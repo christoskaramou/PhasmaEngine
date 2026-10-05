@@ -1366,7 +1366,7 @@ namespace pe
         ImGui::BeginDisabled(!rdocAvailable);
 
         ImGui::SetNextItemWidth(120.f);
-        ImGui::InputInt("Frames##captureN", &m_captureFrameCount);
+        ImGui::InputInt(ui::LabelAbove("Frames##captureN"), &m_captureFrameCount);
         ui::ItemTooltip("Number of frames to include in the RenderDoc capture.");
         m_captureFrameCount = std::max(1, m_captureFrameCount);
         ImGui::SameLine();

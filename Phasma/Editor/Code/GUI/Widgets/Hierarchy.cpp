@@ -1214,7 +1214,7 @@ namespace pe
 
         if (ImGui::BeginPopupModal("Rename Entity", NULL, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            ImGui::InputText("Name", s_renameBuf, IM_ARRAYSIZE(s_renameBuf));
+            ImGui::InputText(ui::LabelAbove("Name"), s_renameBuf, IM_ARRAYSIZE(s_renameBuf));
             ui::ItemTooltip("Edit the node or emitter display name.");
             if (ImGui::Button("OK", ui::DialogButtonSize("OK", 9.2f)))
             {

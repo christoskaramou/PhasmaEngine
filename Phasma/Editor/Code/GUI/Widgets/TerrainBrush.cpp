@@ -69,17 +69,17 @@ namespace pe
                         "view (object picking is suspended there).");
         static const char *kModes[5] = {"Raise", "Dig", "Smooth", "Flatten", "Scatter"};
         ImGui::SetNextItemWidth(120.0f);
-        ImGui::Combo("Mode", &m_mode, kModes, 5);
+        ImGui::Combo(ui::LabelAbove("Mode"), &m_mode, kModes, 5);
         ui::ItemTooltip("Raise/Dig: CSG sphere at the hit point (Shift inverts; the hit is 3D, so "
                         "digging into a cliff undercuts it). Smooth: pull toward the local average. "
                         "Flatten: pull toward the height under the stroke start. Scatter: plant the "
                         "selected Scatter Mesh (Ctrl erases). All strokes persist and serialize.");
         ImGui::SetNextItemWidth(120.0f);
-        ImGui::DragFloat("Radius (m)", &m_radius, 0.1f, 0.5f, 64.0f, "%.1f");
+        ImGui::DragFloat(ui::LabelAbove("Radius (m)"), &m_radius, 0.1f, 0.5f, 64.0f, "%.1f");
         if (m_mode == static_cast<int>(Mode::Smooth) || m_mode == static_cast<int>(Mode::Flatten))
         {
             ImGui::SetNextItemWidth(120.0f);
-            ImGui::SliderFloat("Strength", &m_strength, 0.05f, 1.0f, "%.2f");
+            ImGui::SliderFloat(ui::LabelAbove("Strength"), &m_strength, 0.05f, 1.0f, "%.2f");
             ui::ItemTooltip("Level weight per stamp — low values converge gently over a held stroke.");
         }
         if (m_mode == static_cast<int>(Mode::Scatter))
@@ -100,7 +100,7 @@ namespace pe
                     items.push_back(s.c_str());
                 m_scatterKind = std::clamp(m_scatterKind, 0, kinds);
                 ImGui::SetNextItemWidth(180.0f);
-                ImGui::Combo("Scatter Mesh", &m_scatterKind, items.data(), static_cast<int>(items.size()));
+                ImGui::Combo(ui::LabelAbove("Scatter Mesh"), &m_scatterKind, items.data(), static_cast<int>(items.size()));
             }
         }
         if (!m_hint.empty())

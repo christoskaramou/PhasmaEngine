@@ -14,7 +14,7 @@ namespace pe
     {
         bool DragPositiveFloat(const char *label, float &value, float speed = 0.01f)
         {
-            return ImGui::DragFloat(label, &value, speed, 0.001f, 1000.0f, "%.3f");
+            return ImGui::DragFloat(ui::LabelAbove(label), &value, speed, 0.001f, 1000.0f, "%.3f");
         }
 
         Physics2DBodyType ClampBodyType(Physics2DBodyType type)
@@ -62,7 +62,7 @@ namespace pe
 
         static const char *bodyTypeNames[] = {"Static", "Kinematic", "Dynamic"};
         int bodyType = static_cast<int>(edit.bodyType);
-        if (ImGui::Combo("Body Type", &bodyType, bodyTypeNames, IM_ARRAYSIZE(bodyTypeNames)))
+        if (ImGui::Combo(ui::LabelAbove("Body Type"), &bodyType, bodyTypeNames, IM_ARRAYSIZE(bodyTypeNames)))
         {
             edit.bodyType = static_cast<Physics2DBodyType>(bodyType);
             changed = true;
@@ -72,7 +72,7 @@ namespace pe
 
         static const char *shapeTypeNames[] = {"Box", "Circle", "Capsule"};
         int shapeType = static_cast<int>(edit.shapeType);
-        if (ImGui::Combo("Shape Type", &shapeType, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames)))
+        if (ImGui::Combo(ui::LabelAbove("Shape Type"), &shapeType, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames)))
         {
             edit.shapeType = static_cast<Physics2DShapeType>(shapeType);
             changed = true;
@@ -101,17 +101,17 @@ namespace pe
         }
 
         ImGui::SeparatorText("Material");
-        noteEdit(ImGui::DragFloat("Density", &edit.density, 0.01f, 0.001f, 10000.0f, "%.3f"));
+        noteEdit(ImGui::DragFloat(ui::LabelAbove("Density"), &edit.density, 0.01f, 0.001f, 10000.0f, "%.3f"));
         ui::ItemTooltip("Mass density used when Box2D computes body mass.");
-        noteEdit(ImGui::DragFloat("Friction", &edit.friction, 0.01f, 0.0f, 10.0f, "%.3f"));
+        noteEdit(ImGui::DragFloat(ui::LabelAbove("Friction"), &edit.friction, 0.01f, 0.0f, 10.0f, "%.3f"));
         ui::ItemTooltip("Surface resistance when this body contacts another.");
-        noteEdit(ImGui::DragFloat("Restitution", &edit.restitution, 0.01f, 0.0f, 10.0f, "%.3f"));
+        noteEdit(ImGui::DragFloat(ui::LabelAbove("Restitution"), &edit.restitution, 0.01f, 0.0f, 10.0f, "%.3f"));
         ui::ItemTooltip("Bounciness applied during 2D contacts.");
-        noteEdit(ImGui::DragFloat("Linear Damping", &edit.linearDamping, 0.01f, 0.0f, 100.0f, "%.3f"));
+        noteEdit(ImGui::DragFloat(ui::LabelAbove("Linear Damping"), &edit.linearDamping, 0.01f, 0.0f, 100.0f, "%.3f"));
         ui::ItemTooltip("Slows translational velocity over time.");
-        noteEdit(ImGui::DragFloat("Angular Damping", &edit.angularDamping, 0.01f, 0.0f, 100.0f, "%.3f"));
+        noteEdit(ImGui::DragFloat(ui::LabelAbove("Angular Damping"), &edit.angularDamping, 0.01f, 0.0f, 100.0f, "%.3f"));
         ui::ItemTooltip("Slows rotational velocity over time.");
-        noteEdit(ImGui::DragFloat("Gravity Scale", &edit.gravityScale, 0.01f, -100.0f, 100.0f, "%.3f"));
+        noteEdit(ImGui::DragFloat(ui::LabelAbove("Gravity Scale"), &edit.gravityScale, 0.01f, -100.0f, 100.0f, "%.3f"));
         ui::ItemTooltip("Multiplier for the world's gravity on this body.");
 
         ImGui::SeparatorText("Flags");
@@ -128,7 +128,7 @@ namespace pe
 
         ImGui::SeparatorText("Collision Filter");
         uint64_t categoryBits = edit.categoryBits;
-        bool filterEdited = ImGui::InputScalar("Category Bits", ImGuiDataType_U64, &categoryBits);
+        bool filterEdited = ImGui::InputScalar(ui::LabelAbove("Category Bits"), ImGuiDataType_U64, &categoryBits);
         if (filterEdited)
         {
             edit.categoryBits = categoryBits;
@@ -136,14 +136,14 @@ namespace pe
         noteEdit(filterEdited);
         ui::ItemTooltip("Bitfield describing which collision categories this body belongs to.");
         uint64_t maskBits = edit.maskBits;
-        filterEdited = ImGui::InputScalar("Mask Bits", ImGuiDataType_U64, &maskBits);
+        filterEdited = ImGui::InputScalar(ui::LabelAbove("Mask Bits"), ImGuiDataType_U64, &maskBits);
         if (filterEdited)
         {
             edit.maskBits = maskBits;
         }
         noteEdit(filterEdited);
         ui::ItemTooltip("Bitfield describing which categories this body can collide with.");
-        noteEdit(ImGui::InputInt("Group Index", &edit.groupIndex));
+        noteEdit(ImGui::InputInt(ui::LabelAbove("Group Index"), &edit.groupIndex));
         ui::ItemTooltip("Optional Box2D group override for always-collide or never-collide pairs.");
 
         if (!changed && !rebuildNow)

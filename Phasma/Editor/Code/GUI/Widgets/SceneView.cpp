@@ -18,6 +18,7 @@
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
+#include "Systems/PhysicsSystem.h"
 #include "TerrainBrush.h"
 #include "Systems/RendererSystem.h"
 #include "UI/RuntimeUi.h"
@@ -1383,7 +1384,7 @@ namespace pe
         if (GUIState::s_useLightGizmos)
             DrawLightGizmos(imageMin, imageSize);
 
-        DrawTriggerZoneGizmos(imageMin, imageSize);
+        DrawVolumeGizmos(imageMin, imageSize);
         DrawCameraGizmos(imageMin, imageSize);
         if (GUIState::s_useOrientationGizmo)
             DrawOrientationGizmo(imageMin, imageSize);
@@ -1682,7 +1683,8 @@ namespace pe
         }
     }
 
-    void SceneView::DrawTriggerZoneGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    // Trigger zones (yellow) and physics colliders (green solid, cyan trigger) as world-space wireframes.
+    void SceneView::DrawVolumeGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
     {
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         if (!renderer)
@@ -1695,6 +1697,7 @@ namespace pe
         const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
         ImDrawList *drawList = ImGui::GetWindowDrawList();
         auto &sel = SelectionManager::Instance();
+        NodeId *selectedNode = sel.GetSelectionType() == SelectionType::Node ? sel.GetSelectedNode() : nullptr;
 
         // Unit-cube corners (bit0=x, bit1=y, bit2=z) and the 12 edges between adjacent corners.
         static const int kEdges[12][2] = {
@@ -1715,37 +1718,35 @@ namespace pe
                     drawList->AddLine(screen[e[0]], screen[e[1]], color, thickness);
         };
 
-        // Sphere gizmo: 3 great circles in the world XY/XZ/YZ planes (radius = largest world half-extent,
-        // matching Scene::VolumeDistanceOutside's sphere). Drawn in world space so non-uniform scale still
-        // reads as a sphere, not an ellipsoid.
-        auto drawSphere = [&](const mat4 &world, ImU32 color, float thickness)
+        // Arc c + cos(a)*u + sin(a)*v for a in [a0, a1] (u, v carry the radius).
+        auto drawArc = [&](const vec3 &c, const vec3 &u, const vec3 &v, float a0, float a1, ImU32 color, float thickness)
         {
-            const vec3 center(world[3].x, world[3].y, world[3].z);
-            const float radius = std::max({glm::length(vec3(world[0])), glm::length(vec3(world[1])),
-                                           glm::length(vec3(world[2]))}) *
-                                 0.5f;
-            constexpr int kSeg = 32;
-            const vec3 axes[3][2] = {
-                {vec3(1, 0, 0), vec3(0, 1, 0)}, {vec3(1, 0, 0), vec3(0, 0, 1)}, {vec3(0, 1, 0), vec3(0, 0, 1)}};
-            for (const auto &pl : axes)
+            const int segs = std::max(2, static_cast<int>(32.0f * (a1 - a0) / 6.2831853f));
+            ImVec2 prev{};
+            bool prevOk = false;
+            for (int s = 0; s <= segs; ++s)
             {
-                ImVec2 prev{};
-                bool prevOk = false;
-                for (int s = 0; s <= kSeg; ++s)
-                {
-                    const float a = (static_cast<float>(s) / kSeg) * 6.2831853f;
-                    const vec3 wp = center + radius * (std::cos(a) * pl[0] + std::sin(a) * pl[1]);
-                    ImVec2 sp;
-                    const bool ok = ProjectWorldToViewport(wp, viewProj, imageMin, imageSize, sp);
-                    if (ok && prevOk)
-                        drawList->AddLine(prev, sp, color, thickness);
-                    prev = sp;
-                    prevOk = ok;
-                }
+                const float a = a0 + (a1 - a0) * static_cast<float>(s) / segs;
+                ImVec2 sp;
+                const bool ok = ProjectWorldToViewport(c + std::cos(a) * u + std::sin(a) * v, viewProj, imageMin, imageSize, sp);
+                if (ok && prevOk)
+                    drawList->AddLine(prev, sp, color, thickness);
+                prev = sp;
+                prevOk = ok;
             }
         };
 
-        // Trigger Zones draw a yellow box/sphere gizmo (brighter/thicker when selected).
+        // Sphere gizmo: 3 great circles in the world XY/XZ/YZ planes, so non-uniform scale still reads as a sphere.
+        auto drawSphere = [&](const vec3 &center, float radius, ImU32 color, float thickness)
+        {
+            const vec3 x(radius, 0, 0), y(0, radius, 0), z(0, 0, radius);
+            drawArc(center, x, y, 0.0f, 6.2831853f, color, thickness);
+            drawArc(center, x, z, 0.0f, 6.2831853f, color, thickness);
+            drawArc(center, y, z, 0.0f, 6.2831853f, color, thickness);
+        };
+
+        // Trigger Zones draw a yellow box/sphere gizmo (brighter/thicker when selected). The sphere's radius is
+        // the largest world half-extent, matching Scene::VolumeDistanceOutside.
         for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
         {
             NodeId *node = scene.GetNodeId(i);
@@ -1754,14 +1755,88 @@ namespace pe
             NodeTriggerZoneTag *zone = scene.GetTriggerZoneForNode(node);
             if (!zone)
                 continue;
-            const bool selected = sel.GetSelectionType() == SelectionType::Node && sel.GetSelectedNode() == node;
+            const bool selected = node == selectedNode;
             const float thickness = selected ? 3.0f : 2.0f;
             const ImU32 color = selected ? IM_COL32(255, 225, 120, 255) : IM_COL32(235, 195, 90, 205);
+            const mat4 &world = scene.GetWorldMatrix(node);
             if (zone->shape == ZoneShape::Sphere)
-                drawSphere(scene.GetWorldMatrix(node), color, thickness);
+                drawSphere(vec3(world[3]),
+                           std::max({glm::length(vec3(world[0])), glm::length(vec3(world[1])), glm::length(vec3(world[2]))}) * 0.5f,
+                           color, thickness);
             else
-                drawBox(scene.GetWorldMatrix(node), color, thickness);
+                drawBox(world, color, thickness);
         }
+
+#ifdef PE_PHYSICS
+        // Colliders sit at the node origin with the node's rotation, sized by ScaledColliderSize: what Jolt
+        // simulates, which shows a mesh whose origin is off its centre. ponytail: ConvexHull and Mesh shapes
+        // are skipped (the mesh itself shows them); draw Jolt's hull edges if a mismatch needs debugging.
+        PhysicsSystem *physics = GetGlobalSystem<PhysicsSystem>();
+        if (!physics)
+            return;
+        auto drawCollider = [&](NodeId *node)
+        {
+            // Trigger zones own their body and already drew it yellow above.
+            if (!(scene.GetComponentFlags(node) & Component_Physics) || !scene.IsNodeHierarchyEnabled(node) ||
+                scene.GetTriggerZoneForNode(node))
+                return;
+            const PhysicsBodyDesc *desc = physics->GetBodyDesc(node);
+            if (!desc || desc->shapeType == PhysicsShapeType::ConvexHull || desc->shapeType == PhysicsShapeType::Mesh)
+                return;
+            const mat4 &world = scene.GetWorldMatrix(node);
+            const vec3 scale(glm::length(vec3(world[0])), glm::length(vec3(world[1])), glm::length(vec3(world[2])));
+            const vec3 pos(world[3]);
+            const vec3 ax = vec3(world[0]) / std::max(scale.x, 1e-6f);
+            const vec3 ay = vec3(world[1]) / std::max(scale.y, 1e-6f);
+            const vec3 az = vec3(world[2]) / std::max(scale.z, 1e-6f);
+            const vec3 size = ScaledColliderSize(*desc, scale);
+            const bool selected = node == selectedNode;
+            const float thickness = selected ? 2.5f : 1.5f;
+            const ImU32 color = desc->isTrigger ? (selected ? IM_COL32(120, 235, 255, 255) : IM_COL32(90, 200, 235, 200))
+                                                : (selected ? IM_COL32(140, 255, 140, 255) : IM_COL32(90, 220, 110, 200));
+            switch (desc->shapeType)
+            {
+            case PhysicsShapeType::Sphere:
+                drawSphere(pos, size.x, color, thickness);
+                break;
+            case PhysicsShapeType::Capsule:
+            {
+                // Jolt capsules run along local Y: two rings joined by four lines, capped by half circles.
+                const float r = size.x, hh = size.y;
+                const vec3 top = pos + ay * hh, bottom = pos - ay * hh;
+                drawArc(top, ax * r, az * r, 0.0f, 6.2831853f, color, thickness);
+                drawArc(bottom, ax * r, az * r, 0.0f, 6.2831853f, color, thickness);
+                for (const vec3 &side : {ax * r, -ax * r, az * r, -az * r})
+                {
+                    ImVec2 a, b;
+                    if (ProjectWorldToViewport(top + side, viewProj, imageMin, imageSize, a) &&
+                        ProjectWorldToViewport(bottom + side, viewProj, imageMin, imageSize, b))
+                        drawList->AddLine(a, b, color, thickness);
+                }
+                for (const vec3 &u : {ax * r, az * r})
+                {
+                    drawArc(top, u, ay * r, 0.0f, 3.1415927f, color, thickness);
+                    drawArc(bottom, u, -ay * r, 0.0f, 3.1415927f, color, thickness);
+                }
+                break;
+            }
+            default:
+                drawBox(mat4(vec4(ax * size.x * 2.0f, 0.0f), vec4(ay * size.y * 2.0f, 0.0f), vec4(az * size.z * 2.0f, 0.0f),
+                             vec4(pos, 1.0f)),
+                        color, thickness);
+                break;
+            }
+        };
+        if (GUIState::s_useColliderGizmos)
+        {
+            for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+                drawCollider(scene.GetNodeId(i));
+        }
+        else if (selectedNode)
+        {
+            drawCollider(selectedNode);
+        }
+#endif
     }
 
     void SceneView::DrawCameraGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)

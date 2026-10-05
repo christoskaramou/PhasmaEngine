@@ -66,7 +66,7 @@ namespace pe
         memset(buffer, 0, 256);
         const std::string &nodeName = scene.GetNodeName(node);
         memcpy(buffer, nodeName.c_str(), std::min(nodeName.length(), sizeof(buffer) - 1));
-        if (ImGui::InputText("Name", buffer, 256))
+        if (ImGui::InputText(ui::LabelAbove("Name"), buffer, 256))
         {
             scene.SetNodeName(node, buffer);
         }
@@ -155,14 +155,14 @@ namespace pe
         ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.f);
         if (uiNode)
         {
-            ImGui::DragFloat("Snap (hold Ctrl)", &selection.UiGizmoSnap(), 0.25f, 1.f, 1000.f, "%.0f px", ImGuiSliderFlags_AlwaysClamp);
+            ImGui::DragFloat(ui::LabelAbove("Snap (hold Ctrl)"), &selection.UiGizmoSnap(), 0.25f, 1.f, 1000.f, "%.0f px", ImGuiSliderFlags_AlwaysClamp);
             ui::ItemTooltip("Pixel grid the element's position (move) or size (scale) snaps to while Ctrl is held.");
             return;
         }
 
         const char *format = currentOp == GizmoOperation::Rotate ? "%.1f deg" : currentOp == GizmoOperation::Translate ? "%.3g m"
                                                                                                                        : "%.3g";
-        ImGui::DragFloat("Snap (hold Ctrl)", &selection.GizmoSnap(currentOp), 0.01f, 0.001f, 1000.f, format, ImGuiSliderFlags_AlwaysClamp);
+        ImGui::DragFloat(ui::LabelAbove("Snap (hold Ctrl)"), &selection.GizmoSnap(currentOp), 0.01f, 0.001f, 1000.f, format, ImGuiSliderFlags_AlwaysClamp);
         ui::ItemTooltip("Step the gizmo snaps to while Ctrl is held during a drag.");
     }
 

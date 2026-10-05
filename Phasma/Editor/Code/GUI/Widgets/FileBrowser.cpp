@@ -777,10 +777,12 @@ namespace pe
         ImGui::PopItemWidth();
 
         ImGui::SameLine();
+        ImGui::TextUnformatted("Sort"); // toolbar row: label before the combo, not above
+        ImGui::SameLine();
         static const char *sortLabels[] = {"Name", "Date", "Size"};
         int sortIndex = static_cast<int>(m_sortMode);
         ImGui::SetNextItemWidth(110.0f);
-        if (ImGui::Combo("Sort##filebrowser_sort", &sortIndex, sortLabels, IM_ARRAYSIZE(sortLabels)))
+        if (ImGui::Combo("##filebrowser_sort", &sortIndex, sortLabels, IM_ARRAYSIZE(sortLabels)))
         {
             m_sortMode = static_cast<SortMode>(sortIndex);
             SortCache();
@@ -1233,7 +1235,7 @@ namespace pe
         ImGui::TextWrapped("%s", m_pendingPrefabFolder.string().c_str());
         ImGui::Spacing();
         ImGui::SetNextItemWidth(360.0f);
-        ImGui::InputText("Name", m_prefabNameBuffer, IM_ARRAYSIZE(m_prefabNameBuffer));
+        ImGui::InputText(ui::LabelAbove("Name"), m_prefabNameBuffer, IM_ARRAYSIZE(m_prefabNameBuffer));
         ui::ItemTooltip("Prefab asset filename.");
 
         std::filesystem::path savePath = m_pendingPrefabFolder / (m_prefabNameBuffer[0] ? m_prefabNameBuffer : "Prefab.peprefab");

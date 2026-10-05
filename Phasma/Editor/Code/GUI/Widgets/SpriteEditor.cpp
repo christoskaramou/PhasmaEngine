@@ -316,26 +316,23 @@ namespace pe
     void SpriteEditor::DrawFramePanel()
     {
         ImGui::TextUnformatted("Grid");
-        ImGui::SetNextItemWidth(86.0f);
-        ImGui::DragInt("Frame W", &m_gridFrameWidth, 1.0f, 1, 8192);
+        auto gridField = [](const char *label, int *value, int min)
+        {
+            ui::LabelAboveInRow field(label, 86.0f);
+            ImGui::DragInt(field.id, value, 1.0f, min, 8192);
+        };
+        gridField("Frame W", &m_gridFrameWidth, 1);
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(86.0f);
-        ImGui::DragInt("Frame H", &m_gridFrameHeight, 1.0f, 1, 8192);
+        gridField("Frame H", &m_gridFrameHeight, 1);
+        gridField("Margin X", &m_gridMarginX, 0);
+        ImGui::SameLine();
+        gridField("Margin Y", &m_gridMarginY, 0);
+        gridField("Spacing X", &m_gridSpacingX, 0);
+        ImGui::SameLine();
+        gridField("Spacing Y", &m_gridSpacingY, 0);
 
         ImGui::SetNextItemWidth(86.0f);
-        ImGui::DragInt("Margin X", &m_gridMarginX, 1.0f, 0, 8192);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(86.0f);
-        ImGui::DragInt("Margin Y", &m_gridMarginY, 1.0f, 0, 8192);
-
-        ImGui::SetNextItemWidth(86.0f);
-        ImGui::DragInt("Spacing X", &m_gridSpacingX, 1.0f, 0, 8192);
-        ImGui::SameLine();
-        ImGui::SetNextItemWidth(86.0f);
-        ImGui::DragInt("Spacing Y", &m_gridSpacingY, 1.0f, 0, 8192);
-
-        ImGui::SetNextItemWidth(86.0f);
-        ImGui::DragInt("Max Frames", &m_gridMaxFrames, 1.0f, 0, 10000);
+        ImGui::DragInt(ui::LabelAbove("Max Frames"), &m_gridMaxFrames, 1.0f, 0, 10000);
         ui::ItemTooltip("0 means generate all frames that fit the sheet.");
 
         if (ImGui::Button("Generate Grid Frames"))
@@ -408,11 +405,11 @@ namespace pe
 
         std::array<char, 128> name{};
         CopyTextToBuffer(name, frame.name);
-        if (ImGui::InputText("Name", name.data(), name.size()))
+        if (ImGui::InputText(ui::LabelAbove("Name"), name.data(), name.size()))
             frame.name = name.data();
 
         int rect[4] = {frame.x, frame.y, frame.w, frame.h};
-        if (ImGui::DragInt4("Rect", rect, 1.0f, 0, 8192))
+        if (ImGui::DragInt4(ui::LabelAbove("Rect"), rect, 1.0f, 0, 8192))
         {
             frame.x = rect[0];
             frame.y = rect[1];
@@ -422,18 +419,18 @@ namespace pe
         }
 
         float pivot[2] = {frame.pivotX, frame.pivotY};
-        if (ImGui::DragFloat2("Pivot", pivot, 0.01f, 0.0f, 1.0f, "%.2f"))
+        if (ImGui::DragFloat2(ui::LabelAbove("Pivot"), pivot, 0.01f, 0.0f, 1.0f, "%.2f"))
         {
             frame.pivotX = std::clamp(pivot[0], 0.0f, 1.0f);
             frame.pivotY = std::clamp(pivot[1], 0.0f, 1.0f);
         }
-        ImGui::DragFloat("Duration", &frame.duration, 0.01f, 0.01f, 10.0f, "%.3f s");
+        ImGui::DragFloat(ui::LabelAbove("Duration"), &frame.duration, 0.01f, 0.01f, 10.0f, "%.3f s");
 
         ImGui::Checkbox("Hitbox", &frame.hitboxEnabled);
         int hitbox[4] = {frame.hitboxX, frame.hitboxY, frame.hitboxW, frame.hitboxH};
         if (!frame.hitboxEnabled)
             ImGui::BeginDisabled();
-        if (ImGui::DragInt4("Hitbox Rect", hitbox, 1.0f, -8192, 8192))
+        if (ImGui::DragInt4(ui::LabelAbove("Hitbox Rect"), hitbox, 1.0f, -8192, 8192))
         {
             frame.hitboxX = hitbox[0];
             frame.hitboxY = hitbox[1];
@@ -487,15 +484,15 @@ namespace pe
         SpriteClip &clip = m_clips[m_selectedClip];
         std::array<char, 128> name{};
         CopyTextToBuffer(name, clip.name);
-        if (ImGui::InputText("Clip Name", name.data(), name.size()))
+        if (ImGui::InputText(ui::LabelAbove("Clip Name"), name.data(), name.size()))
             clip.name = name.data();
 
         const int maxFrame = std::max(0, static_cast<int>(m_frames.size()) - 1);
-        ImGui::DragInt("Start", &clip.start, 1.0f, 0, maxFrame);
-        ImGui::DragInt("End", &clip.end, 1.0f, 0, maxFrame);
+        ImGui::DragInt(ui::LabelAbove("Start"), &clip.start, 1.0f, 0, maxFrame);
+        ImGui::DragInt(ui::LabelAbove("End"), &clip.end, 1.0f, 0, maxFrame);
         if (clip.start > clip.end)
             std::swap(clip.start, clip.end);
-        ImGui::DragFloat("FPS", &clip.fps, 0.1f, 0.1f, 120.0f, "%.1f");
+        ImGui::DragFloat(ui::LabelAbove("FPS"), &clip.fps, 0.1f, 0.1f, 120.0f, "%.1f");
         ImGui::Checkbox("Loop", &clip.loop);
         ImGui::Checkbox("Interpolate Frames", &m_interpolate);
         ui::ItemTooltip("Blend each atlas frame into the next during playback.");
@@ -538,8 +535,10 @@ namespace pe
     {
         ImGui::TextUnformatted("Atlas");
         ImGui::SameLine();
+        ImGui::TextUnformatted("Zoom"); // header row: label before the slider, not above
+        ImGui::SameLine();
         ImGui::SetNextItemWidth(140.0f);
-        ImGui::SliderFloat("Zoom", &m_atlasZoom, 0.25f, 8.0f, "%.2fx");
+        ImGui::SliderFloat("##atlas_zoom", &m_atlasZoom, 0.25f, 8.0f, "%.2fx");
 
         if (!m_image || !m_textureId)
         {

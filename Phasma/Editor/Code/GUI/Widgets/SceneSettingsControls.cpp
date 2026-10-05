@@ -37,7 +37,7 @@ namespace pe
         }
         ImGui::Text("Resolution: %d x %d", static_cast<int>(RHII.GetWidthf() * gSettings.render_scale),
                     static_cast<int>(RHII.GetHeightf() * gSettings.render_scale));
-        ImGui::DragFloat("Quality", &rtScale, 0.01f, kMinRenderScale, kMaxRenderScale);
+        ImGui::DragFloat(ui::LabelAbove("Quality"), &rtScale, 0.01f, kMinRenderScale, kMaxRenderScale);
         ui::ItemTooltip("Render-scale preview; click Apply to recreate render targets.");
         if (ImGui::Button("Apply"))
         {
@@ -49,9 +49,8 @@ namespace pe
         ImGui::Separator();
 
         // Present mode (scene setting is authoritative; apply via swapchain recreate).
-        ImGui::Text("Present Mode");
         PePresentMode currentPresentMode = RHII.GetSurface()->GetPresentMode();
-        if (ImGui::BeginCombo("##present_mode", RHII.PresentModeToString(currentPresentMode)))
+        if (ImGui::BeginCombo(ui::LabelAbove("Present Mode"), RHII.PresentModeToString(currentPresentMode)))
         {
             const auto &presentModes = RHII.GetSurface()->GetSupportedPresentModes();
             for (uint32_t i = 0; i < static_cast<uint32_t>(presentModes.size()); i++)
@@ -84,8 +83,7 @@ namespace pe
             const bool rtSupported = RHII.GetCaps().rayTracing;
             int currentMode = static_cast<int>(ClampRenderModeToRayTracingSupport(gSettings.render_mode, rtSupported));
             const int modeCount = rtSupported ? 3 : 1;
-            ImGui::Text("Render Mode");
-            if (ImGui::Combo("##RenderMode", &currentMode, rtModeNames, modeCount) &&
+            if (ImGui::Combo(ui::LabelAbove("Render Mode"), &currentMode, rtModeNames, modeCount) &&
                 currentMode != static_cast<int>(gSettings.render_mode))
             {
                 changed = true;
@@ -113,20 +111,20 @@ namespace pe
             if (gSettings.shadows)
             {
                 ImGui::Indent(16.0f);
-                Track(ImGui::DragFloat("Distance##Shadow", &gSettings.shadow_distance, 5.0f, 10.0f, 1000.0f));
+                Track(ImGui::DragFloat(ui::LabelAbove("Distance##Shadow"), &gSettings.shadow_distance, 5.0f, 10.0f, 1000.0f));
                 ui::ItemTooltip("Maximum camera distance covered by directional shadows.");
-                Track(ImGui::SliderFloat("Cascade Split##Shadow", &gSettings.shadow_cascade_lambda, 0.0f, 1.0f));
+                Track(ImGui::SliderFloat(ui::LabelAbove("Cascade Split##Shadow"), &gSettings.shadow_cascade_lambda, 0.0f, 1.0f));
                 ui::ItemTooltip("Distribution bias between near and far shadow cascades.");
-                Track(ImGui::DragFloat("Slope", &gSettings.depth_bias[2], 0.15f, 0.5f));
+                Track(ImGui::DragFloat(ui::LabelAbove("Slope"), &gSettings.depth_bias[2], 0.15f, 0.5f));
                 ui::ItemTooltip("Slope-scaled depth bias used to reduce shadow acne.");
-                Track(ImGui::DragFloat("Normal Bias##Shadow", &gSettings.shadow_normal_bias, 0.05f, 0.0f, 10.0f));
+                Track(ImGui::DragFloat(ui::LabelAbove("Normal Bias##Shadow"), &gSettings.shadow_normal_bias, 0.05f, 0.0f, 10.0f));
                 ui::ItemTooltip("Normal-offset bias used to reduce self-shadowing.");
-                Track(ImGui::SliderFloat("Fade##Shadow", &gSettings.shadow_fade_fraction, 0.0f, 0.5f));
+                Track(ImGui::SliderFloat(ui::LabelAbove("Fade##Shadow"), &gSettings.shadow_fade_fraction, 0.0f, 0.5f));
                 ui::ItemTooltip("Fraction of the shadow distance used for fade-out.");
-                Track(ImGui::SliderFloat("Filter##Shadow", &gSettings.shadow_filter_radius, 0.0f, 3.0f));
+                Track(ImGui::SliderFloat(ui::LabelAbove("Filter##Shadow"), &gSettings.shadow_filter_radius, 0.0f, 3.0f));
                 ui::ItemTooltip("Radius of the shadow filtering kernel.");
                 const char *shadowDebugModes[] = {"Off", "Cascades", "Shadow Factor"};
-                Track(ImGui::Combo("Debug##Shadow", &gSettings.shadow_debug_mode, shadowDebugModes,
+                Track(ImGui::Combo(ui::LabelAbove("Debug##Shadow"), &gSettings.shadow_debug_mode, shadowDebugModes,
                                    IM_ARRAYSIZE(shadowDebugModes)));
                 ui::ItemTooltip("Visualize shadow cascade or shadow factor debug output.");
                 ImGui::Unindent(16.0f);
@@ -138,7 +136,7 @@ namespace pe
         if (ImGui::Button("Randomize Lights"))
             gSettings.randomize_lights = true;
         ui::ItemTooltip("Request a one-shot randomization of scene light settings.");
-        Track(ImGui::SliderFloat("Light Intst", &gSettings.lights_intensity, 0.01f, 30.f));
+        Track(ImGui::SliderFloat(ui::LabelAbove("Light Intensity"), &gSettings.lights_intensity, 0.01f, 30.f));
         ui::ItemTooltip("Global multiplier for scene light intensity.");
         Track(ImGui::Checkbox("Physical Falloff", &gSettings.physical_point_falloff));
         ui::ItemTooltip("Point lights attenuate by windowed inverse-square (raster path). Intensity is interpreted "
@@ -149,11 +147,9 @@ namespace pe
         if (gSettings.fog)
         {
             ImGui::Indent(16.0f);
-            ImGui::SetNextItemWidth(120.0f);
-            Track(ImGui::DragFloat("Density##Fog", &gSettings.fog_density, 0.0005f, 0.0f, 0.1f, "%.4f"));
+            Track(ImGui::DragFloat(ui::LabelAbove("Density##Fog"), &gSettings.fog_density, 0.0005f, 0.0f, 0.1f, "%.4f"));
             ui::ItemTooltip("Exponential falloff rate per world unit past the start distance.");
-            ImGui::SetNextItemWidth(120.0f);
-            Track(ImGui::DragFloat("Start##Fog", &gSettings.fog_start, 1.0f, 0.0f, 100000.0f));
+            Track(ImGui::DragFloat(ui::LabelAbove("Start##Fog"), &gSettings.fog_start, 1.0f, 0.0f, 100000.0f));
             ui::ItemTooltip("World-unit distance where the haze begins.");
             ImGui::Unindent(16.0f);
         }
@@ -167,8 +163,7 @@ namespace pe
         if (gSettings.occlusion_culling)
         {
             ImGui::Indent(16.0f);
-            ImGui::SetNextItemWidth(120.0f);
-            Track(ImGui::DragFloat("Occlusion Bias", &gSettings.occlusion_culling_bias, 0.0005f, 0.0f, 0.05f, "%.4f"));
+            Track(ImGui::DragFloat(ui::LabelAbove("Occlusion Bias"), &gSettings.occlusion_culling_bias, 0.0005f, 0.0f, 0.05f, "%.4f"));
             ui::ItemTooltip("Hi-Z slack as a FRACTION of occluder depth (0.002 = 0.2%). Higher = more conservative.");
             ImGui::Unindent(16.0f);
         }
@@ -182,15 +177,12 @@ namespace pe
         {
             ImGui::Indent(16.0f);
             int lodCount = static_cast<int>(gSettings.lod_count);
-            ImGui::SetNextItemWidth(120.0f);
-            if (Track(ImGui::SliderInt("Levels (on load)", &lodCount, 1, 4))) // 4 == Mesh::kMaxLods
+            if (Track(ImGui::SliderInt(ui::LabelAbove("Levels (on load)"), &lodCount, 1, 4))) // 4 == Mesh::kMaxLods
                 gSettings.lod_count = static_cast<uint32_t>(lodCount);
             ui::ItemTooltip("LODs generated per mesh. Applies to newly loaded meshes — reload the scene to regenerate.");
-            ImGui::SetNextItemWidth(200.0f);
-            Track(ImGui::DragFloat3("Switch Distances", gSettings.lod_distances.data(), 1.0f, 0.0f, 100000.0f));
+            Track(ImGui::DragFloat3(ui::LabelAbove("Switch Distances"), gSettings.lod_distances.data(), 1.0f, 0.0f, 100000.0f));
             ui::ItemTooltip("World-unit camera distances to switch LOD0->1, 1->2, 2->3 (live).");
-            ImGui::SetNextItemWidth(120.0f);
-            Track(ImGui::DragFloat("Distance Bias", &gSettings.lod_bias, 0.01f, 0.1f, 10.0f));
+            Track(ImGui::DragFloat(ui::LabelAbove("Distance Bias"), &gSettings.lod_bias, 0.01f, 0.1f, 10.0f));
             ui::ItemTooltip("Multiplies measured distance before the switch test (>1 = drop detail sooner). Live.");
             ImGui::Unindent(16.0f);
         }
@@ -216,24 +208,28 @@ namespace pe
                 gSettings.selection_outline_color_b,
                 gSettings.selection_outline_color_a,
             };
-            Track(ImGui::ColorEdit4("Color##SelectionOutline", outlineColor));
+            Track(ImGui::ColorEdit4(ui::LabelAbove("Color##SelectionOutline"), outlineColor));
             gSettings.selection_outline_color_r = outlineColor[0];
             gSettings.selection_outline_color_g = outlineColor[1];
             gSettings.selection_outline_color_b = outlineColor[2];
             gSettings.selection_outline_color_a = outlineColor[3];
             ui::ItemTooltip("Tint and opacity for selected-object outlines.");
-            Track(ImGui::SliderFloat("Thickness##SelectionOutline", &gSettings.selection_outline_thickness, 0.0f, 32.0f, "%.1f px"));
+            Track(ImGui::SliderFloat(ui::LabelAbove("Thickness##SelectionOutline"), &gSettings.selection_outline_thickness, 0.0f, 32.0f, "%.1f px"));
             ui::ItemTooltip("Solid outer outline width in pixels.");
-            Track(ImGui::SliderFloat("Inner Fade##SelectionOutline", &gSettings.selection_outline_inner_fade, 0.0f, 32.0f, "%.1f px"));
+            Track(ImGui::SliderFloat(ui::LabelAbove("Inner Fade##SelectionOutline"), &gSettings.selection_outline_inner_fade, 0.0f, 32.0f, "%.1f px"));
             ui::ItemTooltip("Distance the outline fades inward over the selected object.");
-            Track(ImGui::SliderFloat("Outer Fade##SelectionOutline", &gSettings.selection_outline_outer_fade, 0.0f, 32.0f, "%.1f px"));
+            Track(ImGui::SliderFloat(ui::LabelAbove("Outer Fade##SelectionOutline"), &gSettings.selection_outline_outer_fade, 0.0f, 32.0f, "%.1f px"));
             ui::ItemTooltip("Distance the outline fades outward from the selected object.");
             ImGui::Unindent(16.0f);
         }
         ImGui::Separator();
 
-        Track(ImGui::DragFloat("TimeScale", &gSettings.time_scale, 0.05f, 0.2f));
+        Track(ImGui::DragFloat(ui::LabelAbove("Time Scale"), &gSettings.time_scale, 0.05f, 0.2f));
         ui::ItemTooltip("Scale simulation time used by editor-updated systems.");
+        static constexpr uint32_t kPhysicsRateMin = 10, kPhysicsRateMax = 240;
+        Track(ImGui::SliderScalar(ui::LabelAbove("Physics Rate"), ImGuiDataType_U32, &gSettings.physics_rate, &kPhysicsRateMin,
+                                  &kPhysicsRateMax, "%u Hz"));
+        ui::ItemTooltip("Fixed 3D physics steps per second. Higher is smoother and more accurate for fast bodies, and costs more CPU.");
 
         return changed;
     }

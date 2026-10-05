@@ -32,7 +32,7 @@ namespace pe
 
         // Particle Count (Effective Reset)
         int count = static_cast<int>(emitter.count);
-        if (ImGui::DragInt("Particle Count", &count, 1.0f, 0, 100000))
+        if (ImGui::DragInt(ui::LabelAbove("Particle Count"), &count, 1.0f, 0, 100000))
         {
             if (count < 0)
                 count = 0;
@@ -42,22 +42,22 @@ namespace pe
         ui::ItemTooltip("Maximum number of particles maintained by this emitter.");
 
         // Position
-        if (ImGui::DragFloat3("Position", &emitter.position.x, 0.01f))
+        if (ImGui::DragFloat3(ui::LabelAbove("Position"), &emitter.position.x, 0.01f))
             changed = true;
         ui::ItemTooltip("World-space origin where new particles spawn.");
-        if (ImGui::DragFloat3("Velocity", &emitter.velocity.x, 0.01f))
+        if (ImGui::DragFloat3(ui::LabelAbove("Velocity"), &emitter.velocity.x, 0.01f))
             changed = true;
         ui::ItemTooltip("Initial velocity applied to newly spawned particles.");
-        if (ImGui::DragFloat3("Gravity", &emitter.gravity.x, 0.01f))
+        if (ImGui::DragFloat3(ui::LabelAbove("Gravity"), &emitter.gravity.x, 0.01f))
             changed = true;
         ui::ItemTooltip("Acceleration applied to particles after spawn.");
 
         ImGui::Separator();
 
-        if (ImGui::ColorEdit4("Color Start", &emitter.colorStart.x))
+        if (ImGui::ColorEdit4(ui::LabelAbove("Color Start"), &emitter.colorStart.x))
             changed = true;
         ui::ItemTooltip("Color and alpha at the beginning of each particle's lifetime.");
-        if (ImGui::ColorEdit4("Color End", &emitter.colorEnd.x))
+        if (ImGui::ColorEdit4(ui::LabelAbove("Color End"), &emitter.colorEnd.x))
             changed = true;
         ui::ItemTooltip("Color and alpha blended toward the end of each particle's lifetime.");
 
@@ -65,7 +65,7 @@ namespace pe
 
         // Size & Life
         float size[2] = {emitter.sizeLife.x, emitter.sizeLife.y};
-        if (ImGui::DragFloat2("Size (Start/End)", size, 0.001f, 0.0f, 100.0f))
+        if (ImGui::DragFloat2(ui::LabelAbove("Size (Start/End)"), size, 0.001f, 0.0f, 100.0f))
         {
             emitter.sizeLife.x = size[0];
             emitter.sizeLife.y = size[1];
@@ -74,7 +74,7 @@ namespace pe
         ui::ItemTooltip("Particle size at spawn and at the end of its lifetime.");
 
         float life[2] = {emitter.sizeLife.z, emitter.sizeLife.w};
-        if (ImGui::DragFloat2("Life (Min/Max)", life, 0.001f, 0.0f, 100.0f))
+        if (ImGui::DragFloat2(ui::LabelAbove("Life (Min/Max)"), life, 0.001f, 0.0f, 100.0f))
         {
             emitter.sizeLife.z = life[0];
             emitter.sizeLife.w = life[1];
@@ -85,16 +85,16 @@ namespace pe
         ImGui::Separator();
 
         // Physics
-        if (ImGui::DragFloat("Spawn Rate", &emitter.physics.x, 0.01f, 0.0f, 10000.0f))
+        if (ImGui::DragFloat(ui::LabelAbove("Spawn Rate"), &emitter.physics.x, 0.01f, 0.0f, 10000.0f))
             changed = true;
         ui::ItemTooltip("Particles emitted per second.");
-        if (ImGui::DragFloat("Spawn Radius", &emitter.physics.y, 0.01f, 0.0f, 100.0f))
+        if (ImGui::DragFloat(ui::LabelAbove("Spawn Radius"), &emitter.physics.y, 0.01f, 0.0f, 100.0f))
             changed = true;
         ui::ItemTooltip("Radius around the emitter origin used for random spawn positions.");
-        if (ImGui::DragFloat("Noise Strength", &emitter.physics.z, 0.01f, 0.0f, 10.0f))
+        if (ImGui::DragFloat(ui::LabelAbove("Noise Strength"), &emitter.physics.z, 0.01f, 0.0f, 10.0f))
             changed = true;
         ui::ItemTooltip("Random motion variation added to each particle.");
-        if (ImGui::DragFloat("Drag", &emitter.physics.w, 0.01f, 0.0f, 5.0f))
+        if (ImGui::DragFloat(ui::LabelAbove("Drag"), &emitter.physics.w, 0.01f, 0.0f, 5.0f))
             changed = true;
         ui::ItemTooltip("Velocity damping applied over the particle lifetime.");
 
@@ -103,7 +103,7 @@ namespace pe
         // Orientation
         const char *orientations[] = {"Billboard", "Horizontal", "Vertical", "Velocity"};
         int currentOrientation = static_cast<int>(emitter.orientation);
-        if (ImGui::Combo("Orientation", &currentOrientation, orientations, IM_ARRAYSIZE(orientations)))
+        if (ImGui::Combo(ui::LabelAbove("Orientation"), &currentOrientation, orientations, IM_ARRAYSIZE(orientations)))
         {
             emitter.orientation = static_cast<uint32_t>(currentOrientation);
             changed = true;
@@ -111,7 +111,7 @@ namespace pe
         ui::ItemTooltip("Controls how particle quads face the camera or velocity direction.");
 
         // Animation
-        if (ImGui::DragFloat2("Anim Rows/Cols", &emitter.animation.x, 1.0f, 1.0f, 64.0f, "%.0f"))
+        if (ImGui::DragFloat2(ui::LabelAbove("Anim Rows/Cols"), &emitter.animation.x, 1.0f, 1.0f, 64.0f, "%.0f"))
         {
             if (emitter.animation.x < 1.0f)
                 emitter.animation.x = 1.0f;
@@ -120,7 +120,7 @@ namespace pe
             changed = true;
         }
         ui::ItemTooltip("Rows and columns in the texture atlas used for flipbook animation.");
-        if (ImGui::DragFloat("Anim Speed", &emitter.animation.z, 0.1f, 0.0f, 10.0f))
+        if (ImGui::DragFloat(ui::LabelAbove("Anim Speed"), &emitter.animation.z, 0.1f, 0.0f, 10.0f))
             changed = true;
         ui::ItemTooltip("Rate at which particles advance through atlas frames.");
 
@@ -201,7 +201,7 @@ namespace pe
         // Combo Box
         if (!texNames.empty())
         {
-            if (ImGui::Combo("Texture", &currentItem, [](void *data, int idx, const char **out_text)
+            if (ImGui::Combo(ui::LabelAbove("Texture"), &currentItem, [](void *data, int idx, const char **out_text)
                              {
                     auto& vec = *static_cast<const std::vector<std::string>*>(data);
                     *out_text = vec[idx].c_str();

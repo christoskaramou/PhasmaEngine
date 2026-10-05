@@ -594,7 +594,7 @@ namespace pe
             snprintf(m_renameBuffer, sizeof(m_renameBuffer), "%s", view.name.c_str());
 
         ImGui::SetNextItemWidth(-1.f);
-        if (ImGui::InputText("Name", m_renameBuffer, sizeof(m_renameBuffer)))
+        if (ImGui::InputText(ui::LabelAbove("Name"), m_renameBuffer, sizeof(m_renameBuffer)))
         {
             view.name = m_renameBuffer[0] ? m_renameBuffer : "Prefab Node";
             nodeJson["name"] = view.name;
@@ -656,15 +656,15 @@ namespace pe
         ImGui::TextDisabled("Local Transform");
 
         ImGui::SetNextItemWidth(-1.f);
-        changed |= ImGui::DragFloat3("Position", t, 0.1f, 0.0f, 0.0f, "%.2f");
+        changed |= ImGui::DragFloat3(ui::LabelAbove("Position"), t, 0.1f, 0.0f, 0.0f, "%.2f");
         ui::ItemTooltip("Edit local position stored in the prefab asset.");
 
         ImGui::SetNextItemWidth(-1.f);
-        changed |= ImGui::DragFloat3("Rotation", r, 0.1f, 0.0f, 0.0f, "%.2f");
+        changed |= ImGui::DragFloat3(ui::LabelAbove("Rotation"), r, 0.1f, 0.0f, 0.0f, "%.2f");
         ui::ItemTooltip("Edit local Euler rotation in degrees.");
 
         ImGui::SetNextItemWidth(-1.f);
-        changed |= ImGui::DragFloat3("Scale", s, 0.01f, 0.001f, 0.0f, "%.3f");
+        changed |= ImGui::DragFloat3(ui::LabelAbove("Scale"), s, 0.01f, 0.001f, 0.0f, "%.3f");
         ui::ItemTooltip("Edit local scale.");
 
         if (changed)
@@ -743,32 +743,32 @@ namespace pe
             std::string projection = ReadStringField(camera, "projection", "perspective");
             int projectionIndex = projection == "orthographic" ? 1 : 0;
             const char *projectionItems[] = {"Perspective", "Orthographic"};
-            if (ImGui::Combo("Projection", &projectionIndex, projectionItems, IM_ARRAYSIZE(projectionItems)))
+            if (ImGui::Combo(ui::LabelAbove("Projection"), &projectionIndex, projectionItems, IM_ARRAYSIZE(projectionItems)))
             {
                 camera["projection"] = projectionIndex == 1 ? "orthographic" : "perspective";
                 MarkDirty();
             }
 
             float fovx = camera.value("fovx", 60.0f);
-            if (ImGui::DragFloat("FOV X", &fovx, 0.1f, 1.0f, 179.0f, "%.1f"))
+            if (ImGui::DragFloat(ui::LabelAbove("FOV X"), &fovx, 0.1f, 1.0f, 179.0f, "%.1f"))
             {
                 camera["fovx"] = fovx;
                 MarkDirty();
             }
             float ortho = camera.value("orthographic_size", 10.0f);
-            if (ImGui::DragFloat("Orthographic Size", &ortho, 0.1f, 0.01f, 10000.0f, "%.2f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Orthographic Size"), &ortho, 0.1f, 0.01f, 10000.0f, "%.2f"))
             {
                 camera["orthographic_size"] = ortho;
                 MarkDirty();
             }
             float nearPlane = camera.value("near_plane", 0.1f);
-            if (ImGui::DragFloat("Near", &nearPlane, 0.01f, 0.001f, 1000.0f, "%.3f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Near"), &nearPlane, 0.01f, 0.001f, 1000.0f, "%.3f"))
             {
                 camera["near_plane"] = nearPlane;
                 MarkDirty();
             }
             float farPlane = camera.value("far_plane", 1000.0f);
-            if (ImGui::DragFloat("Far", &farPlane, 1.0f, 0.01f, 100000.0f, "%.1f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Far"), &farPlane, 1.0f, 0.01f, 100000.0f, "%.1f"))
             {
                 camera["far_plane"] = farPlane;
                 MarkDirty();
@@ -787,7 +787,7 @@ namespace pe
             std::string type = ReadStringField(light, "type", "point");
             int typeIndex = type == "directional" ? 0 : (type == "spot" ? 2 : (type == "area" ? 3 : 1));
             const char *lightItems[] = {"Directional", "Point", "Spot", "Area"};
-            if (ImGui::Combo("Type", &typeIndex, lightItems, IM_ARRAYSIZE(lightItems)))
+            if (ImGui::Combo(ui::LabelAbove("Type"), &typeIndex, lightItems, IM_ARRAYSIZE(lightItems)))
             {
                 light["type"] = typeIndex == 0 ? "directional" : (typeIndex == 2 ? "spot" : (typeIndex == 3 ? "area" : "point"));
                 MarkDirty();
@@ -800,14 +800,14 @@ namespace pe
                     if (light["color"][i].is_number())
                         color[i] = light["color"][i].get<float>();
             }
-            if (ImGui::ColorEdit4("Color", color))
+            if (ImGui::ColorEdit4(ui::LabelAbove("Color"), color))
             {
                 light["color"] = MakeVec4Json(color[0], color[1], color[2], color[3]);
                 MarkDirty();
             }
 
             float range = light.value(typeIndex == 1 ? "radius" : "range", 10.0f);
-            if (typeIndex != 0 && ImGui::DragFloat(typeIndex == 1 ? "Radius" : "Range", &range, 0.1f, 0.0f, 10000.0f, "%.2f"))
+            if (typeIndex != 0 && ImGui::DragFloat(ui::LabelAbove(typeIndex == 1 ? "Radius" : "Range"), &range, 0.1f, 0.0f, 10000.0f, "%.2f"))
             {
                 light[typeIndex == 1 ? "radius" : "range"] = range;
                 MarkDirty();
@@ -836,20 +836,20 @@ namespace pe
                 AddComponent(nodeIndex, Component_Physics);
             int bodyType = physics.value("body_type", 1);
             const char *bodyItems[] = {"Static", "Dynamic", "Kinematic"};
-            if (ImGui::Combo("Body Type", &bodyType, bodyItems, IM_ARRAYSIZE(bodyItems)))
+            if (ImGui::Combo(ui::LabelAbove("Body Type"), &bodyType, bodyItems, IM_ARRAYSIZE(bodyItems)))
             {
                 physics["body_type"] = bodyType;
                 MarkDirty();
             }
             int shapeType = physics.value("shape_type", 0);
             const char *shapeItems[] = {"Box", "Sphere", "Capsule", "Convex Hull"};
-            if (ImGui::Combo("Shape", &shapeType, shapeItems, IM_ARRAYSIZE(shapeItems)))
+            if (ImGui::Combo(ui::LabelAbove("Shape"), &shapeType, shapeItems, IM_ARRAYSIZE(shapeItems)))
             {
                 physics["shape_type"] = shapeType;
                 MarkDirty();
             }
             float mass = physics.value("mass", 1.0f);
-            if (ImGui::DragFloat("Mass", &mass, 0.05f, 0.0f, 100000.0f, "%.2f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Mass"), &mass, 0.05f, 0.0f, 100000.0f, "%.2f"))
             {
                 physics["mass"] = mass;
                 MarkDirty();
@@ -878,26 +878,26 @@ namespace pe
                 AddComponent(nodeIndex, Component_Physics2D);
             int bodyType = physics.value("body_type", 1);
             const char *bodyItems[] = {"Static", "Dynamic", "Kinematic"};
-            if (ImGui::Combo("2D Body Type", &bodyType, bodyItems, IM_ARRAYSIZE(bodyItems)))
+            if (ImGui::Combo(ui::LabelAbove("2D Body Type"), &bodyType, bodyItems, IM_ARRAYSIZE(bodyItems)))
             {
                 physics["body_type"] = bodyType;
                 MarkDirty();
             }
             int shapeType = physics.value("shape_type", 0);
             const char *shapeItems[] = {"Box", "Circle", "Capsule"};
-            if (ImGui::Combo("2D Shape", &shapeType, shapeItems, IM_ARRAYSIZE(shapeItems)))
+            if (ImGui::Combo(ui::LabelAbove("2D Shape"), &shapeType, shapeItems, IM_ARRAYSIZE(shapeItems)))
             {
                 physics["shape_type"] = shapeType;
                 MarkDirty();
             }
             float width = physics.value("width", 1.0f);
             float height = physics.value("height", 1.0f);
-            if (ImGui::DragFloat("Width", &width, 0.05f, 0.001f, 10000.0f, "%.2f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Width"), &width, 0.05f, 0.001f, 10000.0f, "%.2f"))
             {
                 physics["width"] = width;
                 MarkDirty();
             }
-            if (ImGui::DragFloat("Height", &height, 0.05f, 0.001f, 10000.0f, "%.2f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Height"), &height, 0.05f, 0.001f, 10000.0f, "%.2f"))
             {
                 physics["height"] = height;
                 MarkDirty();
@@ -919,7 +919,7 @@ namespace pe
             if (!audio.is_object())
                 AddComponent(nodeIndex, Component_Audio);
             float volume = audio.value("volume", 1.0f);
-            if (ImGui::DragFloat("Volume", &volume, 0.01f, 0.0f, 10.0f, "%.2f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Volume"), &volume, 0.01f, 0.0f, 10.0f, "%.2f"))
             {
                 audio["volume"] = volume;
                 MarkDirty();

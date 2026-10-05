@@ -51,9 +51,9 @@ namespace pe
         }
         ui::ItemTooltip("Choose the audio file this source will play.");
 
-        ImGui::DragFloat("Volume", &desc->volume, 0.01f, 0.0f, 2.0f);
+        ImGui::DragFloat(ui::LabelAbove("Volume"), &desc->volume, 0.01f, 0.0f, 2.0f);
         ui::ItemTooltip("Scales playback loudness for this source.");
-        ImGui::DragFloat("Pitch", &desc->pitch, 0.01f, 0.1f, 3.0f);
+        ImGui::DragFloat(ui::LabelAbove("Pitch"), &desc->pitch, 0.01f, 0.1f, 3.0f);
         ui::ItemTooltip("Changes playback pitch and speed.");
         ImGui::Checkbox("Loop", &desc->loop);
         ui::ItemTooltip("Restart playback automatically when the clip ends.");
@@ -67,9 +67,9 @@ namespace pe
 
         if (desc->spatial)
         {
-            ImGui::DragFloat("Min Distance", &desc->minDistance, 0.1f, 0.1f, 100.0f);
+            ImGui::DragFloat(ui::LabelAbove("Min Distance"), &desc->minDistance, 0.1f, 0.1f, 100.0f);
             ui::ItemTooltip("Distance where the sound is still at full volume.");
-            ImGui::DragFloat("Max Distance", &desc->maxDistance, 1.0f, 1.0f, 1000.0f);
+            ImGui::DragFloat(ui::LabelAbove("Max Distance"), &desc->maxDistance, 1.0f, 1.0f, 1000.0f);
             ui::ItemTooltip("Distance where attenuation reaches its quietest point.");
         }
 

@@ -40,7 +40,7 @@ namespace pe
         static const char *shapeTypeNames[] = {"Box", "Sphere", "Capsule", "Convex Hull"};
 
         int bodyType = static_cast<int>(desc->bodyType);
-        if (ImGui::Combo("Body Type", &bodyType, bodyTypeNames, IM_ARRAYSIZE(bodyTypeNames)))
+        if (ImGui::Combo(ui::LabelAbove("Body Type"), &bodyType, bodyTypeNames, IM_ARRAYSIZE(bodyTypeNames)))
             desc->bodyType = static_cast<PhysicsBodyType>(bodyType);
         ui::ItemTooltip("Select whether the body is static, simulated dynamically, or moved kinematically.");
 
@@ -49,7 +49,7 @@ namespace pe
 
         bool shapeChanged = false;
         int shapeType = static_cast<int>(desc->shapeType);
-        if (ImGui::Combo("Shape Type", &shapeType, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames)))
+        if (ImGui::Combo(ui::LabelAbove("Shape Type"), &shapeType, shapeTypeNames, IM_ARRAYSIZE(shapeTypeNames)))
         {
             desc->shapeType = static_cast<PhysicsShapeType>(shapeType);
             shapeChanged = true;
@@ -64,17 +64,17 @@ namespace pe
             switch (desc->shapeType)
             {
             case PhysicsShapeType::Box:
-                shapeChanged |= ImGui::DragFloat3("Half Extents", &desc->boxHalfExtents.x, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat3(ui::LabelAbove("Half Extents"), &desc->boxHalfExtents.x, 0.01f, 0.001f, 100.0f);
                 ui::ItemTooltip("Half-size of the box collider on X, Y, and Z.");
                 break;
             case PhysicsShapeType::Sphere:
-                shapeChanged |= ImGui::DragFloat("Radius", &desc->sphereRadius, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat(ui::LabelAbove("Radius"), &desc->sphereRadius, 0.01f, 0.001f, 100.0f);
                 ui::ItemTooltip("Radius of the sphere collider.");
                 break;
             case PhysicsShapeType::Capsule:
-                shapeChanged |= ImGui::DragFloat("Half Height", &desc->capsuleHalfHeight, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat(ui::LabelAbove("Half Height"), &desc->capsuleHalfHeight, 0.01f, 0.001f, 100.0f);
                 ui::ItemTooltip("Half the straight section height of the capsule collider.");
-                shapeChanged |= ImGui::DragFloat("Capsule Radius", &desc->capsuleRadius, 0.01f, 0.001f, 100.0f);
+                shapeChanged |= ImGui::DragFloat(ui::LabelAbove("Capsule Radius"), &desc->capsuleRadius, 0.01f, 0.001f, 100.0f);
                 ui::ItemTooltip("Radius of the rounded capsule ends.");
                 break;
             case PhysicsShapeType::ConvexHull:
@@ -87,13 +87,13 @@ namespace pe
             ps->InvalidateShapeCache(node);
 
         if (desc->bodyType != PhysicsBodyType::Static)
-            ImGui::DragFloat("Mass", &desc->mass, 0.1f, 0.001f, 10000.0f);
+            ImGui::DragFloat(ui::LabelAbove("Mass"), &desc->mass, 0.1f, 0.001f, 10000.0f);
         if (desc->bodyType != PhysicsBodyType::Static)
             ui::ItemTooltip("Mass used by dynamic and kinematic body simulation.");
 
-        ImGui::DragFloat("Friction", &desc->friction, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat(ui::LabelAbove("Friction"), &desc->friction, 0.01f, 0.0f, 1.0f);
         ui::ItemTooltip("Surface resistance applied when this body contacts another.");
-        ImGui::DragFloat("Restitution", &desc->restitution, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat(ui::LabelAbove("Restitution"), &desc->restitution, 0.01f, 0.0f, 1.0f);
         ui::ItemTooltip("Bounciness applied during collisions.");
     }
 } // namespace pe

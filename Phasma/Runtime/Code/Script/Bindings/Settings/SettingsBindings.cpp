@@ -95,6 +95,7 @@ namespace pe
         {"shadow_map_size", &SceneSettings::shadow_map_size},
         {"num_cascades", &SceneSettings::num_cascades},
         {"lod_count", &SceneSettings::lod_count},
+        {"physics_rate", &SceneSettings::physics_rate},
     };
 
     static const std::unordered_map<std::string_view, RenderMode> s_renderModeMap = {

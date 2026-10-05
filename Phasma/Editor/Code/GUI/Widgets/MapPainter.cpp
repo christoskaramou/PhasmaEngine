@@ -1092,7 +1092,7 @@ namespace pe
         }
 
         int layer = m_layer;
-        if (ImGui::Combo("Layer", &layer, kLayerNames, kLayerCount))
+        if (ImGui::Combo(ui::LabelAbove("Layer"), &layer, kLayerNames, kLayerCount))
             SetLayer(layer);
         ui::ItemTooltip("Which input map the brush edits. Surface: the terrain height (a Terrain node when "
                         "present, else the Voxel World's heightmap). Strata: thickness of the band below the "
@@ -1120,7 +1120,7 @@ namespace pe
         // normal debounced reconcile - no save needed. Terrain uses a float metres/pixel; Voxel World an int.
         if (target.metersPerPixel)
         {
-            if (ImGui::DragFloat("Meters / Pixel", target.metersPerPixel, 0.05f, 0.05f, 256.0f, "%.2f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Meters / Pixel"), target.metersPerPixel, 0.05f, 0.05f, 256.0f, "%.2f"))
             {
                 *target.metersPerPixel = std::clamp(*target.metersPerPixel, 0.05f, 256.0f);
                 scene->MarkDirty();
@@ -1128,7 +1128,7 @@ namespace pe
             ui::ItemTooltip("World metres each map pixel / mesh cell spans. Terrain size derives from map size x this; "
                             "bigger spreads a small map over a large world with fewer verts.");
         }
-        else if (target.blocksPerPixel && ImGui::DragInt("Meters / Pixel", target.blocksPerPixel, 0.1f, 1, 64))
+        else if (target.blocksPerPixel && ImGui::DragInt(ui::LabelAbove("Meters / Pixel"), target.blocksPerPixel, 0.1f, 1, 64))
         {
             *target.blocksPerPixel = std::clamp(*target.blocksPerPixel, 1, 64);
             scene->MarkDirty();
@@ -1145,7 +1145,7 @@ namespace pe
             if (configured.empty())
             {
                 ImGui::TextWrapped("No map file set for this layer.");
-                ImGui::InputText("New Map Path", m_newPath.data(), m_newPath.size());
+                ImGui::InputText(ui::LabelAbove("New Map Path"), m_newPath.data(), m_newPath.size());
                 ui::ItemTooltip("PNG path under the project's Assets folder.");
             }
             else
@@ -1154,11 +1154,15 @@ namespace pe
                 if (ImGui::Button("Retry Load"))
                     buf.loadedPath.clear(); // next SyncLayer retries the file
             }
-            ImGui::SetNextItemWidth(90.0f);
-            ImGui::DragInt("Width", &m_newW, 1.0f, 16, 2048);
+            {
+                ui::LabelAboveInRow field("Width", 90.0f);
+                ImGui::DragInt(field.id, &m_newW, 1.0f, 16, 2048);
+            }
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(90.0f);
-            ImGui::DragInt("Height", &m_newH, 1.0f, 16, 2048);
+            {
+                ui::LabelAboveInRow field("Height", 90.0f);
+                ImGui::DragInt(field.id, &m_newH, 1.0f, 16, 2048);
+            }
             ui::ItemTooltip("Map size in pixels; one pixel spans Meters/Pixel in X/Z.");
             const float ppN = target.ppScale();
             ImGui::TextDisabled("covers %.0f x %.0f m", m_newW * ppN, m_newH * ppN);
@@ -1166,7 +1170,7 @@ namespace pe
             {
                 float f = SurfRangeToSigned(m_newValue);
                 ImGui::SetNextItemWidth(90.0f);
-                if (ImGui::DragFloat("Fill Value", &f, 0.002f, -1.0f, 1.0f, "%.3f"))
+                if (ImGui::DragFloat(ui::LabelAbove("Fill Value"), &f, 0.002f, -1.0f, 1.0f, "%.3f"))
                     m_newValue = SurfSignedToRange(f);
                 ui::ItemTooltip("Starting height scaler for every pixel: -1 = lowest, 0 = ground, +1 = highest. "
                                 "Mapped into the node's Height Range around Ground Height. This is only the flat "
@@ -1181,7 +1185,7 @@ namespace pe
             {
                 int iv = static_cast<int>(std::lround(m_newValue));
                 ImGui::SetNextItemWidth(90.0f);
-                if (ImGui::DragInt("Fill Value", &iv, 1.0f, 0, 255))
+                if (ImGui::DragInt(ui::LabelAbove("Fill Value"), &iv, 1.0f, 0, 255))
                     m_newValue = static_cast<float>(iv);
                 ui::ItemTooltip("Initial thickness in metres for every pixel of the new strata map. "
                                 "This is only the flat starting level; paint on top afterwards.");
@@ -1212,15 +1216,19 @@ namespace pe
                 for (const std::string &s : labels)
                     items.push_back(s.c_str());
                 m_scatterKind = std::clamp(m_scatterKind, 0, kinds);
-                ImGui::SetNextItemWidth(180.0f);
-                ImGui::Combo("Type", &m_scatterKind, items.data(), static_cast<int>(items.size()));
-                ui::ItemTooltip("Which Scatter Mesh the brush plants (drag freely - the scatter never "
-                                "doubles up). Strokes re-mesh the touched terrain tiles live; Save just "
-                                "persists the PNG. Ctrl+LMB erases with any type selected.");
+                {
+                    ui::LabelAboveInRow field("Type", 180.0f);
+                    ImGui::Combo(field.id, &m_scatterKind, items.data(), static_cast<int>(items.size()));
+                    ui::ItemTooltip("Which Scatter Mesh the brush plants (drag freely - the scatter never "
+                                    "doubles up). Strokes re-mesh the touched terrain tiles live; Save just "
+                                    "persists the PNG. Ctrl+LMB erases with any type selected.");
+                }
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(110.0f);
-                ImGui::DragInt("Spacing", &m_featureSpacing, 0.2f, 2, 64);
-                ui::ItemTooltip("Minimum pixels between scattered instances.");
+                {
+                    ui::LabelAboveInRow field("Spacing", 110.0f);
+                    ImGui::DragInt(field.id, &m_featureSpacing, 0.2f, 2, 64);
+                    ui::ItemTooltip("Minimum pixels between scattered instances.");
+                }
             }
         }
         else if (OnSplat())
@@ -1230,7 +1238,7 @@ namespace pe
             static const char *kSplatItems[5] = {"Grass", "Rock", "Sand", "Snow", "Erase"};
             m_splatLayer = std::clamp(m_splatLayer, 0, 4);
             ImGui::SetNextItemWidth(150.0f);
-            ImGui::Combo("Texture", &m_splatLayer, kSplatItems, 5);
+            ImGui::Combo(ui::LabelAbove("Texture"), &m_splatLayer, kSplatItems, 5);
             ui::ItemTooltip("Which terrain texture layer the brush paints (grass/rock/sand/snow, in the "
                             "Terrain node's Layer order). Weights blend softly — build a layer up with "
                             "repeated strokes (Strength = per-stamp amount). Strokes re-texture live; "
@@ -1239,16 +1247,18 @@ namespace pe
         else if (OnFeatures())
         {
             LoadPalette(); // thumbnails for the Block picker + tile colors for the preview
-            ImGui::SetNextItemWidth(110.0f);
-            ImGui::Combo("Type", &m_brushType, kFeatureNames, 6);
-            ui::ItemTooltip("Tree/Rock/Olive/Cypress scatter sparse feature dots (drag freely - the "
-                            "scatter never doubles up). Block paints the picked tile solidly onto the "
-                            "surface. Erase clears. Ctrl+LMB erases with any type selected.");
+            {
+                ui::LabelAboveInRow field("Type", 110.0f);
+                ImGui::Combo(field.id, &m_brushType, kFeatureNames, 6);
+                ui::ItemTooltip("Tree/Rock/Olive/Cypress scatter sparse feature dots (drag freely - the "
+                                "scatter never doubles up). Block paints the picked tile solidly onto the "
+                                "surface. Erase clears. Ctrl+LMB erases with any type selected.");
+            }
             if (m_brushType <= static_cast<int>(FeatureStamp::Cypress)) // scatter types use Spacing
             {
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(110.0f);
-                ImGui::DragInt("Spacing", &m_featureSpacing, 0.2f, 2, 64);
+                ui::LabelAboveInRow field("Spacing", 110.0f);
+                ImGui::DragInt(field.id, &m_featureSpacing, 0.2f, 2, 64);
                 ui::ItemTooltip("Minimum pixels between scattered features.");
             }
             if (m_brushType == static_cast<int>(FeatureStamp::Block))
@@ -1257,47 +1267,53 @@ namespace pe
         else
         {
             static const char *kBrushNames[4] = {"Raise / Lower", "Smooth", "Flatten", "Set Value"};
-            ImGui::SetNextItemWidth(110.0f);
-            ImGui::Combo("Type", &m_brushType, kBrushNames, 4);
-            ui::ItemTooltip("Raise: add height (Shift+LMB lowers). Smooth: blend toward the neighborhood "
-                            "average. Flatten: pull toward the value under the stroke start. Set: pull "
-                            "toward an explicit value.");
+            {
+                ui::LabelAboveInRow field("Type", 110.0f);
+                ImGui::Combo(field.id, &m_brushType, kBrushNames, 4);
+                ui::ItemTooltip("Raise: add height (Shift+LMB lowers). Smooth: blend toward the neighborhood "
+                                "average. Flatten: pull toward the value under the stroke start. Set: pull "
+                                "toward an explicit value.");
+            }
             if (m_brushType == static_cast<int>(Brush::Set))
             {
                 ImGui::SameLine();
-                ImGui::SetNextItemWidth(110.0f);
+                ui::LabelAboveInRow field("Value", 110.0f);
                 if (m_layer == 0) // surface: signed height scaler
                 {
                     float f = SurfRangeToSigned(m_setValue);
-                    if (ImGui::DragFloat("Value", &f, 0.002f, -1.0f, 1.0f, "%.3f"))
+                    if (ImGui::DragFloat(field.id, &f, 0.002f, -1.0f, 1.0f, "%.3f"))
                         m_setValue = SurfSignedToRange(f);
                     ui::ItemTooltip("Target height scaler the Set brush paints toward (-1 low, 0 ground, +1 high).");
                 }
                 else
                 {
                     int iv = static_cast<int>(std::lround(m_setValue));
-                    if (ImGui::DragInt("Value", &iv, 1.0f, 0, 255))
+                    if (ImGui::DragInt(field.id, &iv, 1.0f, 0, 255))
                         m_setValue = static_cast<float>(iv);
                     ui::ItemTooltip("Target value the Set brush paints toward.");
                 }
             }
         }
-        ImGui::SetNextItemWidth(110.0f);
-        ImGui::DragFloat("Brush", &m_brushRadius, 0.2f, 1.0f, 128.0f, "%.0f px");
-        ui::ItemTooltip("Brush radius in map pixels.");
+        {
+            ui::LabelAboveInRow field("Brush", 110.0f);
+            ImGui::DragFloat(field.id, &m_brushRadius, 0.2f, 1.0f, 128.0f, "%.0f px");
+            ui::ItemTooltip("Brush radius in map pixels.");
+        }
         if (!OnFeatures()) // features are a solid scatter stamp — every other layer has a strength
         {
             ImGui::SameLine();
-            ImGui::SetNextItemWidth(110.0f);
-            ImGui::DragFloat("Strength", &m_brushStrength, 0.2f, 1.0f, 64.0f, "%.0f");
+            ui::LabelAboveInRow field("Strength", 110.0f);
+            ImGui::DragFloat(field.id, &m_brushStrength, 0.2f, 1.0f, 64.0f, "%.0f");
             ui::ItemTooltip("Effect per stamp at the brush center, falling off to the rim. For blend "
                             "brushes 64 = full effect in one stamp.");
         }
         ImGui::SameLine();
-        ImGui::SetNextItemWidth(110.0f);
-        ImGui::SliderFloat("Zoom", &m_zoom, 0.1f, static_cast<float>(std::max(buf.w, buf.h)), "%.2fx",
-                           ImGuiSliderFlags_Logarithmic);
-        ui::ItemTooltip("Mouse wheel over the canvas zooms toward the cursor; right-drag pans.");
+        {
+            ui::LabelAboveInRow field("Zoom", 110.0f);
+            ImGui::SliderFloat(field.id, &m_zoom, 0.1f, static_cast<float>(std::max(buf.w, buf.h)), "%.2fx",
+                               ImGuiSliderFlags_Logarithmic);
+            ui::ItemTooltip("Mouse wheel over the canvas zooms toward the cursor; right-drag pans.");
+        }
 
         if (ImGui::Button("Save + Rebuild"))
             Save();

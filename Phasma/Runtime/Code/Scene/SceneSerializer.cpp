@@ -321,6 +321,7 @@ namespace pe
             settings.AddMember("depth_bias", depthBias.Move(), allocator);
 
             settings.AddMember("time_scale", gSettings.time_scale, allocator);
+            settings.AddMember("physics_rate", gSettings.physics_rate, allocator);
             AddStringVectorMember(settings, "model_list", gSettings.model_list, allocator);
             settings.AddMember("freeze_frustum_culling", gSettings.freeze_frustum_culling, allocator);
             settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
@@ -565,6 +566,10 @@ namespace pe
             }
             if (settings.HasMember("time_scale"))
                 gSettings.time_scale = settings["time_scale"].GetFloat();
+            // Absent (scenes saved before the setting) = the old fixed 30 Hz, not the previous scene's rate.
+            gSettings.physics_rate = settings.HasMember("physics_rate") && settings["physics_rate"].IsUint()
+                                         ? settings["physics_rate"].GetUint()
+                                         : 30u;
             ReadStringVectorMember(settings, "model_list", gSettings.model_list);
             if (settings.HasMember("freeze_frustum_culling"))
                 gSettings.freeze_frustum_culling = settings["freeze_frustum_culling"].GetBool();

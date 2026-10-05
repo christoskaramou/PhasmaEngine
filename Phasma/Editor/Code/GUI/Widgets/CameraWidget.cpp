@@ -42,7 +42,7 @@ namespace pe
         if (projectionOpen)
         {
             int mode = camera->IsOrthographic() ? 1 : 0;
-            if (ImGui::Combo("Mode", &mode, "Perspective\0Orthographic\0"))
+            if (ImGui::Combo(ui::LabelAbove("Mode"), &mode, "Perspective\0Orthographic\0"))
                 camera->SetProjectionMode(mode == 1 ? CameraProjectionMode::Orthographic : CameraProjectionMode::Perspective);
             ui::ItemTooltip("Switch between perspective depth projection and orthographic projection.");
 

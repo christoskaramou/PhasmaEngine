@@ -194,6 +194,7 @@ namespace pe
         std::string skybox_path = DefaultSkyboxPath;
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
+        uint32_t physics_rate = 30; // fixed 3D physics (Jolt) steps per second; clamped to 10..240 Hz
         std::vector<std::string> model_list{};
         Image *current_rendering_image = nullptr;
         std::vector<Image *> rendering_images{};

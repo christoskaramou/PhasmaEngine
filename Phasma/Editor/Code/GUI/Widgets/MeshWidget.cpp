@@ -103,7 +103,7 @@ namespace pe
             aabbColor[2] = ((mesh->aabbColor >> 8) & 0xFF) / 255.0f;
             aabbColor[3] = ((mesh->aabbColor >> 0) & 0xFF) / 255.0f;
 
-            if (ImGui::ColorEdit4("AABB Color", aabbColor))
+            if (ImGui::ColorEdit4(ui::LabelAbove("AABB Color"), aabbColor))
             {
                 uint32_t r = static_cast<uint32_t>(aabbColor[0] * 255.0f + 0.5f);
                 uint32_t g = static_cast<uint32_t>(aabbColor[1] * 255.0f + 0.5f);
@@ -137,7 +137,7 @@ namespace pe
                     {
                         int shift = static_cast<int>(mesh->lodShift);
                         ImGui::SetNextItemWidth(120.0f);
-                        if (ImGui::DragInt("Shift LOD", &shift, 0.1f, 0, static_cast<int>(mesh->lodCount) - 1))
+                        if (ImGui::DragInt(ui::LabelAbove("Shift LOD"), &shift, 0.1f, 0, static_cast<int>(mesh->lodCount) - 1))
                         {
                             mesh->lodShift =
                                 static_cast<uint32_t>(std::clamp(shift, 0, static_cast<int>(mesh->lodCount) - 1));
@@ -146,7 +146,7 @@ namespace pe
                         ui::ItemTooltip("LOD level offset added to the distance pick (0 = automatic, 1+ forces that "
                                         "many levels coarser, clamped to the last level).");
                         ImGui::SetNextItemWidth(120.0f);
-                        lodDirty |= ImGui::DragFloat("Distance Bias", &mesh->lodBias, 0.01f, 0.05f, 20.0f);
+                        lodDirty |= ImGui::DragFloat(ui::LabelAbove("Distance Bias"), &mesh->lodBias, 0.01f, 0.05f, 20.0f);
                         ui::ItemTooltip("Per-mesh multiplier on camera distance (>1 = drop detail sooner, "
                                         "<1 = keep detail longer).");
                     }

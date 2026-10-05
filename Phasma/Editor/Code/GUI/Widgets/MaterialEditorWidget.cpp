@@ -282,25 +282,25 @@ namespace pe
         case MaterialWidgetHint::Color4:
         {
             vec4 &v = std::get<vec4>(value);
-            changed = ImGui::ColorEdit4(field.name.c_str(), &v.x);
+            changed = ImGui::ColorEdit4(ui::LabelAbove(field.name.c_str()), &v.x);
             break;
         }
         case MaterialWidgetHint::Color3:
         {
             vec3 &v = std::get<vec3>(value);
-            changed = ImGui::ColorEdit3(field.name.c_str(), &v.x);
+            changed = ImGui::ColorEdit3(ui::LabelAbove(field.name.c_str()), &v.x);
             break;
         }
         case MaterialWidgetHint::Range01:
         {
             float &v = std::get<float>(value);
-            changed = ImGui::SliderFloat(field.name.c_str(), &v, 0.f, 1.f);
+            changed = ImGui::SliderFloat(ui::LabelAbove(field.name.c_str()), &v, 0.f, 1.f);
             break;
         }
         case MaterialWidgetHint::Range:
         {
             float &v = std::get<float>(value);
-            changed = ImGui::SliderFloat(field.name.c_str(), &v, field.rangeMin, field.rangeMax);
+            changed = ImGui::SliderFloat(ui::LabelAbove(field.name.c_str()), &v, field.rangeMin, field.rangeMax);
             break;
         }
         case MaterialWidgetHint::Auto:
@@ -310,19 +310,19 @@ namespace pe
                        {
                 using T = std::decay_t<decltype(v)>;
                 if constexpr (std::is_same_v<T, float>)
-                    changed = ImGui::DragFloat(field.name.c_str(), &v, 0.01f);
+                    changed = ImGui::DragFloat(ui::LabelAbove(field.name.c_str()), &v, 0.01f);
                 else if constexpr (std::is_same_v<T, vec2>)
-                    changed = ImGui::DragFloat2(field.name.c_str(), &v.x, 0.01f);
+                    changed = ImGui::DragFloat2(ui::LabelAbove(field.name.c_str()), &v.x, 0.01f);
                 else if constexpr (std::is_same_v<T, vec3>)
-                    changed = ImGui::DragFloat3(field.name.c_str(), &v.x, 0.01f);
+                    changed = ImGui::DragFloat3(ui::LabelAbove(field.name.c_str()), &v.x, 0.01f);
                 else if constexpr (std::is_same_v<T, vec4>)
-                    changed = ImGui::ColorEdit4(field.name.c_str(), &v.x);
+                    changed = ImGui::ColorEdit4(ui::LabelAbove(field.name.c_str()), &v.x);
                 else if constexpr (std::is_same_v<T, int32_t>)
-                    changed = ImGui::DragInt(field.name.c_str(), &v);
+                    changed = ImGui::DragInt(ui::LabelAbove(field.name.c_str()), &v);
                 else if constexpr (std::is_same_v<T, uint32_t>)
                 {
                     int tmp = static_cast<int>(v);
-                    if (ImGui::DragInt(field.name.c_str(), &tmp, 1.f, 0, INT32_MAX))
+                    if (ImGui::DragInt(ui::LabelAbove(field.name.c_str()), &tmp, 1.f, 0, INT32_MAX))
                     {
                         v = static_cast<uint32_t>(tmp);
                         changed = true;

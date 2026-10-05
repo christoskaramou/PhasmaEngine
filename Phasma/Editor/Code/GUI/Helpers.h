@@ -118,6 +118,46 @@ namespace pe::ui
         return itemWidth + (text > 0.f ? ImGui::GetStyle().ItemInnerSpacing.x + text : 0.f);
     }
 
+    // Editor controls put their label on its own line above them, not to the right. Draws the visible part of
+    // label and returns a hidden "##label" id for the control; pass it straight in, the buffer is reused:
+    // ImGui::SliderFloat(ui::LabelAbove("Radius##SSAO"), ...). A width set with SetNextItemWidth before the call
+    // is kept; otherwise the control spans the full width, except in auto-sizing windows (popups), where that
+    // would collapse it, so it keeps the default width. A hidden ("##id") label passes through untouched.
+    inline const char *LabelAbove(const char *label)
+    {
+        const char *end = ImGui::FindRenderedTextEnd(label);
+        if (end == label)
+            return label;
+        ImGuiContext &g = *GImGui;
+        const bool hasWidth = (g.NextItemData.HasFlags & ImGuiNextItemDataFlags_HasWidth) != 0;
+        const float width = g.NextItemData.Width;
+        ImGui::TextUnformatted(label, end); // consumes the pending SetNextItemWidth
+        if (hasWidth)
+            ImGui::SetNextItemWidth(width);
+        else if (!(ImGui::GetCurrentWindow()->Flags & ImGuiWindowFlags_AlwaysAutoResize))
+            ImGui::SetNextItemWidth(-FLT_MIN);
+        static char hidden[256];
+        snprintf(hidden, sizeof(hidden), "##%s", label);
+        return hidden;
+    }
+
+    // LabelAbove for a control inside a SameLine row: label and control share one group, so the next SameLine
+    // item sits beside the pair rather than beside the control. Scope it around the control:
+    // { ui::LabelAboveInRow f("Width", 90.f); ImGui::DragInt(f.id, ...); } ImGui::SameLine(); ...
+    struct LabelAboveInRow
+    {
+        LabelAboveInRow(const char *label, float width)
+        {
+            ImGui::BeginGroup();
+            ImGui::SetNextItemWidth(width);
+            id = LabelAbove(label);
+        }
+        ~LabelAboveInRow() { ImGui::EndGroup(); }
+        LabelAboveInRow(const LabelAboveInRow &) = delete;
+        LabelAboveInRow &operator=(const LabelAboveInRow &) = delete;
+        const char *id;
+    };
+
     // SameLine only while the next item still fits the row; otherwise it falls to the next line.
     // Toolbars built this way reflow instead of clipping when the editor font is scaled up.
     inline void SameLineIfFits(float nextItemWidth, float spacing = -1.f)

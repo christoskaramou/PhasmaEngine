@@ -59,7 +59,7 @@ namespace pe
             const ImGuiID id = ImGui::GetID(label);
             if (s_editing != id)
                 snprintf(s_buf, sizeof(s_buf), "%s", value.c_str());
-            ImGui::InputText(label, s_buf, sizeof(s_buf));
+            ImGui::InputText(ui::LabelAbove(label), s_buf, sizeof(s_buf));
             if (ImGui::IsItemActivated())
                 s_editing = id;
             bool committed = false;
@@ -376,7 +376,7 @@ namespace pe
             int runMode = static_cast<int>(scene.GetNodeScriptRunMode(node));
             const char *runModeNames[] = {"Player", "Editor", "Both"};
             ImGui::SetNextItemWidth(140.f);
-            if (ImGui::Combo("Run In", &runMode, runModeNames, 3))
+            if (ImGui::Combo(ui::LabelAbove("Run In"), &runMode, runModeNames, 3))
                 scene.SetNodeScriptRunMode(node, static_cast<ScriptRunMode>(runMode));
             ui::ItemTooltip("When this script's init/update/destroy run: Player (play mode + the "
                             "player), Editor (while editing, not in play), or Both.");
@@ -415,7 +415,7 @@ namespace pe
                     if (!opt)
                         break;
                     float val = static_cast<float>(*opt);
-                    if (ImGui::DragFloat(var.name.c_str(), &val, 0.1f))
+                    if (ImGui::DragFloat(ui::LabelAbove(var.name.c_str()), &val, 0.1f))
                         exposed[var.name] = static_cast<double>(val);
                     ui::ItemTooltip("Edit this numeric value exposed by the node script.");
                     break;
@@ -439,7 +439,7 @@ namespace pe
                     std::string val = *opt;
                     char buf[256];
                     std::snprintf(buf, sizeof(buf), "%s", val.c_str());
-                    if (ImGui::InputText(var.name.c_str(), buf, sizeof(buf)))
+                    if (ImGui::InputText(ui::LabelAbove(var.name.c_str()), buf, sizeof(buf)))
                         exposed[var.name] = std::string(buf);
                     ui::ItemTooltip("Edit this string value exposed by the node script.");
                     break;
@@ -522,7 +522,7 @@ namespace pe
                 if (templates[i].type == uiComponent->widgetType)
                     currentType = i;
 
-            if (ImGui::BeginCombo("Type", templates[currentType].name))
+            if (ImGui::BeginCombo(ui::LabelAbove("Type"), templates[currentType].name))
             {
                 for (int i = 0; i < static_cast<int>(templates.size()); ++i)
                 {
@@ -543,7 +543,7 @@ namespace pe
             {
                 char buffer[512];
                 snprintf(buffer, sizeof(buffer), "%s", value.c_str());
-                if (ImGui::InputText(label, buffer, sizeof(buffer)))
+                if (ImGui::InputText(ui::LabelAbove(label), buffer, sizeof(buffer)))
                 {
                     value = buffer;
                     markRuntimeUiChanged();
@@ -581,7 +581,7 @@ namespace pe
             };
 
             int currentAction = findActionIndex();
-            if (ImGui::BeginCombo("Action", kRuntimeUiActions[currentAction].label))
+            if (ImGui::BeginCombo(ui::LabelAbove("Action"), kRuntimeUiActions[currentAction].label))
             {
                 for (int i = 0; i < kRuntimeUiActionCount; ++i)
                 {
@@ -605,7 +605,7 @@ namespace pe
             auto editColor = [&](const char *label, vec4 &color)
             {
                 float value[4] = {color.r, color.g, color.b, color.a};
-                if (ImGui::ColorEdit4(label, value))
+                if (ImGui::ColorEdit4(ui::LabelAbove(label), value))
                 {
                     color = vec4(value[0], value[1], value[2], value[3]);
                     markRuntimeUiChanged();
@@ -622,14 +622,14 @@ namespace pe
             ui::ItemTooltip("Route this widget through the global background tint instead of the element tint.");
 
             float anchorVals[2] = {uiComponent->anchor.x, uiComponent->anchor.y};
-            if (ImGui::DragFloat2("Anchor", anchorVals, 0.01f, 0.0f, 1.0f, "%.2f"))
+            if (ImGui::DragFloat2(ui::LabelAbove("Anchor"), anchorVals, 0.01f, 0.0f, 1.0f, "%.2f"))
             {
                 uiComponent->anchor = vec2(anchorVals[0], anchorVals[1]);
                 markRuntimeUiChanged();
             }
             ui::ItemTooltip("Screen anchor (0..1): 0,0 = top-left, 0.5,0.5 = center, 1,1 = bottom-right. The element stays at this screen point across resolutions.");
             float pivotVals[2] = {uiComponent->pivot.x, uiComponent->pivot.y};
-            if (ImGui::DragFloat2("Pivot", pivotVals, 0.01f, 0.0f, 1.0f, "%.2f"))
+            if (ImGui::DragFloat2(ui::LabelAbove("Pivot"), pivotVals, 0.01f, 0.0f, 1.0f, "%.2f"))
             {
                 uiComponent->pivot = vec2(pivotVals[0], pivotVals[1]);
                 markRuntimeUiChanged();
@@ -638,12 +638,12 @@ namespace pe
 
             // Uncapped: floor at a small positive value, no upper bound (FLT_MAX) so
             // titles/HUD text can scale arbitrarily large. Ctrl+click the slider to type.
-            if (ImGui::DragFloat("Font Scale", &uiComponent->fontScale, 0.05f, 0.01f, FLT_MAX, "%.2f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Font Scale"), &uiComponent->fontScale, 0.05f, 0.01f, FLT_MAX, "%.2f"))
                 markRuntimeUiChanged();
 
             const char *hAlignItems[] = {"Default", "Left", "Center", "Right"};
             int hAlign = uiComponent->textAlignH < 4 ? static_cast<int>(uiComponent->textAlignH) : 0;
-            if (ImGui::Combo("Text Align X", &hAlign, hAlignItems, IM_ARRAYSIZE(hAlignItems)))
+            if (ImGui::Combo(ui::LabelAbove("Text Align X"), &hAlign, hAlignItems, IM_ARRAYSIZE(hAlignItems)))
             {
                 uiComponent->textAlignH = static_cast<uint8_t>(hAlign);
                 markRuntimeUiChanged();
@@ -651,14 +651,14 @@ namespace pe
             ui::ItemTooltip("Horizontal text alignment. Default = Left for text/panels, Center for buttons.");
             const char *vAlignItems[] = {"Default", "Top", "Middle", "Bottom"};
             int vAlign = uiComponent->textAlignV < 4 ? static_cast<int>(uiComponent->textAlignV) : 0;
-            if (ImGui::Combo("Text Align Y", &vAlign, vAlignItems, IM_ARRAYSIZE(vAlignItems)))
+            if (ImGui::Combo(ui::LabelAbove("Text Align Y"), &vAlign, vAlignItems, IM_ARRAYSIZE(vAlignItems)))
             {
                 uiComponent->textAlignV = static_cast<uint8_t>(vAlign);
                 markRuntimeUiChanged();
             }
             ui::ItemTooltip("Vertical text alignment. Default = Top for text/panels, Middle for buttons.");
             float textOffsetVals[2] = {uiComponent->textOffset.x, uiComponent->textOffset.y};
-            if (ImGui::DragFloat2("Text Offset", textOffsetVals, 0.5f, -4000.0f, 4000.0f, "%.0f"))
+            if (ImGui::DragFloat2(ui::LabelAbove("Text Offset"), textOffsetVals, 0.5f, -4000.0f, 4000.0f, "%.0f"))
             {
                 uiComponent->textOffset = vec2(textOffsetVals[0], textOffsetVals[1]);
                 markRuntimeUiChanged();
@@ -738,7 +738,7 @@ namespace pe
 
             int frameIndex = sprite->frameIndex;
             ImGui::SetNextItemWidth(96.0f);
-            if (ImGui::DragInt("Frame", &frameIndex, 1.0f, 0, std::max(0, static_cast<int>(sprite->frames.size()) - 1)))
+            if (ImGui::DragInt(ui::LabelAbove("Frame"), &frameIndex, 1.0f, 0, std::max(0, static_cast<int>(sprite->frames.size()) - 1)))
             {
                 std::string err;
                 if (!scene.SetSpriteFrame(node, frameIndex, sprite->meshSlot, &err))
@@ -748,7 +748,7 @@ namespace pe
             }
 
             vec4 tint = sprite->tint;
-            if (ImGui::ColorEdit4("Tint", &tint.x))
+            if (ImGui::ColorEdit4(ui::LabelAbove("Tint"), &tint.x))
             {
                 SpriteAuthoring::Options options;
                 options.hasTint = true;
@@ -769,7 +769,7 @@ namespace pe
                     clipNames.push_back(clip.name.c_str());
 
                 ImGui::SetNextItemWidth(-1.0f);
-                if (ImGui::Combo("Clip", &clipIndex, clipNames.data(), static_cast<int>(clipNames.size())))
+                if (ImGui::Combo(ui::LabelAbove("Clip"), &clipIndex, clipNames.data(), static_cast<int>(clipNames.size())))
                 {
                     sprite->activeClipIndex = clipIndex;
                     sprite->activeClipName = sprite->clips[clipIndex].name;
@@ -779,7 +779,7 @@ namespace pe
                 }
 
                 ImGui::SetNextItemWidth(96.0f);
-                if (ImGui::DragFloat("Speed", &sprite->playbackSpeed, 0.05f, 0.0f, 16.0f, "%.2f"))
+                if (ImGui::DragFloat(ui::LabelAbove("Speed"), &sprite->playbackSpeed, 0.05f, 0.0f, 16.0f, "%.2f"))
                 {
                     sprite->playbackSpeed = std::clamp(sprite->playbackSpeed, 0.0f, 16.0f);
                     if (m_gui)
@@ -852,7 +852,7 @@ namespace pe
                 clipNames.push_back(clip.name.empty() ? "<unnamed>" : clip.name.c_str());
 
             bool loop = state ? state->loop : true;
-            if (ImGui::Combo("Clip", &clipIndex, clipNames.data(), static_cast<int>(clipNames.size())))
+            if (ImGui::Combo(ui::LabelAbove("Clip"), &clipIndex, clipNames.data(), static_cast<int>(clipNames.size())))
             {
                 anim->PlayAnimation(scene, node, clipIndex, loop);
                 state = anim->GetAnimationState(node);
@@ -899,7 +899,7 @@ namespace pe
             ui::ItemTooltip("Loop the selected animation clip during playback.");
 
             float speed = state ? state->speed : 1.0f;
-            if (ImGui::DragFloat("Speed", &speed, 0.01f, -10.0f, 10.0f, "%.3f"))
+            if (ImGui::DragFloat(ui::LabelAbove("Speed"), &speed, 0.01f, -10.0f, 10.0f, "%.3f"))
             {
                 if (state)
                     anim->SetSpeed(node, speed);
@@ -910,7 +910,7 @@ namespace pe
             {
                 const AnimationClip &clip = clips[clipIndex];
                 float time = state->time;
-                if (ImGui::SliderFloat("Time", &time, 0.0f, std::max(clip.duration, 0.001f), "%.2f ticks"))
+                if (ImGui::SliderFloat(ui::LabelAbove("Time"), &time, 0.0f, std::max(clip.duration, 0.001f), "%.2f ticks"))
                 {
                     anim->SetPlaybackTime(scene, node, time);
                     state = anim->GetAnimationState(node);
@@ -982,7 +982,7 @@ namespace pe
             ui::ItemTooltip("Move the IK target back to the strip's bind-pose tip.");
 
             ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::DragInt("IK Iterations", &stripState.ikIterations, 0.25f, 1, 64))
+            if (ImGui::DragInt(ui::LabelAbove("IK Iterations"), &stripState.ikIterations, 0.25f, 1, 64))
             {
                 stripState.ikIterations = std::clamp(stripState.ikIterations, 1, 64);
                 skinned_strip_2d_editor::PersistState(scene, node, stripState);
@@ -991,7 +991,7 @@ namespace pe
             ui::ItemTooltip("Solver iterations used when applying the IK target.");
 
             ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::DragFloat("Bend Limit",
+            if (ImGui::DragFloat(ui::LabelAbove("Bend Limit"),
                                  &stripState.maxBendDegrees,
                                  0.25f,
                                  skinned_strip_2d_editor::kMinBendLimitDegrees,
@@ -1007,7 +1007,7 @@ namespace pe
             ui::ItemTooltip("Maximum local bend used while solving IK.");
 
             ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::DragFloat("Stretch Limit",
+            if (ImGui::DragFloat(ui::LabelAbove("Stretch Limit"),
                                  &stripState.maxStretchScale,
                                  0.01f,
                                  skinned_strip_2d_editor::kMinStretchScale,
@@ -1025,7 +1025,7 @@ namespace pe
             ui::ItemTooltip("Maximum elongation allowed while solving IK.");
 
             ImGui::SetNextItemWidth(120.0f);
-            if (ImGui::DragFloat("Pose Stretch",
+            if (ImGui::DragFloat(ui::LabelAbove("Pose Stretch"),
                                  &stripState.stretchScale,
                                  0.01f,
                                  skinned_strip_2d_editor::kMinStretchScale,
@@ -1039,7 +1039,7 @@ namespace pe
             }
             ui::ItemTooltip("Current strip elongation for direct joint posing.");
 
-            if (ImGui::DragFloat2("IK Target", &stripState.ikTargetLocal.x, 0.02f, -100.0f, 100.0f, "%.2f"))
+            if (ImGui::DragFloat2(ui::LabelAbove("IK Target"), &stripState.ikTargetLocal.x, 0.02f, -100.0f, 100.0f, "%.2f"))
             {
                 if (skinned_strip_2d_editor::SolveIk(anim, scene, node, stripState))
                     notifyPoseEdit();
@@ -1644,16 +1644,16 @@ namespace pe
                         bool changed = false;
 
                         // --- common ---
-                        changed |= ImGui::DragFloat("Priority", &z->priority, 0.1f);
+                        changed |= ImGui::DragFloat(ui::LabelAbove("Priority"), &z->priority, 0.1f);
                         ui::ItemTooltip("When zones overlap, higher priority wins (post-process / audio).");
-                        changed |= ImGui::SliderFloat("Blend", &z->blend, 0.0f, 1.0f);
+                        changed |= ImGui::SliderFloat(ui::LabelAbove("Blend"), &z->blend, 0.0f, 1.0f);
                         ui::ItemTooltip("Master weight (0..1) for this zone's blended effects (post-process / audio).");
-                        changed |= ImGui::DragFloat("Blend Distance", &z->blend_distance, 0.05f, 0.0f, 1e6f);
+                        changed |= ImGui::DragFloat(ui::LabelAbove("Blend Distance"), &z->blend_distance, 0.05f, 0.0f, 1e6f);
                         ui::ItemTooltip("World-unit fade OUTSIDE the box: full at the wall, fading to none this many "
                                         "metres away. 0 = hard edge.");
                         const char *runModes[] = {"Editor", "Player", "Both"};
                         int runModeIdx = static_cast<int>(z->runMode);
-                        if (ImGui::Combo("Mode", &runModeIdx, runModes, IM_ARRAYSIZE(runModes)))
+                        if (ImGui::Combo(ui::LabelAbove("Mode"), &runModeIdx, runModes, IM_ARRAYSIZE(runModes)))
                         {
                             z->runMode = static_cast<TriggerRunMode>(runModeIdx);
                             changed = true;
@@ -1662,7 +1662,7 @@ namespace pe
                                         "built game), or Both.");
                         const char *shapes[] = {"Box", "Sphere"};
                         int shapeIdx = static_cast<int>(z->shape);
-                        if (ImGui::Combo("Shape", &shapeIdx, shapes, IM_ARRAYSIZE(shapes)))
+                        if (ImGui::Combo(ui::LabelAbove("Shape"), &shapeIdx, shapes, IM_ARRAYSIZE(shapes)))
                         {
                             z->shape = static_cast<ZoneShape>(shapeIdx);
                             changed = true;
@@ -1694,13 +1694,13 @@ namespace pe
                                 char exitBuf[128];
                                 std::snprintf(enterBuf, sizeof(enterBuf), "%s", z->onEnter.c_str());
                                 std::snprintf(exitBuf, sizeof(exitBuf), "%s", z->onExit.c_str());
-                                if (ImGui::InputText("On Enter", enterBuf, sizeof(enterBuf)))
+                                if (ImGui::InputText(ui::LabelAbove("On Enter"), enterBuf, sizeof(enterBuf)))
                                 {
                                     z->onEnter = enterBuf;
                                     changed = true;
                                 }
                                 ui::ItemTooltip("Script function called on enter (default on_enter).");
-                                if (ImGui::InputText("On Exit", exitBuf, sizeof(exitBuf)))
+                                if (ImGui::InputText(ui::LabelAbove("On Exit"), exitBuf, sizeof(exitBuf)))
                                 {
                                     z->onExit = exitBuf;
                                     changed = true;
@@ -1810,8 +1810,8 @@ namespace pe
                                 }
                             }
                             ui::ItemTooltip("Choose the audio file this zone plays.");
-                            changed |= ImGui::DragFloat("Volume##zoneaudio", &a.volume, 0.01f, 0.0f, 2.0f);
-                            changed |= ImGui::DragFloat("Pitch##zoneaudio", &a.pitch, 0.01f, 0.1f, 3.0f);
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Volume##zoneaudio"), &a.volume, 0.01f, 0.0f, 2.0f);
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Pitch##zoneaudio"), &a.pitch, 0.01f, 0.1f, 3.0f);
                             changed |= ImGui::Checkbox("Loop##zoneaudio", &a.loop);
                             changed |= ImGui::Checkbox("Spatial##zoneaudio", &a.spatial);
                             ui::ItemTooltip("Attenuate by listener distance (left exactly as you set it).");
@@ -1830,7 +1830,7 @@ namespace pe
 #ifdef PE_PHYSICS2D
                                 const char *engines[] = {"Physics (3D / Jolt)", "Physics2D (Box2D)"};
                                 int engIdx = static_cast<int>(z->physicsEngine);
-                                if (ImGui::Combo("Engine##zonephysics", &engIdx, engines, IM_ARRAYSIZE(engines)))
+                                if (ImGui::Combo(ui::LabelAbove("Engine##zonephysics"), &engIdx, engines, IM_ARRAYSIZE(engines)))
                                 {
                                     z->physicsEngine = static_cast<ZonePhysicsEngine>(engIdx);
                                     changed = true;
@@ -1841,7 +1841,7 @@ namespace pe
 #endif
                                 const char *modes[] = {"Sensor (trigger)", "Solid (collider)"};
                                 int modeIdx = static_cast<int>(z->physicsMode);
-                                if (ImGui::Combo("Physics Mode", &modeIdx, modes, IM_ARRAYSIZE(modes)))
+                                if (ImGui::Combo(ui::LabelAbove("Physics Mode"), &modeIdx, modes, IM_ARRAYSIZE(modes)))
                                 {
                                     z->physicsMode = static_cast<ZonePhysicsMode>(modeIdx);
                                     changed = true;
@@ -1850,7 +1850,7 @@ namespace pe
 
                                 const char *bodyTypes[] = {"Static", "Dynamic", "Kinematic"};
                                 int btIdx = static_cast<int>(z->physicsBodyType);
-                                if (ImGui::Combo("Body Type", &btIdx, bodyTypes, IM_ARRAYSIZE(bodyTypes)))
+                                if (ImGui::Combo(ui::LabelAbove("Body Type"), &btIdx, bodyTypes, IM_ARRAYSIZE(bodyTypes)))
                                 {
                                     z->physicsBodyType = static_cast<PhysicsBodyType>(btIdx);
                                     changed = true;
@@ -1862,10 +1862,10 @@ namespace pe
                                     z->physicsBodyType == PhysicsBodyType::Dynamic)
                                 {
                                     // 2D bodies are sized by area density rather than absolute mass.
-                                    changed |= ImGui::DragFloat(zone2D ? "Density##zonephysics" : "Mass##zonephysics",
+                                    changed |= ImGui::DragFloat(ui::LabelAbove(zone2D ? "Density##zonephysics" : "Mass##zonephysics"),
                                                                 &z->physicsMass, 0.05f, 0.0f, 1e6f);
-                                    changed |= ImGui::DragFloat("Friction##zonephysics", &z->physicsFriction, 0.01f, 0.0f, 1.0f);
-                                    changed |= ImGui::DragFloat("Restitution##zonephysics", &z->physicsRestitution, 0.01f, 0.0f, 1.0f);
+                                    changed |= ImGui::DragFloat(ui::LabelAbove("Friction##zonephysics"), &z->physicsFriction, 0.01f, 0.0f, 1.0f);
+                                    changed |= ImGui::DragFloat(ui::LabelAbove("Restitution##zonephysics"), &z->physicsRestitution, 0.01f, 0.0f, 1.0f);
                                     ui::ItemTooltip("Restitution = bounciness (0 = none, 1 = full).");
                                 }
 
@@ -1873,7 +1873,7 @@ namespace pe
                                 {
                                     char filterBuf[128];
                                     std::snprintf(filterBuf, sizeof(filterBuf), "%s", z->physicsFilterTag.c_str());
-                                    if (ImGui::InputText("Filter##zonephysics", filterBuf, sizeof(filterBuf)))
+                                    if (ImGui::InputText(ui::LabelAbove("Filter##zonephysics"), filterBuf, sizeof(filterBuf)))
                                     {
                                         z->physicsFilterTag = filterBuf;
                                         changed = true;
@@ -1884,12 +1884,12 @@ namespace pe
                                     char exitBuf[128];
                                     std::snprintf(enterBuf, sizeof(enterBuf), "%s", z->physicsOnEnter.c_str());
                                     std::snprintf(exitBuf, sizeof(exitBuf), "%s", z->physicsOnExit.c_str());
-                                    if (ImGui::InputText("On Enter##zonephysics", enterBuf, sizeof(enterBuf)))
+                                    if (ImGui::InputText(ui::LabelAbove("On Enter##zonephysics"), enterBuf, sizeof(enterBuf)))
                                     {
                                         z->physicsOnEnter = enterBuf;
                                         changed = true;
                                     }
-                                    if (ImGui::InputText("On Exit##zonephysics", exitBuf, sizeof(exitBuf)))
+                                    if (ImGui::InputText(ui::LabelAbove("On Exit##zonephysics"), exitBuf, sizeof(exitBuf)))
                                     {
                                         z->physicsOnExit = exitBuf;
                                         changed = true;
@@ -1902,7 +1902,7 @@ namespace pe
                                                     "below (world units). E.g. (0, 20, 0) = an anti-gravity updraft.");
                                     if (z->physicsForceField)
                                     {
-                                        changed |= ImGui::DragFloat3("Force##zoneff", &z->physicsForce.x, 0.5f);
+                                        changed |= ImGui::DragFloat3(ui::LabelAbove("Force##zoneff"), &z->physicsForce.x, 0.5f);
                                         ui::ItemTooltip("World-space force applied per frame to bodies inside. 2D ignores Z.");
                                     }
 
@@ -2010,7 +2010,7 @@ namespace pe
                             {
                                 char tgtBuf[128];
                                 std::snprintf(tgtBuf, sizeof(tgtBuf), "%s", z->streamTargetName.c_str());
-                                if (ImGui::InputText("Target Node##zonestream", tgtBuf, sizeof(tgtBuf)))
+                                if (ImGui::InputText(ui::LabelAbove("Target Node##zonestream"), tgtBuf, sizeof(tgtBuf)))
                                 {
                                     z->streamTargetName = tgtBuf;
                                     changed = true;
@@ -2029,13 +2029,13 @@ namespace pe
                             {
                                 char camBuf[128];
                                 std::snprintf(camBuf, sizeof(camBuf), "%s", z->cameraTargetName.c_str());
-                                if (ImGui::InputText("Camera Node##zonecam", camBuf, sizeof(camBuf)))
+                                if (ImGui::InputText(ui::LabelAbove("Camera Node##zonecam"), camBuf, sizeof(camBuf)))
                                 {
                                     z->cameraTargetName = camBuf;
                                     changed = true;
                                 }
                                 ui::ItemTooltip("Exact name of a camera node to activate (leave empty to only override FOV).");
-                                changed |= ImGui::DragFloat("FOV (deg)##zonecam", &z->cameraFovDeg, 0.5f, 0.0f, 179.0f);
+                                changed |= ImGui::DragFloat(ui::LabelAbove("FOV (deg)##zonecam"), &z->cameraFovDeg, 0.5f, 0.0f, 179.0f);
                                 ui::ItemTooltip("Override the active camera's horizontal FOV in degrees while inside (0 = no change).");
                             }
                         }
@@ -2084,17 +2084,17 @@ namespace pe
                             changed |= ImGui::Checkbox("Anchor Follows Camera", &v->anchorFollowsCamera);
                             ui::ItemTooltip("Stream around the active camera. Off: a script drives "
                                             "voxel.set_anchor (e.g. around the player).");
-                            changed |= ImGui::DragInt("Load Radius", &v->loadRadius, 0.2f, 1, 64);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Load Radius"), &v->loadRadius, 0.2f, 1, 64);
                             ui::ItemTooltip("Streaming radius in 16 m columns around the anchor.");
-                            changed |= ImGui::DragInt("Unload Margin", &v->unloadMargin, 0.2f, 0, 16);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Unload Margin"), &v->unloadMargin, 0.2f, 0, 16);
                             ui::ItemTooltip("Extra columns kept loaded past the radius before unloading.");
                         }
-                        changed |= ImGui::DragInt("World Radius", &v->worldRadius, 0.2f, 0, 4096);
+                        changed |= ImGui::DragInt(ui::LabelAbove("World Radius"), &v->worldRadius, 0.2f, 0, 4096);
                         ui::ItemTooltip("Total world size in columns around this node; columns outside never "
                                         "generate. 0 = infinite in X/Z.");
-                        changed |= ImGui::DragInt("Ground Y", &v->groundY, 0.5f, 0, 256);
+                        changed |= ImGui::DragInt(ui::LabelAbove("Ground Y"), &v->groundY, 0.5f, 0, 256);
                         ui::ItemTooltip("Terrain base height fed to the world generator (noise base / sea-level datum).");
-                        changed |= ImGui::DragInt("Upload Budget", &v->uploadBudget, 0.2f, 1, 64);
+                        changed |= ImGui::DragInt(ui::LabelAbove("Upload Budget"), &v->uploadBudget, 0.2f, 1, 64);
                         ui::ItemTooltip("Section meshes uploaded per frame; higher streams in faster but can "
                                         "spike frame time.");
                         changed |= ImGui::Checkbox("LOD", &v->lodEnabled);
@@ -2104,7 +2104,7 @@ namespace pe
                         {
                             ImGui::Indent(16.0f);
                             ImGui::SetNextItemWidth(120.0f);
-                            changed |= ImGui::DragInt("Full-Detail Radius", &v->lod0Radius, 0.2f, 1, 64);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Full-Detail Radius"), &v->lod0Radius, 0.2f, 1, 64);
                             ui::ItemTooltip("Full-detail ring in columns, measured 3D from the camera "
                                             "(circular; height counts — a high camera coarsens everything). "
                                             "2 m cells out to 3x this radius, 4 m cells beyond.");
@@ -2112,7 +2112,7 @@ namespace pe
                         }
                         char saveBuf[260];
                         snprintf(saveBuf, sizeof(saveBuf), "%s", v->saveDir.c_str());
-                        if (ImGui::InputText("Save Dir", saveBuf, sizeof(saveBuf)))
+                        if (ImGui::InputText(ui::LabelAbove("Save Dir"), saveBuf, sizeof(saveBuf)))
                         {
                             v->saveDir = saveBuf;
                             changed = true;
@@ -2125,12 +2125,12 @@ namespace pe
                         // (MapGen::MapHeight). Heightmap terrain only; noise cube terrain uses Ground Y.
                         if (!v->heightmapPath.empty())
                         {
-                            changed |= ImGui::DragFloatRange2("Height Range (m)", &v->heightMin, &v->heightMax, 0.5f,
+                            changed |= ImGui::DragFloatRange2(ui::LabelAbove("Height Range (m)"), &v->heightMin, &v->heightMax, 0.5f,
                                                               -256.0f, 256.0f, "min %.0f", "max %.0f");
                             ui::ItemTooltip("Vertical span in metres around Ground Height the heightmap maps into: "
                                             "0 = Ground Height, 1 = Ground Height + max.");
                             v->groundHeight = std::clamp(v->groundHeight, v->heightMin, v->heightMax);
-                            changed |= ImGui::DragFloat("Ground Height", &v->groundHeight, 0.25f, v->heightMin,
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Ground Height"), &v->groundHeight, 0.25f, v->heightMin,
                                                         v->heightMax, "%.1f");
                             ui::ItemTooltip("Height in metres the 0 map value sits at; drags within Height Range.");
                         }
@@ -2138,7 +2138,7 @@ namespace pe
                         {
                             char buf[260];
                             snprintf(buf, sizeof(buf), "%s", path.c_str());
-                            if (ImGui::InputText(label, buf, sizeof(buf)))
+                            if (ImGui::InputText(ui::LabelAbove(label), buf, sizeof(buf)))
                             {
                                 path = buf;
                                 changed = true;
@@ -2150,13 +2150,13 @@ namespace pe
                                         "centered on this node. Empty = procedural noise terrain.");
                         if (v->heightmapPath.empty())
                         {
-                            changed |= ImGui::DragFloat("Mountain Height", &v->noiseAmplitude, 0.25f, 0.0f, 128.0f, "%.0f");
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Mountain Height"), &v->noiseAmplitude, 0.25f, 0.0f, 128.0f, "%.0f");
                             ui::ItemTooltip("Peak height above Ground Y in metres. 0 = flat plain.");
-                            changed |= ImGui::DragFloat("Feature Scale", &v->noiseFeatureScale, 0.5f, 8.0f, 1024.0f,
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Feature Scale"), &v->noiseFeatureScale, 0.5f, 8.0f, 1024.0f,
                                                         "%.0f");
                             ui::ItemTooltip("Terrain feature wavelength in metres — small = choppy hills, large = "
                                             "wide rolling terrain.");
-                            changed |= ImGui::DragInt("Seed", &v->noiseSeed);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Seed"), &v->noiseSeed);
                             ui::ItemTooltip("Shifts the noise domain; each seed is a different world.");
                             changed |= ImGui::Checkbox("Caves", &v->caves);
                             ui::ItemTooltip("Carve worm caves under the surface.");
@@ -2172,23 +2172,23 @@ namespace pe
                             pathField("Features Map", v->featuresPath);
                             ui::ItemTooltip("Decoration map: pixel 1 = tree, 2 = rock at that pixel's block. "
                                             "Paint it sparse in the Map Painter's Features layer.");
-                            changed |= ImGui::DragInt("Meters / Pixel", &v->blocksPerPixel, 0.1f, 1, 64);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Meters / Pixel"), &v->blocksPerPixel, 0.1f, 1, 64);
                             ui::ItemTooltip("Metres each map pixel spans in X/Z; heights lerp between pixels.");
                             changed |= ImGui::Checkbox("Elevation Bands", &v->surfaceBands);
                             ui::ItemTooltip("Pick the top block by height (sand < dry grass < rock < snow) instead of "
                                             "one Surface Block. Great for coast-to-summit terrain.");
-                            changed |= ImGui::DragInt("Surface Block", &v->surfaceBlock, 0.1f, 0, 255);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Surface Block"), &v->surfaceBlock, 0.1f, 0, 255);
                             ui::ItemTooltip("Top block when Elevation Bands is off. Ids: 1=stone 2=dirt 3=grass "
                                             "4=water 8=sand 10=rock 11=snow 13=marble, 0=air.");
-                            changed |= ImGui::DragInt("Strata 1 Block", &v->strata1Block, 0.1f, 0, 255);
-                            changed |= ImGui::DragInt("Strata 1 Thickness", &v->strata1Thickness, 0.2f, 0, 128);
-                            changed |= ImGui::DragInt("Strata 2 Block", &v->strata2Block, 0.1f, 0, 255);
-                            changed |= ImGui::DragInt("Strata 2 Thickness", &v->strata2Thickness, 0.2f, 0, 128);
-                            changed |= ImGui::DragInt("Fill Block", &v->fillBlock, 0.1f, 0, 255);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Strata 1 Block"), &v->strata1Block, 0.1f, 0, 255);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Strata 1 Thickness"), &v->strata1Thickness, 0.2f, 0, 128);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Strata 2 Block"), &v->strata2Block, 0.1f, 0, 255);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Strata 2 Thickness"), &v->strata2Thickness, 0.2f, 0, 128);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Fill Block"), &v->fillBlock, 0.1f, 0, 255);
                             ui::ItemTooltip("Fills below the strata down to y=0. 0 = air (floating-island "
                                             "shells).");
                         }
-                        changed |= ImGui::DragInt("Sea Level", &v->seaLevel, 0.2f, -1, 256);
+                        changed |= ImGui::DragInt(ui::LabelAbove("Sea Level"), &v->seaLevel, 0.2f, -1, 256);
                         ui::ItemTooltip("Water surface height in metres: -1 = auto (Ground Y - 2), 0 = no water.");
                         changed |= ImGui::Checkbox("Auto Rebuild", &v->autoRebuild);
                         ui::ItemTooltip("On (default): worldgen edits rebuild the world automatically after a short "
@@ -2221,28 +2221,28 @@ namespace pe
                         bool changed = false;
                         changed |= ImGui::Checkbox("Enabled##terrain", &t->worldEnabled);
                         ui::ItemTooltip("Build and keep the terrain while this node is enabled.");
-                        changed |= ImGui::DragInt("Size X (m)", &t->sizeXMeters, 1.0f, 0, 65536);
+                        changed |= ImGui::DragInt(ui::LabelAbove("Size X (m)"), &t->sizeXMeters, 1.0f, 0, 65536);
                         ui::ItemTooltip("Terrain width in metres, centred on this node. 0 with a heightmap fills the "
                                         "map's X extent. Mesh is capped at 2048 cells/axis — raise Meters/Pixel for a "
                                         "bigger world.");
-                        changed |= ImGui::DragInt("Size Z (m)", &t->sizeZMeters, 1.0f, 0, 65536);
+                        changed |= ImGui::DragInt(ui::LabelAbove("Size Z (m)"), &t->sizeZMeters, 1.0f, 0, 65536);
                         ui::ItemTooltip("Terrain depth in metres, centred on this node. 0 with a heightmap fills the "
                                         "map's Z extent.");
-                        changed |= ImGui::DragFloat("Meters / Pixel", &t->metersPerPixel, 0.05f, 0.05f, 256.0f, "%.2f");
+                        changed |= ImGui::DragFloat(ui::LabelAbove("Meters / Pixel"), &t->metersPerPixel, 0.05f, 0.05f, 256.0f, "%.2f");
                         ui::ItemTooltip("World metres each heightmap pixel / mesh cell spans. >1 spreads a small map "
                                         "over a big world with fewer verts; <1 adds mesh detail. Cells = Size / this, "
                                         "capped at 2048/axis.");
 
-                        changed |= ImGui::DragFloatRange2("Height Range (m)", &t->heightMin, &t->heightMax, 0.5f,
+                        changed |= ImGui::DragFloatRange2(ui::LabelAbove("Height Range (m)"), &t->heightMin, &t->heightMax, 0.5f,
                                                           -256.0f, 256.0f, "min %.0f", "max %.0f");
                         ui::ItemTooltip("Vertical span in metres around Ground Height: a heightmap 0..1 (or the noise) "
                                         "maps into Ground Height + [min, max]. May dip below y=0.");
                         t->groundHeight = std::clamp(t->groundHeight, t->heightMin, t->heightMax);
-                        changed |= ImGui::DragFloat("Ground Height", &t->groundHeight, 0.25f, t->heightMin, t->heightMax,
+                        changed |= ImGui::DragFloat(ui::LabelAbove("Ground Height"), &t->groundHeight, 0.25f, t->heightMin, t->heightMax,
                                                     "%.1f m");
                         ui::ItemTooltip("World height the mid-gray level sits at; drags within Height Range.");
                         t->seaLevelM = std::clamp(t->seaLevelM, t->heightMin, t->heightMax);
-                        changed |= ImGui::DragFloat("Sea Level (m)", &t->seaLevelM, 0.25f, t->heightMin, t->heightMax,
+                        changed |= ImGui::DragFloat(ui::LabelAbove("Sea Level (m)"), &t->seaLevelM, 0.25f, t->heightMin, t->heightMax,
                                                     "%.1f m");
                         ui::ItemTooltip("Surface below this world height is tinted underwater (no water surface yet). "
                                         "Default 0.");
@@ -2300,7 +2300,7 @@ namespace pe
                             changed |= InputTextDeferred(kMatLabels[li], t->materialPaths[li]);
                         ui::ItemTooltip("Optional per-layer material maps: RGB = tangent-space normal, A = roughness. "
                                         "Empty = flat normal + full roughness (terrain looks as before).");
-                        if (ImGui::DragFloat("Texture Scale", &t->textureScaleM, 0.05f, 0.1f, 64.0f, "%.2f m/tile"))
+                        if (ImGui::DragFloat(ui::LabelAbove("Texture Scale"), &t->textureScaleM, 0.05f, 0.1f, 64.0f, "%.2f m/tile"))
                         {
                             t->textureScaleM = std::clamp(t->textureScaleM, 0.1f, 64.0f);
                             changed = true;
@@ -2310,11 +2310,11 @@ namespace pe
 
                         if (t->heightmapPath.empty())
                         {
-                            changed |= ImGui::DragFloat("Feature Scale", &t->noiseFeatureScale, 0.5f, 8.0f, 1024.0f, "%.0f");
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Feature Scale"), &t->noiseFeatureScale, 0.5f, 8.0f, 1024.0f, "%.0f");
                             ui::ItemTooltip("Noise feature wavelength in metres — small = choppy, large = rolling.");
-                            changed |= ImGui::DragInt("Seed", &t->noiseSeed);
+                            changed |= ImGui::DragInt(ui::LabelAbove("Seed"), &t->noiseSeed);
                             ui::ItemTooltip("Each seed is a different terrain.");
-                            changed |= ImGui::SliderFloat("Overhangs", &t->overhangs, 0.0f, 1.0f, "%.2f");
+                            changed |= ImGui::SliderFloat(ui::LabelAbove("Overhangs"), &t->overhangs, 0.0f, 1.0f, "%.2f");
                             ui::ItemTooltip("3D relief strength: cliffs undercut and hollows open (true overhangs). "
                                             "0 = pure heightfield. Widens the meshing band, so it costs build time.");
                         }
@@ -2329,11 +2329,11 @@ namespace pe
                                         "with it in play mode. Toggling does not rebuild the terrain.");
                         if (t->physics)
                         {
-                            changed |= ImGui::DragFloat("Friction", &t->physicsFriction, 0.01f, 0.0f, 1.0f);
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Friction"), &t->physicsFriction, 0.01f, 0.0f, 1.0f);
                             ui::ItemTooltip("Terrain surface friction — how much sliding objects grip it.");
-                            changed |= ImGui::DragFloat("Restitution", &t->physicsRestitution, 0.01f, 0.0f, 1.0f);
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Restitution"), &t->physicsRestitution, 0.01f, 0.0f, 1.0f);
                             ui::ItemTooltip("Terrain bounciness — how much objects rebound on impact.");
-                            changed |= ImGui::DragFloat("Collision Radius (m)", &t->collisionRadiusM, 1.0f, 0.0f, 4096.0f,
+                            changed |= ImGui::DragFloat(ui::LabelAbove("Collision Radius (m)"), &t->collisionRadiusM, 1.0f, 0.0f, 4096.0f,
                                                         "%.0f");
                             ui::ItemTooltip("Colliders exist only within this range of the camera (cook cost tracks "
                                             "the player). 0 = collide everywhere. Applied live.");

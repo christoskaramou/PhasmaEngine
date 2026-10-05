@@ -248,22 +248,22 @@ namespace pe
         if (!scene)
             return;
 
-        float dt = 0.0f;
+        const float step = 1.0f / static_cast<float>(std::clamp(Settings::Get<SceneSettings>().physics_rate, 10u, 240u));
+        const int maxSteps = std::max(1, static_cast<int>(MAX_CATCHUP_SECONDS / step + 0.5f));
         const float rawDt = static_cast<float>(FrameTimer::Instance().GetDelta());
         {
             PE_PROFILE_SCOPE("Physics Frame Budget");
-            dt = std::min(rawDt, FIXED_TIMESTEP * MAX_STEPS_PER_FRAME);
-            m_accumulator += dt;
+            m_accumulator += std::min(rawDt, step * maxSteps);
         }
 
         int steps = 0;
         {
             PE_PROFILE_SCOPE("Physics Step Loop");
-            while (m_accumulator >= FIXED_TIMESTEP && steps < MAX_STEPS_PER_FRAME)
+            while (m_accumulator >= step && steps < maxSteps)
             {
                 PE_PROFILE_SCOPE("Physics Step");
-                m_joltSystem->Update(FIXED_TIMESTEP, 1, m_tempAllocator, m_jobSystem);
-                m_accumulator -= FIXED_TIMESTEP;
+                m_joltSystem->Update(step, 1, m_tempAllocator, m_jobSystem);
+                m_accumulator -= step;
                 steps++;
             }
         }
@@ -823,22 +823,17 @@ namespace pe
             {
             case PhysicsShapeType::Box:
             {
-                vec3 he = glm::max(desc.boxHalfExtents * worldScale, vec3(minHE));
+                const vec3 he = ScaledColliderSize(desc, worldScale);
                 shape = new JPH::BoxShape(JPH::Vec3(he.x, he.y, he.z));
                 break;
             }
             case PhysicsShapeType::Sphere:
-            {
-                float maxScale = std::max({worldScale.x, worldScale.y, worldScale.z});
-                float r = std::max(desc.sphereRadius * maxScale, minHE);
-                shape = new JPH::SphereShape(r);
+                shape = new JPH::SphereShape(ScaledColliderSize(desc, worldScale).x);
                 break;
-            }
             case PhysicsShapeType::Capsule:
             {
-                float hh = std::max(desc.capsuleHalfHeight * worldScale.y, minHE);
-                float r = std::max(desc.capsuleRadius * std::max(worldScale.x, worldScale.z), minHE);
-                shape = new JPH::CapsuleShape(hh, r);
+                const vec3 s = ScaledColliderSize(desc, worldScale);
+                shape = new JPH::CapsuleShape(s.y, s.x);
                 break;
             }
             case PhysicsShapeType::ConvexHull:

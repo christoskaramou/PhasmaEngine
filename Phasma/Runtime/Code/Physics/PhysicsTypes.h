@@ -32,4 +32,22 @@ namespace pe
         bool autoFitShape = true;
         bool isTrigger = false;
     };
+
+    // Box/Sphere/Capsule size after the node's world scale, exactly as the Jolt shape is built: box half
+    // extents; sphere radius in x; capsule radius in x and cylinder half height in y. Floored above Jolt's
+    // 0.05 convex radius. The editor's collider overlay draws from this too.
+    inline vec3 ScaledColliderSize(const PhysicsBodyDesc &desc, const vec3 &worldScale)
+    {
+        constexpr float minHE = 0.06f;
+        switch (desc.shapeType)
+        {
+        case PhysicsShapeType::Sphere:
+            return vec3(std::max(desc.sphereRadius * std::max({worldScale.x, worldScale.y, worldScale.z}), minHE));
+        case PhysicsShapeType::Capsule:
+            return vec3(std::max(desc.capsuleRadius * std::max(worldScale.x, worldScale.z), minHE),
+                        std::max(desc.capsuleHalfHeight * worldScale.y, minHE), 0.f);
+        default:
+            return glm::max(desc.boxHalfExtents * worldScale, vec3(minHE));
+        }
+    }
 } // namespace pe

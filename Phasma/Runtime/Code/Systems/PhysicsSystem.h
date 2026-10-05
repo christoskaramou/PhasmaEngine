@@ -165,8 +165,8 @@ namespace pe
         bool m_paused = false;
         float m_accumulator = 0.0f;
 
-        static constexpr float FIXED_TIMESTEP = 1.0f / 30.0f;
-        static constexpr int MAX_STEPS_PER_FRAME = 2;
+        // A long frame catches up at most this much physics time (2 steps at the default 30 Hz); the rest is dropped.
+        static constexpr float MAX_CATCHUP_SECONDS = 2.0f / 30.0f;
     };
 } // namespace pe
 
