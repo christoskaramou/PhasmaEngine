@@ -44,6 +44,12 @@ namespace pe
 
         GizmoOperation GetGizmoOperation() const;
         void SetGizmoOperation(GizmoOperation op);
+        bool IsGizmoLocal() const { return m_gizmoLocal; }
+        void SetGizmoLocal(bool local) { m_gizmoLocal = local; }
+        // Ctrl-drag snap step per operation: metres, degrees, scale factor.
+        float &GizmoSnap(GizmoOperation op) { return m_gizmoSnap[static_cast<int>(op)]; }
+        // Runtime UI elements snap their rect to an absolute grid of this many surface pixels.
+        float &UiGizmoSnap() { return m_uiGizmoSnap; }
 
     private:
         SelectionManager() = default;
@@ -57,5 +63,8 @@ namespace pe
         int m_selectedCameraIndex = -1;
         SelectionType m_selectionType = SelectionType::Node;
         GizmoOperation m_gizmoOperation = GizmoOperation::Translate;
+        bool m_gizmoLocal = false;
+        float m_gizmoSnap[3] = {0.5f, 15.f, 0.1f};
+        float m_uiGizmoSnap = 8.f;
     };
 } // namespace pe

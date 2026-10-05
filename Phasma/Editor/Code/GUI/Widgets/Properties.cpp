@@ -1201,9 +1201,23 @@ namespace pe
 
             if (ImGui::BeginPopup("AddComponentPopup"))
             {
+                static ImGuiTextFilter filter;
+                if (ImGui::IsWindowAppearing())
+                {
+                    filter.Clear();
+                    ImGui::SetKeyboardFocusHere();
+                }
+                // Escape clears a typed search first; on an empty search it closes the popup.
+                const bool hadSearch = filter.IsActive();
+                if (ImGui::InputTextWithHint("##ComponentSearch", "Search", filter.InputBuf, IM_ARRAYSIZE(filter.InputBuf),
+                                             ImGuiInputTextFlags_EscapeClearsAll))
+                    filter.Build();
+                if (!hadSearch && ImGui::IsKeyPressed(ImGuiKey_Escape, false))
+                    ImGui::CloseCurrentPopup();
+
                 // Items sorted by display name. Conditional/#ifdef blocks keep their own gating.
 #ifdef PE_AUDIO
-                if (!(flags & Component_Audio))
+                if (!(flags & Component_Audio) && filter.PassFilter("Audio Source"))
                 {
                     if (ImGui::MenuItem("Audio Source"))
                     {
@@ -1217,83 +1231,96 @@ namespace pe
                 }
 #endif
 
+                // While searching, submenu entries are listed inline as "Menu / Item" so the search reaches them.
+                const bool searching = filter.IsActive();
+                auto beginGroup = [&](const char *menu, const char *tip)
+                {
+                    if (searching)
+                        return true;
+                    const bool open = ImGui::BeginMenu(menu);
+                    ui::ItemTooltip(tip);
+                    return open;
+                };
+                auto endGroup = [&]()
+                {
+                    if (!searching)
+                        ImGui::EndMenu();
+                };
+                auto groupItem = [&](const char *menu, const std::string &label, const char *tip = nullptr)
+                {
+                    const std::string text = searching ? std::string(menu) + " / " + label : label;
+                    if (searching && !filter.PassFilter(text.c_str()))
+                        return false;
+                    const bool clicked = ImGui::MenuItem(text.c_str());
+                    if (tip)
+                        ui::ItemTooltip(tip);
+                    return clicked;
+                };
+
+                if (!(flags & Component_Script) && beginGroup("Lua Script", "Attach a Lua script component to this node."))
+                {
+                    if (groupItem("Lua Script", "Browse Existing...", "Choose an existing Lua script asset."))
+                    {
+                        if (auto *fs = m_gui->GetWidget<FileSelector>())
+                        {
+                            fs->OpenSelection([node](const std::string &path) -> bool
+                                              {
+                                if (auto *r = GetGlobalSystem<RendererSystem>())
+                                    r->GetScene().SetNodeScript(node, path);
+                                return true; },
+                                              {".lua"});
+                        }
+                    }
+                    if (groupItem("Lua Script", "New Empty Script", "Create a new Lua script and attach it to this node."))
+                    {
+                        if (auto *se = m_gui->GetWidget<ScriptEditor>())
+                            se->OpenNewScript(node);
+                    }
+                    endGroup();
+                }
+
                 if (!(flags & Component_Script))
                 {
-                    const bool scriptMenuOpen = ImGui::BeginMenu("Lua Script");
-                    ui::ItemTooltip("Attach a Lua script component to this node.");
-                    if (scriptMenuOpen)
-                    {
-                        if (ImGui::MenuItem("Browse Existing..."))
-                        {
-                            if (auto *fs = m_gui->GetWidget<FileSelector>())
-                            {
-                                fs->OpenSelection([node](const std::string &path) -> bool
-                                                  {
-                                    if (auto *r = GetGlobalSystem<RendererSystem>())
-                                        r->GetScene().SetNodeScript(node, path);
-                                    return true; },
-                                                  {".lua"});
-                            }
-                        }
-                        ui::ItemTooltip("Choose an existing Lua script asset.");
-                        if (ImGui::MenuItem("New Empty Script"))
-                        {
-                            if (auto *se = m_gui->GetWidget<ScriptEditor>())
-                                se->OpenNewScript(node);
-                        }
-                        ui::ItemTooltip("Create a new Lua script and attach it to this node.");
-                        ImGui::EndMenu();
-                    }
-
                     std::vector<std::string> cppScripts;
                     if (auto *scripts = GetGlobalSystem<ScriptSystem>())
                         cppScripts = scripts->ListCppNodeScripts();
-                    const bool cppMenuOpen = ImGui::BeginMenu("C++ Script");
-                    ui::ItemTooltip(cppScripts.empty() ? "Build/load PhasmaGame to make native scripts available."
-                                                       : "Attach a C++ script compiled into PhasmaGame.");
-                    if (cppMenuOpen)
+                    if (beginGroup("C++ Script", cppScripts.empty() ? "Build/load PhasmaGame to make native scripts available."
+                                                                    : "Attach a C++ script compiled into PhasmaGame."))
                     {
-                        if (ImGui::MenuItem("New C++ Script..."))
+                        if (groupItem("C++ Script", "New C++ Script..."))
                             if (auto *se = m_gui->GetWidget<ScriptEditor>())
                                 se->OpenNewCppScript(node);
-                        if (ImGui::MenuItem("Browse C++ Source..."))
+                        if (groupItem("C++ Script", "Browse C++ Source..."))
                             if (auto *fs = m_gui->GetWidget<FileSelector>())
                                 fs->OpenSelection([this, node](const std::string &path) -> bool
                                                   {
                                     if (auto *se = m_gui->GetWidget<ScriptEditor>())
                                         se->ImportCppScript(node, path);
                                     return true; }, {".cpp"});
-                        ImGui::Separator();
+                        if (!searching)
+                            ImGui::Separator();
                         for (const std::string &name : cppScripts)
                         {
                             auto *ss = GetGlobalSystem<ScriptSystem>();
                             const auto source = ss->CppSourceFile("cpp:" + name);
                             const auto label = source.empty() ? name : CppSourceName(source);
-                            if (ImGui::MenuItem(label.c_str())) // bare filename: scenes stay machine-independent
+                            if (groupItem("C++ Script", label)) // bare filename: scenes stay machine-independent
                                 scene.SetNodeScript(node, source.empty() ? "cpp:" + name : CppScriptReference(source));
                         }
-                        ImGui::EndMenu();
+                        endGroup();
                     }
                 }
 
-                if (!(flags & Component_Mesh))
+                if (!(flags & Component_Mesh) && beginGroup("Mesh", "Add a mesh component using a built-in primitive."))
                 {
-                    const bool meshMenuOpen = ImGui::BeginMenu("Mesh");
-                    ui::ItemTooltip("Add a mesh component using a built-in primitive.");
-                    if (meshMenuOpen)
-                    {
-                        for (const auto &p : kPrimitiveMenu)
-                        {
-                            if (ImGui::MenuItem(p.name))
-                                attachPrimitive(node, p.make());
-                            ui::ItemTooltip(p.tip);
-                        }
-                        ImGui::EndMenu();
-                    }
+                    for (const auto &p : kPrimitiveMenu)
+                        if (groupItem("Mesh", p.name, p.tip))
+                            attachPrimitive(node, p.make());
+                    endGroup();
                 }
 
 #ifdef PE_PHYSICS
-                if (!(flags & Component_Physics))
+                if (!(flags & Component_Physics) && filter.PassFilter("Physics Body"))
                 {
                     if (ImGui::MenuItem("Physics Body"))
                     {
@@ -1308,7 +1335,7 @@ namespace pe
 #endif
 
 #ifdef PE_PHYSICS2D
-                if (!(flags & Component_Physics2D))
+                if (!(flags & Component_Physics2D) && filter.PassFilter("Physics2D Body"))
                 {
                     if (ImGui::MenuItem("Physics2D Body"))
                     {
@@ -1322,14 +1349,14 @@ namespace pe
                 }
 #endif
 
-                if (!(flags & Component_RuntimeUi))
+                if (!(flags & Component_RuntimeUi) && filter.PassFilter("Runtime UI"))
                 {
                     if (ImGui::MenuItem("Runtime UI"))
                         scene.AddComponentFlag(node, Component_RuntimeUi);
                     ui::ItemTooltip("Tag this node as a Runtime UI surface.");
                 }
 
-                if (!(flags & Component_Sprite))
+                if (!(flags & Component_Sprite) && filter.PassFilter("Sprite"))
                 {
                     if (ImGui::MenuItem("Sprite"))
                         scene.AddComponentFlag(node, Component_Sprite);

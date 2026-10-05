@@ -25,7 +25,7 @@ namespace pe
             Rotation,
             Scale
         };
-        void DrawGizmoModeButtons();
+        void DrawGizmoModeButtons(bool uiNode);
         void DrawVec3Control(TransformType type, vec3 &values, float resetValue = 0.0f, float columnWidth = 100.0f);
         void ApplyLocalTransform(NodeId *node, const float t[3], const float r[3], const float s[3]);
     };

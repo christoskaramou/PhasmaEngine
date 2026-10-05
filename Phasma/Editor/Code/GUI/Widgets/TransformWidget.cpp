@@ -47,7 +47,7 @@ namespace pe
         ui::ItemTooltip("Edit the selected node's local transform and active gizmo mode.");
         if (transformOpen)
         {
-            DrawGizmoModeButtons();
+            DrawGizmoModeButtons((GetActiveScene()->GetComponentFlags(node) & Component_RuntimeUi) != 0);
             ImGui::Text("Local Transform");
             DrawPositionEditor(node);
             DrawRotationEditor(node);
@@ -107,7 +107,7 @@ namespace pe
         }
     }
 
-    void TransformWidget::DrawGizmoModeButtons()
+    void TransformWidget::DrawGizmoModeButtons(bool uiNode)
     {
         auto &selection = SelectionManager::Instance();
         GizmoOperation currentOp = selection.GetGizmoOperation();
@@ -142,6 +142,28 @@ namespace pe
         if (isScale)
             ImGui::PopStyleColor();
         ui::ItemTooltip("Use the scale gizmo for the current selection.");
+
+        if (!uiNode) // the 2D UI gizmo has no world axes
+        {
+            ImGui::SameLine();
+            const bool local = selection.IsGizmoLocal();
+            if (ImGui::Button(local ? "Local" : "World"))
+                selection.SetGizmoLocal(!local);
+            ui::ItemTooltip("Gizmo axes: world, or the selection's own (local). Scale always uses local axes.");
+        }
+
+        ImGui::SetNextItemWidth(ImGui::GetFontSize() * 7.f);
+        if (uiNode)
+        {
+            ImGui::DragFloat("Snap (hold Ctrl)", &selection.UiGizmoSnap(), 0.25f, 1.f, 1000.f, "%.0f px", ImGuiSliderFlags_AlwaysClamp);
+            ui::ItemTooltip("Pixel grid the element's position (move) or size (scale) snaps to while Ctrl is held.");
+            return;
+        }
+
+        const char *format = currentOp == GizmoOperation::Rotate ? "%.1f deg" : currentOp == GizmoOperation::Translate ? "%.3g m"
+                                                                                                                       : "%.3g";
+        ImGui::DragFloat("Snap (hold Ctrl)", &selection.GizmoSnap(currentOp), 0.01f, 0.001f, 1000.f, format, ImGuiSliderFlags_AlwaysClamp);
+        ui::ItemTooltip("Step the gizmo snaps to while Ctrl is held during a drag.");
     }
 
     void TransformWidget::DrawPositionEditor(NodeId *node)

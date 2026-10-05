@@ -57,6 +57,9 @@ local function update_editor()
         handle_escape()
     end
 
+    -- Typing in UI, or any popup/menu open (e.g. the Add Component search), owns the letter keys
+    local typing = engine.want_capture_keyboard() or engine.is_popup_open()
+
     -- Shortcuts below only when right-click is NOT held
     if not rmb then
         -- Ctrl+T: trigger GPU capture
@@ -70,12 +73,12 @@ local function update_editor()
         end
 
         -- F: focus camera on selected object (glides smoothly; only when not typing in UI)
-        if f_down and not f_was_down and not engine.want_capture_keyboard() then
+        if f_down and not f_was_down and not typing then
             selection.focus()
         end
 
         -- W/E/R: gizmo mode (only when object selected and not typing in UI)
-        if not engine.want_capture_keyboard() then
+        if not typing then
             local sel = selection.get()
             if sel.has_selection then
                 if w_down and not w_was_down then

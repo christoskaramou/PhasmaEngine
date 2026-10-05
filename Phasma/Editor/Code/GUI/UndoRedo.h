@@ -3,6 +3,7 @@
 namespace pe
 {
     class Scene;
+    struct NodeId;
 
     struct HistoryEntry
     {
@@ -16,6 +17,13 @@ namespace pe
         static UndoRedo &Instance();
 
         void CaptureIdleState(Scene &scene);
+        // Edits made while one object stays selected are one action (one entry); selecting anything else ends it.
+        void NoteSelection(NodeId *node)
+        {
+            m_selectedNode = node;
+            if (node != m_mergeNode)
+                m_mergeNode = nullptr;
+        }
         void RecordSnapshot(Scene &scene, std::string label = "Scene Change");
 
         void Undo(Scene &scene);
@@ -47,6 +55,8 @@ namespace pe
         bool m_hasIdleSnapshot = false;
         bool m_restoring = false;
         int m_settleFrames = 0;
+        NodeId *m_selectedNode = nullptr;
+        NodeId *m_mergeNode = nullptr; // selection whose captured edits fold into the top entry
 
         static constexpr size_t MAX_HISTORY = 100;
         static constexpr int SETTLE_FRAMES = 3;

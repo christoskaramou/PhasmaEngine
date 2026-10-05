@@ -57,6 +57,7 @@
 #endif
 #include "UndoRedo.h"
 #include <nlohmann/json.hpp>
+#include "imgui/ImGuizmo.h"
 #include "imgui/imgui_internal.h"
 #include "Base/Process.h"
 
@@ -2851,14 +2852,16 @@ namespace pe
             if (editMenuOpen)
             {
                 auto &undoRedo = UndoRedo::Instance();
-                if (ImGui::MenuItem("Undo", "Ctrl+Z", false, undoRedo.CanUndo()))
+                const std::string undoLabel = undoRedo.CanUndo() ? "Undo " + undoRedo.GetUndoStack().back().label + "###Undo" : "Undo###Undo";
+                const std::string redoLabel = undoRedo.CanRedo() ? "Redo " + undoRedo.GetRedoStack().back().label + "###Redo" : "Redo###Redo";
+                if (ImGui::MenuItem(undoLabel.c_str(), "Ctrl+Z", false, undoRedo.CanUndo()))
                 {
                     RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                     if (rs)
                         undoRedo.Undo(rs->GetScene());
                 }
                 ui::ItemTooltip("Undo the most recent scene edit.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
-                if (ImGui::MenuItem("Redo", "Ctrl+Y", false, undoRedo.CanRedo()))
+                if (ImGui::MenuItem(redoLabel.c_str(), "Ctrl+Y", false, undoRedo.CanRedo()))
                 {
                     RendererSystem *rs = GetGlobalSystem<RendererSystem>();
                     if (rs)
@@ -3698,7 +3701,10 @@ namespace pe
         // Undo/Redo auto-capture: detect state changes by comparing idle snapshots.
         // After any activity, keep capturing for a few idle frames to catch
         // async changes (e.g. ModelLoaded events processed after GUI update).
-        bool anyActive = ImGui::IsAnyItemActive();
+        // Gizmo drags are not ImGui items; count them so each drag is captured when it ends.
+        bool anyActive = ImGui::IsAnyItemActive() || ImGuizmo::IsUsingAny();
+        SelectionManager &undoSelection = SelectionManager::Instance();
+        undoRedo.NoteSelection(undoSelection.HasSelection() ? undoSelection.GetSelectedNode() : nullptr);
         if (anyActive)
             m_idleFramesAfterEdit = 0;
         if (!anyActive && m_wasAnyItemActive)

@@ -228,8 +228,17 @@ namespace pe
 
         if (m_hasIdleSnapshot && m_settleFrames == 0 && current != m_idleSnapshot)
         {
-            std::string label = DiffSnapshots(m_idleSnapshot, current);
-            PushUndo({std::move(m_idleSnapshot), std::move(label)});
+            if (m_selectedNode && m_selectedNode == m_mergeNode && !m_undoStack.empty())
+            {
+                // Same object still selected: keep the state from before its first edit, refresh the label.
+                m_undoStack.back().label = DiffSnapshots(m_undoStack.back().snapshot, current);
+            }
+            else
+            {
+                std::string label = DiffSnapshots(m_idleSnapshot, current);
+                PushUndo({std::move(m_idleSnapshot), std::move(label)});
+                m_mergeNode = m_selectedNode;
+            }
             m_redoStack.clear();
             scene.MarkDirty();
         }
@@ -252,6 +261,7 @@ namespace pe
         scene.MarkDirty();
 
         m_hasIdleSnapshot = false;
+        m_mergeNode = nullptr;
     }
 
     void UndoRedo::Undo(Scene &scene)
@@ -360,6 +370,7 @@ namespace pe
         m_hasIdleSnapshot = false;
         m_restoring = false;
         m_settleFrames = 0;
+        m_mergeNode = nullptr;
     }
 
     void UndoRedo::PushUndo(HistoryEntry entry)
@@ -402,6 +413,7 @@ namespace pe
         m_idleSnapshot.clear();
         m_hasIdleSnapshot = false;
         m_settleFrames = SETTLE_FRAMES;
+        m_mergeNode = nullptr;
         return true;
     }
 } // namespace pe

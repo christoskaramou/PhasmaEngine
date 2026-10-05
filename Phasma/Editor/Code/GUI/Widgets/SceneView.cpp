@@ -1135,22 +1135,26 @@ namespace pe
             float s[3] = {};
             ImGuizmo::DecomposeMatrixToComponents(value_ptr(matrix), t, r, s);
 
-            const float newW = std::max(std::fabs(s[0]), 1.0f);
-            const float newH = std::max(std::fabs(s[1]), 1.0f);
-            if (std::isfinite(t[0]) && std::isfinite(t[1]) &&
-                std::isfinite(newW) && std::isfinite(newH))
+            float newW = std::max(std::fabs(s[0]), 1.0f);
+            float newH = std::max(std::fabs(s[1]), 1.0f);
+            // Ctrl snaps to an absolute pixel grid (not steps from the drag start) so elements line up.
+            const bool snapping = ImGui::GetIO().KeyCtrl;
+            const float grid = selection.UiGizmoSnap();
+            if (snapping && op == ImGuizmo::SCALE)
             {
-                SetRuntimeUiNodeRect(scene,
-                                     node,
-                                     x,
-                                     y,
-                                     w,
-                                     h,
-                                     t[0] - newW * 0.5f,
-                                     t[1] - newH * 0.5f,
-                                     newW,
-                                     newH);
+                newW = std::max(std::round(newW / grid) * grid, grid);
+                newH = std::max(std::round(newH / grid) * grid, grid);
             }
+            float newX = t[0] - newW * 0.5f;
+            float newY = t[1] - newH * 0.5f;
+            if (snapping && op == ImGuizmo::TRANSLATE)
+            {
+                newX = std::round(newX / grid) * grid;
+                newY = std::round(newY / grid) * grid;
+            }
+            if (std::isfinite(newX) && std::isfinite(newY) &&
+                std::isfinite(newW) && std::isfinite(newH))
+                SetRuntimeUiNodeRect(scene, node, x, y, w, h, newX, newY, newW, newH);
         }
 
         return true;
@@ -1309,7 +1313,12 @@ namespace pe
         if (selection.GetSelectionType() == SelectionType::Emitter && op == ImGuizmo::SCALE)
             op = ImGuizmo::TRANSLATE;
 
-        ImGuizmo::MODE mode = ImGuizmo::WORLD;
+        const ImGuizmo::MODE mode = selection.IsGizmoLocal() ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+        const float step = selection.GizmoSnap(op == ImGuizmo::ROTATE  ? GizmoOperation::Rotate
+                                               : op == ImGuizmo::SCALE ? GizmoOperation::Scale
+                                                                       : GizmoOperation::Translate);
+        const float snap[3] = {step, step, step};
+        const float *snapping = ImGui::GetIO().KeyCtrl ? snap : nullptr;
 
         // selection context
         GizmoUtils::SelectionContext ctx = GizmoUtils::GetSelectionContext();
@@ -1320,7 +1329,7 @@ namespace pe
         glm::mat4 matrixRH = GizmoUtils::FlipHandedness(matrixLH);
 
         // --- Manipulate in RH space ---
-        if (ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projRH), op, mode, glm::value_ptr(matrixRH)))
+        if (ImGuizmo::Manipulate(glm::value_ptr(viewRH), glm::value_ptr(projRH), op, mode, glm::value_ptr(matrixRH), nullptr, snapping))
         {
             // Convert back to LH
             matrixLH = GizmoUtils::FlipHandedness(matrixRH);
