@@ -994,6 +994,7 @@ namespace pe
         addAction("gizmo.lights", "Light Gizmos", "Gizmos", "toggle", true, GUIState::s_useLightGizmos, true);
         addAction("gizmo.cameras", "Camera Gizmos", "Gizmos", "toggle", true, GUIState::s_useCameraGizmos, true);
         addAction("gizmo.colliders", "Collider Gizmos", "Gizmos", "toggle", true, GUIState::s_useColliderGizmos, true);
+        addAction("gizmo.navmesh", "NavMesh Gizmos", "Gizmos", "toggle", true, GUIState::s_useNavMeshGizmos, true);
         addAction("gizmo.orientation", "Orientation Gizmo", "Gizmos", "toggle", true, GUIState::s_useOrientationGizmo, true);
         addAction("gizmo.grid", "Grid", "Gizmos", "toggle", true, globalSettings.draw_grid, true);
 
@@ -1433,6 +1434,8 @@ namespace pe
             return toggleBool(GUIState::s_useCameraGizmos);
         if (action == "gizmo.colliders")
             return toggleBool(GUIState::s_useColliderGizmos);
+        if (action == "gizmo.navmesh")
+            return toggleBool(GUIState::s_useNavMeshGizmos);
         if (action == "gizmo.orientation")
             return toggleBool(GUIState::s_useOrientationGizmo);
         if (action == "gizmo.grid")
@@ -2967,6 +2970,8 @@ namespace pe
                 ui::ItemTooltip("Show editor camera gizmos in the viewport.");
                 ImGui::MenuItem("Colliders", nullptr, &GUIState::s_useColliderGizmos);
                 ui::ItemTooltip("Outline every physics collider (the selected object's always shows): green solid, cyan trigger.");
+                ImGui::MenuItem("NavMesh", nullptr, &GUIState::s_useNavMeshGizmos);
+                ui::ItemTooltip("Outline the baked navigation mesh (Scene Settings > Navigation > Bake) in blue.");
                 ImGui::MenuItem("Orientation", nullptr, &GUIState::s_useOrientationGizmo);
                 ui::ItemTooltip("Show the viewport orientation gizmo.");
                 ImGui::MenuItem("Grid", nullptr, &gSettings.draw_grid);

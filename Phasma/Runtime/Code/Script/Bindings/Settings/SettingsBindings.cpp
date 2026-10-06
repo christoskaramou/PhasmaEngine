@@ -83,6 +83,12 @@ namespace pe
         {"shadow_filter_radius", &SceneSettings::shadow_filter_radius},
         {"fog_density", &SceneSettings::fog_density},
         {"fog_start", &SceneSettings::fog_start},
+        {"nav_agent_radius", &SceneSettings::nav_agent_radius},
+        {"nav_agent_height", &SceneSettings::nav_agent_height},
+        {"nav_agent_climb", &SceneSettings::nav_agent_climb},
+        {"nav_agent_slope", &SceneSettings::nav_agent_slope},
+        {"nav_cell_size", &SceneSettings::nav_cell_size},
+        {"nav_cell_height", &SceneSettings::nav_cell_height},
     };
 
     static const std::unordered_map<std::string_view, int SceneSettings::*> s_intSettings = {

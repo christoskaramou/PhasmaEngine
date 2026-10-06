@@ -32,6 +32,7 @@
 #include "Systems/AudioSystem.h"
 #endif
 #include "Systems/AnimationSystem.h"
+#include "Systems/NavigationSystem.h"
 #include "Terrain/TerrainSystem.h"
 #include "Voxel/VoxelSystem.h"
 #include "Window/Window.h"
@@ -431,6 +432,7 @@ namespace pe
         CreateGlobalSystem<AnimationSystem>()->Init(nullptr);
         CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
         CreateGlobalSystem<terrain::TerrainSystem>()->Init(nullptr);
+        CreateGlobalSystem<NavigationSystem>()->Init(nullptr); // idle until a bake
 
         // ScriptSystem is initialized last because it can call other systems in Init()
         CreateGlobalSystem<ScriptSystem>()->Init(nullptr);

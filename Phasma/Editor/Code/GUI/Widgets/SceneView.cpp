@@ -18,6 +18,7 @@
 #include "Scene/SelectionManager.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
+#include "Systems/NavigationSystem.h"
 #include "Systems/PhysicsSystem.h"
 #include "TerrainBrush.h"
 #include "Systems/RendererSystem.h"
@@ -1385,6 +1386,8 @@ namespace pe
             DrawLightGizmos(imageMin, imageSize);
 
         DrawVolumeGizmos(imageMin, imageSize);
+        if (GUIState::s_useNavMeshGizmos)
+            DrawNavMeshGizmos(imageMin, imageSize);
         DrawCameraGizmos(imageMin, imageSize);
         if (GUIState::s_useOrientationGizmo)
             DrawOrientationGizmo(imageMin, imageSize);
@@ -1680,6 +1683,29 @@ namespace pe
                 continue;
             if (checkGizmoIcon(vec3(scene.GetAreaLights()[i].position), ICON_FA_LIGHTBULB, LightType::Area, i))
                 drawLightVisuals(vec3(scene.GetAreaLights()[i].position), LightType::Area, i);
+        }
+    }
+
+    // The baked navigation mesh's polygon edges (blue), lifted off the floor.
+    void SceneView::DrawNavMeshGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        auto *nav = GetGlobalSystem<NavigationSystem>();
+        if (!renderer || !nav)
+            return;
+        Camera *camera = renderer->GetScene().GetActiveCamera();
+        if (!camera)
+            return;
+        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const std::vector<vec3> &segments = nav->DebugSegments();
+        const vec3 lift(0.0f, 0.03f, 0.0f); // just above the surface the mesh lies on
+        for (size_t i = 0; i + 1 < segments.size(); i += 2)
+        {
+            ImVec2 a, b;
+            if (ProjectWorldToViewport(segments[i] + lift, viewProj, imageMin, imageSize, a) &&
+                ProjectWorldToViewport(segments[i + 1] + lift, viewProj, imageMin, imageSize, b))
+                drawList->AddLine(a, b, IM_COL32(80, 170, 255, 210), 1.5f);
         }
     }
 

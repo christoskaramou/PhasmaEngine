@@ -56,6 +56,7 @@ namespace pe
         static bool s_useLightGizmos;
         static bool s_useCameraGizmos;
         static bool s_useColliderGizmos; // every physics collider; the selected node's always shows
+        static bool s_useNavMeshGizmos;  // the baked navigation mesh's polygon edges
         static bool s_useOrientationGizmo;
         // Play Mode State
         static bool s_playMode;

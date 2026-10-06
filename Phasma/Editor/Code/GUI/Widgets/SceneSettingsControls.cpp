@@ -7,6 +7,8 @@
 #include "RenderPasses/RayTracingPass.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "GUI/GUIState.h"
+#include "Systems/NavigationSystem.h"
 #include "Systems/PhysicsSystem.h"
 
 namespace pe
@@ -334,6 +336,48 @@ namespace pe
                 }
             }
             ui::ItemTooltip("Name the next free layer (up to 32). Rename it in its row.");
+            ImGui::TreePop();
+        }
+
+        // The Animator shows scene settings without a navigation system: no section there.
+        const bool hasNav = GetGlobalSystem<NavigationSystem>() != nullptr;
+        const bool navOpen = hasNav && ImGui::TreeNode("Navigation");
+        if (hasNav)
+            ui::ItemTooltip("Bake a navigation mesh from the scene's static physics colliders, for nav.find_path and agents. "
+                            "The agent size decides how close to walls and how high a step the mesh allows.");
+        if (navOpen)
+        {
+            Track(ImGui::DragFloat(ui::LabelAbove("Agent Radius"), &gSettings.nav_agent_radius, 0.01f, 0.05f, 5.0f, "%.2f m"));
+            ui::ItemTooltip("Walls and props are kept this far from the mesh edge.");
+            Track(ImGui::DragFloat(ui::LabelAbove("Agent Height"), &gSettings.nav_agent_height, 0.01f, 0.1f, 10.0f, "%.2f m"));
+            ui::ItemTooltip("Ceilings lower than this block the way.");
+            Track(ImGui::DragFloat(ui::LabelAbove("Max Climb"), &gSettings.nav_agent_climb, 0.01f, 0.0f, 5.0f, "%.2f m"));
+            ui::ItemTooltip("Steps up to this height are walkable.");
+            Track(ImGui::DragFloat(ui::LabelAbove("Max Slope"), &gSettings.nav_agent_slope, 0.5f, 0.0f, 89.0f, "%.0f deg"));
+            Track(ImGui::DragFloat(ui::LabelAbove("Cell Size"), &gSettings.nav_cell_size, 0.005f, 0.05f, 2.0f, "%.3f m"));
+            ui::ItemTooltip("Horizontal voxel size: smaller follows edges more closely and bakes slower.");
+            Track(ImGui::DragFloat(ui::LabelAbove("Cell Height"), &gSettings.nav_cell_height, 0.005f, 0.02f, 1.0f, "%.3f m"));
+            static std::string s_navStatus;
+            if (ImGui::Button("Bake"))
+            {
+                std::string error = "navigation is unavailable";
+                auto *nav = GetGlobalSystem<NavigationSystem>();
+                if (nav && nav->Bake(NavigationSystem::SceneSettingsForBake(), error))
+                {
+                    const NavMeshStats &stats = nav->Mesh()->Stats();
+                    s_navStatus = std::to_string(stats.polygons) + " polygons in " +
+                                  std::to_string(static_cast<int>(stats.bakeMs + 0.5f)) + " ms";
+                    GUIState::s_useNavMeshGizmos = true;
+                }
+                else
+                {
+                    s_navStatus = error;
+                }
+            }
+            ui::ItemTooltip("Bake now (held in memory; bake again after moving colliders, or from Lua with nav.bake()).");
+            ImGui::SameLine();
+            ImGui::TextUnformatted(s_navStatus.c_str());
+            ImGui::Checkbox("Show NavMesh", &GUIState::s_useNavMeshGizmos);
             ImGui::TreePop();
         }
 

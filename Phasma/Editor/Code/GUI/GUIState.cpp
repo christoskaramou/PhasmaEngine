@@ -51,6 +51,7 @@ namespace pe
     bool GUIState::s_useLightGizmos = true;
     bool GUIState::s_useCameraGizmos = true;
     bool GUIState::s_useColliderGizmos = false;
+    bool GUIState::s_useNavMeshGizmos = false;
     bool GUIState::s_useOrientationGizmo = true;
     bool GUIState::s_playMode = false;
     bool GUIState::s_isPaused = false;

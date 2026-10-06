@@ -200,6 +200,14 @@ namespace pe
         static constexpr uint32_t kPhysicsLayerCount = 32;
         std::array<std::string, kPhysicsLayerCount> physics_layer_names{"Default"};
         std::array<uint32_t, kPhysicsLayerCount> physics_layer_ignore{};
+        // Navigation bake (Lua nav.bake, the editor's Navigation > Bake): the agent's size in metres and degrees and
+        // the voxel resolution. Absent from a scene = these defaults.
+        float nav_agent_radius = 0.4f;
+        float nav_agent_height = 1.8f;
+        float nav_agent_climb = 0.4f;
+        float nav_agent_slope = 45.0f;
+        float nav_cell_size = 0.2f;
+        float nav_cell_height = 0.1f;
         std::vector<std::string> model_list{};
         Image *current_rendering_image = nullptr;
         std::vector<Image *> rendering_images{};

@@ -3,6 +3,7 @@
 #include "Script/ScriptSystem.h"
 #include "Systems/AnimationSystem.h"
 #include "Systems/AudioSystem.h"
+#include "Systems/NavigationSystem.h"
 #include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
 #include "UI/RuntimeUi.h"
@@ -45,6 +46,9 @@ namespace pe
 
     void StopRuntimePlaySession(const RuntimePlaySessionStopDesc &desc)
     {
+        // Agents and swarm members end with play; the restored scene must not be moved by them.
+        if (auto *nav = GetGlobalSystem<NavigationSystem>())
+            nav->StopPlay();
 #ifdef PE_AUDIO
         if (desc.stopAudio)
         {
@@ -88,6 +92,8 @@ namespace pe
 
     void SetRuntimePlaySessionPaused(bool paused)
     {
+        if (auto *nav = GetGlobalSystem<NavigationSystem>())
+            nav->SetPaused(paused);
 #ifdef PE_PHYSICS
         if (auto *physics = GetGlobalSystem<PhysicsSystem>())
             physics->SetPaused(paused);

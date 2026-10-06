@@ -330,6 +330,12 @@ namespace pe
             }
             settings.AddMember("physics_layer_names", layerNames.Move(), allocator);
             settings.AddMember("physics_layer_ignore", layerIgnore.Move(), allocator);
+            settings.AddMember("nav_agent_radius", gSettings.nav_agent_radius, allocator);
+            settings.AddMember("nav_agent_height", gSettings.nav_agent_height, allocator);
+            settings.AddMember("nav_agent_climb", gSettings.nav_agent_climb, allocator);
+            settings.AddMember("nav_agent_slope", gSettings.nav_agent_slope, allocator);
+            settings.AddMember("nav_cell_size", gSettings.nav_cell_size, allocator);
+            settings.AddMember("nav_cell_height", gSettings.nav_cell_height, allocator);
             AddStringVectorMember(settings, "model_list", gSettings.model_list, allocator);
             settings.AddMember("freeze_frustum_culling", gSettings.freeze_frustum_culling, allocator);
             settings.AddMember("draw_aabbs", gSettings.draw_aabbs, allocator);
@@ -669,6 +675,21 @@ namespace pe
                 for (rapidjson::SizeType i = 0; i < ignore.Size() && i < SceneSettings::kPhysicsLayerCount; ++i)
                     if (ignore[i].IsUint())
                         gSettings.physics_layer_ignore[i] = ignore[i].GetUint();
+            }
+            // Navigation bake settings: absent = the defaults, the same rule.
+            {
+                const SceneSettings defaults{};
+                const auto navFloat = [&](const char *key, float SceneSettings::*member)
+                {
+                    gSettings.*member = settings.HasMember(key) && settings[key].IsNumber() ? settings[key].GetFloat()
+                                                                                            : defaults.*member;
+                };
+                navFloat("nav_agent_radius", &SceneSettings::nav_agent_radius);
+                navFloat("nav_agent_height", &SceneSettings::nav_agent_height);
+                navFloat("nav_agent_climb", &SceneSettings::nav_agent_climb);
+                navFloat("nav_agent_slope", &SceneSettings::nav_agent_slope);
+                navFloat("nav_cell_size", &SceneSettings::nav_cell_size);
+                navFloat("nav_cell_height", &SceneSettings::nav_cell_height);
             }
             ReadStringVectorMember(settings, "model_list", gSettings.model_list);
             if (settings.HasMember("freeze_frustum_culling"))

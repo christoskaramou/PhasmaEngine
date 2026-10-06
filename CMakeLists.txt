@@ -211,6 +211,36 @@ if(PE_PHYSICS2D)
     endif()
 endif()
 
+# --- Recast/Detour navigation ---
+option(PE_NAV "Enable Recast/Detour navigation meshes" ON)
+if(PE_NAV)
+    include(FetchContent)
+    set(BUILD_SHARED_LIBS_SAVED "${BUILD_SHARED_LIBS}")
+    set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+    set(RECASTNAVIGATION_DEMO OFF CACHE BOOL "" FORCE)
+    set(RECASTNAVIGATION_TESTS OFF CACHE BOOL "" FORCE)
+    set(RECASTNAVIGATION_EXAMPLES OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(RecastNavigation
+        GIT_REPOSITORY https://github.com/recastnavigation/recastnavigation.git
+        GIT_TAG        v1.6.0
+        GIT_PROGRESS   TRUE
+    )
+    # v1.6.0 asks for CMake 3.1, which CMake 4 refuses; its build needs nothing newer than 3.5 policies.
+    set(CMAKE_POLICY_VERSION_MINIMUM 3.5)
+    FetchContent_MakeAvailable(RecastNavigation)
+    unset(CMAKE_POLICY_VERSION_MINIMUM)
+    set(BUILD_SHARED_LIBS "${BUILD_SHARED_LIBS_SAVED}" CACHE BOOL "" FORCE)
+
+    foreach(nav_target Recast Detour DetourCrowd)
+        if(TARGET ${nav_target} AND MSVC)
+            target_compile_options(${nav_target} PRIVATE /W0)
+        elseif(TARGET ${nav_target})
+            target_compile_options(${nav_target} PRIVATE -w)
+        endif()
+    endforeach()
+endif()
+
 option(PE_AUDIO "Enable miniaudio integration" ON)
 
 # --- mbedTLS (TLS client for the net binding) ---

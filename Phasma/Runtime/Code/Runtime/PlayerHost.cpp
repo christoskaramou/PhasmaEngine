@@ -23,6 +23,7 @@
 #include "Script/ScriptSystem.h"
 #include "Systems/AnimationSystem.h"
 #include "Systems/AudioSystem.h"
+#include "Systems/NavigationSystem.h"
 #include "Systems/Physics2DSystem.h"
 #include "Systems/PhysicsSystem.h"
 #include "Terrain/TerrainSystem.h"
@@ -934,6 +935,8 @@ namespace pe
                 CreateGlobalSystem<voxel::VoxelSystem>()->Init(nullptr);
                 // Terrain subsystem: heightfield terrain node reconcile. Permanent, idle until a Terrain node exists.
                 CreateGlobalSystem<terrain::TerrainSystem>()->Init(nullptr);
+                // Navigation: idle until a bake (nav.bake).
+                CreateGlobalSystem<NavigationSystem>()->Init(nullptr);
 
                 if (!startupScene.IsExplicitEmpty() && !startupScene.scenePath.empty())
                 {

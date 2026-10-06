@@ -11,6 +11,7 @@ Migrated 2026-09-20. Open the relevant focused page; verify current behavior in 
 - [Runtime UI Helper Surface](runtime/runtime-ui-helper-surface.md)
 - [Runtime 2D Physics And Shapes](runtime/runtime-2d-physics-and-shapes.md)
 - [Runtime 3D Physics](runtime/runtime-3d-physics.md)
+- [Runtime Navigation](runtime/runtime-navigation.md)
 - [Runtime 2D Skinned Procedural Animation](runtime/runtime-2d-skinned-procedural-animation.md)
 - [Runtime Particle Helper Surface](runtime/runtime-particle-helper-surface.md)
 - [MyProject Contract](runtime/myproject-contract.md)
