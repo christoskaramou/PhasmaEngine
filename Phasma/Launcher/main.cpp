@@ -2597,6 +2597,7 @@ namespace
             selection.displayIndex = 0;
         while (running)
         {
+            pe::FrameTimer::Instance().Tick();
             SDL_Event event{};
             while (SDL_PollEvent(&event))
             {
@@ -2843,6 +2844,7 @@ namespace
             SDL_RenderClear(renderer);
             RenderImGuiDrawData(renderer, ImGui::GetDrawData());
             SDL_RenderPresent(renderer);
+            pe::FrameTimer::Instance().EndFrame();
         }
 
         if (fontTexture)

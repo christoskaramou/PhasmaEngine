@@ -39,6 +39,7 @@ namespace pe
         void CountCpuTotalStamp();
         void CountDeltaTime();
         void Tick();
+        void EndFrame(uint32_t targetFps = 30);
         double GetUpdatesStamp() const { return m_updatesStamp; }
         double GetCpuTotal() const { return m_cpuTotalStamp; }
         double GetDelta() const;
@@ -58,6 +59,9 @@ namespace pe
         double m_cpuTotalStamp;
         std::chrono::duration<double> m_delta{};
         std::chrono::high_resolution_clock::time_point m_lastTime;
+        std::chrono::steady_clock::time_point m_frameStart{};
+        std::chrono::steady_clock::time_point m_nextFrame{};
+        std::chrono::steady_clock::duration m_frameDuration{};
     };
 
     class GpuTimer;

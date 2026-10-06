@@ -2,6 +2,14 @@
 
 The render path is split between PhasmaRuntime's shared scene renderer and PhasmaCore's backend-neutral RHI wrappers. Code remains the source of truth; use this page for cross-cutting pitfalls that are easy to miss when reading one file at a time.
 
+## Background Frame Pacing
+
+All six Phasma windowed apps (Editor, Player, Animator, Launcher, Cook UI and Profiler) call [FrameTimer::Tick / EndFrame](../../../Phasma/Core/Code/Base/Timer.cpp) around each frame. `Tick` records the start without waiting. After rendering and presentation, `EndFrame` waits only for the remaining background frame budget (30 FPS by default; its target argument accepts other integer rates, with zero disabling the cap). CPU work stamps precede this wait; the next frame's delta includes it. Headless Cook/Export operations do not run the window frame loop.
+
+The deadline advances by a fixed period on a steady clock, so late wake-ups do not accumulate into a lower average. Long stalls reset missed deadlines instead of producing a burst of catch-up frames. Any focused SDL window in the process, including a detached Editor/Animator panel, clears the background schedule. Windows uses a high-resolution waitable timer, with a standard-library wait if creating, arming or waiting on that timer fails; other platforms use the standard-library wait. Neither path spins the CPU.
+
+The engine hosts pace after their frame pump in [Editor](../../../Phasma/Editor/main.cpp), [Player](../../../Phasma/Runtime/Code/Runtime/PlayerHost.cpp) and [Animator](../../../Phasma/Animator/main.cpp); the SDL-rendered loops in [Launcher](../../../Phasma/Launcher/main.cpp), [Cook UI](../../../Phasma/Cook/CookUI.cpp) and [Profiler](../../../Phasma/Profiler/main.cpp) pace after `SDL_RenderPresent`. Local pool test `background-fps` exercises the built shared timer with SDL's dummy video driver: 30/60 FPS averages with variable work and host overhead, uncapped main and secondary focus, no extra wait after a slow frame, and no catch-up burst. Verified 2026-10-07.
+
 ## Skinned Mesh LODs
 
 `Scene::AddModel` generates index-only skinned LODs against the original vertex store. `Scene/MeshLod.h` converts each mesh section's positive bone influences into dense weights over a stable bone palette; numerical bone indices are never simplification attributes. The existing meshoptimizer library supports 16 attributes, so sections using more than 16 active bones, invalid weights/joints, or no positive influences retain only LOD0. The palette limit is per section, not per skeleton. Static mesh simplification is unchanged.

@@ -1,5 +1,9 @@
 #include "Base/Timer_Internal.h"
 
+#if defined(PE_WIN32)
+#include <windows.h>
+#endif
+
 namespace pe
 {
     Timer::Timer()
@@ -54,10 +58,47 @@ namespace pe
 
     void FrameTimer::Tick()
     {
+        m_frameStart = std::chrono::steady_clock::now();
         auto now = std::chrono::high_resolution_clock::now();
         m_delta = now - m_lastTime;
         m_lastTime = now;
         m_start = now;
+    }
+
+    void FrameTimer::EndFrame(uint32_t targetFps)
+    {
+        using Clock = std::chrono::steady_clock;
+        if (SDL_GetKeyboardFocus() || targetFps == 0)
+        {
+            m_nextFrame = {};
+            return;
+        }
+
+        const auto frameDuration = std::chrono::duration_cast<Clock::duration>(std::chrono::duration<double>(1.0 / targetFps));
+        if (m_nextFrame == Clock::time_point{} || frameDuration != m_frameDuration)
+        {
+            m_frameDuration = frameDuration;
+            m_nextFrame = m_frameStart + frameDuration;
+        }
+
+        if (Clock::now() < m_nextFrame)
+        {
+#if defined(PE_WIN32)
+            static std::unique_ptr<void, decltype(&CloseHandle)> timer(
+                CreateWaitableTimerExW(nullptr, nullptr, CREATE_WAITABLE_TIMER_HIGH_RESOLUTION, TIMER_MODIFY_STATE | SYNCHRONIZE), &CloseHandle);
+            LARGE_INTEGER dueTime{};
+            dueTime.QuadPart = -std::max<LONGLONG>(1, std::chrono::duration_cast<std::chrono::duration<LONGLONG, std::ratio<1, 10000000>>>(m_nextFrame - Clock::now()).count());
+            if (!timer || !SetWaitableTimer(timer.get(), &dueTime, 0, nullptr, nullptr, FALSE) ||
+                WaitForSingleObject(timer.get(), INFINITE) != WAIT_OBJECT_0)
+#endif
+                std::this_thread::sleep_until(m_nextFrame);
+        }
+
+        // Carry the deadline forward so late wake-ups do not accumulate.
+        m_nextFrame += frameDuration;
+        const auto afterWait = Clock::now();
+        if (m_nextFrame <= afterWait)
+            m_nextFrame = afterWait + frameDuration;
     }
 
     double FrameTimer::GetDelta() const

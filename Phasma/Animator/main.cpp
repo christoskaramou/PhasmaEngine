@@ -51,6 +51,7 @@ int main(int argc, char *argv[])
             pe::AnimatorApp app(argc, argv);
             while (app.Frame())
             {
+                pe::FrameTimer::Instance().EndFrame();
             }
         }
         pe::EventSystem::Destroy();

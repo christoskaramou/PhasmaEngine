@@ -2401,6 +2401,7 @@ int main(int argc, char *argv[])
     bool wasConnected = false;
     while (running)
     {
+        pe::FrameTimer::Instance().Tick();
         SDL_Event event{};
         while (SDL_PollEvent(&event))
         {
@@ -2603,6 +2604,7 @@ int main(int argc, char *argv[])
         SDL_RenderClear(renderer);
         RenderImGuiDrawData(renderer, ImGui::GetDrawData());
         SDL_RenderPresent(renderer);
+        pe::FrameTimer::Instance().EndFrame();
     }
 
     if (client.IsConnected())

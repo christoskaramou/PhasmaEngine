@@ -611,6 +611,7 @@ namespace pe
             {
                 while (Frame())
                 {
+                    FrameTimer::Instance().EndFrame();
                 }
             }
 

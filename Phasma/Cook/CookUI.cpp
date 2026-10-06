@@ -518,6 +518,7 @@ namespace pe
         bool running = true;
         while (running)
         {
+            FrameTimer::Instance().Tick();
             SDL_Event event{};
             while (SDL_PollEvent(&event))
             {
@@ -547,6 +548,7 @@ namespace pe
             SDL_RenderClear(renderer);
             RenderImGuiDrawData(renderer, ImGui::GetDrawData());
             SDL_RenderPresent(renderer);
+            FrameTimer::Instance().EndFrame();
         }
 
         if (st.worker.joinable())

@@ -278,6 +278,8 @@ int main(int argc, char *argv[])
                 break;
             }
 
+            pe::FrameTimer::Instance().EndFrame();
+
             pe::EventSystem::QueuedEvent ev;
             if (pe::EventSystem::PeekAndPop(pe::EventType::ReloadModule, ev))
             {
