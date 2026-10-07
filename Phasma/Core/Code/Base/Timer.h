@@ -40,6 +40,10 @@ namespace pe
         void CountDeltaTime();
         void Tick();
         void EndFrame(uint32_t targetFps = 30);
+        // EndFrame paces unfocused windows unless this is off. Starts from phasma_settings.json "background_fps_cap"
+        // (default on); Lua engine.set_background_fps_cap changes it for the session (tests, captures).
+        void SetBackgroundCap(bool enabled);
+        bool GetBackgroundCap() const;
         double GetUpdatesStamp() const { return m_updatesStamp; }
         double GetCpuTotal() const { return m_cpuTotalStamp; }
         double GetDelta() const;
@@ -62,6 +66,7 @@ namespace pe
         std::chrono::steady_clock::time_point m_frameStart{};
         std::chrono::steady_clock::time_point m_nextFrame{};
         std::chrono::steady_clock::duration m_frameDuration{};
+        bool m_backgroundCap = true;
     };
 
     class GpuTimer;

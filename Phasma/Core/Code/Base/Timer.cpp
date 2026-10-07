@@ -1,4 +1,6 @@
 #include "Base/Timer_Internal.h"
+#include "Base/Path.h"
+#include "rapidjson/document.h"
 
 #if defined(PE_WIN32)
 #include <windows.h>
@@ -6,6 +8,26 @@
 
 namespace pe
 {
+    namespace
+    {
+        // phasma_settings.json beside the executables (every Phasma app's machine-wide settings, which the Launcher
+        // writes): "background_fps_cap": false renders unfocused windows uncapped. Absent or unreadable = capped.
+        bool ReadBackgroundCapSetting()
+        {
+            Path::Init();
+            std::ifstream file(std::filesystem::path(Path::Root) / "phasma_settings.json", std::ios::binary);
+            if (!file)
+                return true;
+            const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            rapidjson::Document document;
+            document.Parse(text.c_str(), text.size());
+            if (document.HasParseError() || !document.IsObject())
+                return true;
+            const auto it = document.FindMember("background_fps_cap");
+            return it == document.MemberEnd() || !it->value.IsBool() || it->value.GetBool();
+        }
+    } // namespace
+
     Timer::Timer()
         : m_start{},
           m_system_delay{0}
@@ -49,6 +71,7 @@ namespace pe
           m_delta{}
     {
         m_lastTime = std::chrono::high_resolution_clock::now();
+        m_backgroundCap = ReadBackgroundCapSetting();
     }
 
     void FrameTimer::CountDeltaTime()
@@ -65,10 +88,20 @@ namespace pe
         m_start = now;
     }
 
+    void FrameTimer::SetBackgroundCap(bool enabled)
+    {
+        m_backgroundCap = enabled;
+    }
+
+    bool FrameTimer::GetBackgroundCap() const
+    {
+        return m_backgroundCap;
+    }
+
     void FrameTimer::EndFrame(uint32_t targetFps)
     {
         using Clock = std::chrono::steady_clock;
-        if (SDL_GetKeyboardFocus() || targetFps == 0)
+        if (SDL_GetKeyboardFocus() || targetFps == 0 || !m_backgroundCap)
         {
             m_nextFrame = {};
             return;

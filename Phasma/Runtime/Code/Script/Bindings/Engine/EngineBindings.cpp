@@ -22,6 +22,14 @@ namespace pe
                     return t;
                 });
 
+                // Unfocused windows render at 30 FPS unless this is off (on by default; not saved).
+                engine.set_function("set_background_fps_cap", [](bool enabled) {
+                    FrameTimer::Instance().SetBackgroundCap(enabled);
+                });
+                engine.set_function("get_background_fps_cap", []() -> bool {
+                    return FrameTimer::Instance().GetBackgroundCap();
+                });
+
                 engine.set_function("compile_shaders", []() {
                     EventSystem::PushEvent(EventType::CompileShaders);
                 });
