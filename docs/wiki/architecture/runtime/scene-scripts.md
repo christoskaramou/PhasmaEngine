@@ -255,6 +255,18 @@ ABI 26 (2026-10-04) appends `setTransform` (`World::SetTransform(node, position,
 handle lookup, one `ReplaceTrs` and one `SetLocalMatrix`. On AgainstTheHero's 1,000-enemy fill the two calls cost
 ~200 and ~170 ns per enemy per frame (0.35 ms, ~80% of its per-enemy view update).
 
+ABI 27 (2026-10-07) appends node-free navigation for game code that moves its own bodies:
+`navCreate` bakes a NavMesh from world-space triangles (`NavBake`'s zero fields take the engine defaults),
+`navSwarmCreate` puts a NavSwarm on it (bake once, a swarm per match; a mesh takes its swarms with it), and
+`navAdd` / `navRemove` / `navSetTarget` / `navSetSpeed` / `navSetPosition` / `navUpdate` / `navGet` drive the members
+(position and velocity on the 60 Hz steps, `drawn` blended between them, `anchored`). The table entries are
+[NavScriptApi.cpp](../../../../Phasma/Runtime/Code/Navigation/NavScriptApi.cpp) (`navscript::Fill`), and play stop
+frees whatever meshes and swarms a script left. A game's headless check compiles the same file with the Navigation
+sources and Recast/Detour, force-including
+[NavStandalone.h](../../../../Phasma/Runtime/Code/Navigation/NavStandalone.h) for what the engine's precompiled header
+gives them, and fills its own table; the game DLL itself links nothing (on Android its objects join PhasmaRuntime,
+which already holds the navigation).
+
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and
 uses the existing `RunProcess` helper asynchronously for Save & Build with compiler output.

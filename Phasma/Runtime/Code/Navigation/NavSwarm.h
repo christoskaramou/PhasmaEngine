@@ -40,11 +40,17 @@ namespace pe
         NavSwarm(const NavSwarm &) = delete;
         NavSwarm &operator=(const NavSwarm &) = delete;
 
-        // The member's index, or -1 when the position is off the mesh.
+        // The member's index, or -1 when the position is off the mesh. A radius wider than the bake's agent keeps the
+        // difference off the mesh edges, so a gap narrower than its body stops it.
         int Add(const vec3 &position, const NavSwarmMember &member);
         void Remove(int member);
+        // For game logic that varies a member every tick: its speed (0 holds it still and the others route around
+        // it), and a move to the mesh point nearest `position` (knockback, dashes, teleports; its drawn position
+        // shifts by the same offset). False for a removed or invalid member, an invalid speed or a point off the mesh.
+        bool SetSpeed(int member, float speed);
+        bool SetPosition(int member, const vec3 &position);
         void SetTarget(const vec3 &target);
-        // Runs the whole fixed steps that fit in `dt` (the rest carries over, at most 4 a call) and returns how many.
+        // Runs the whole fixed steps that fit in `dt` (the rest carries over, at most 6 a call) and returns how many.
         // A supplied crowd steps with the swarm and shares its avoidance pass.
         int Update(float dt, NavCrowd *crowd = nullptr);
         bool Get(int member, vec3 &position, vec3 &velocity) const;

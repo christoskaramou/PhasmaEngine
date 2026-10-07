@@ -11,6 +11,7 @@
 #include "Base/Log.h"
 #include "Base/Path.h"
 #include "Camera/Camera.h"
+#include "Navigation/NavScriptApi.h"
 #include "Particles/ParticleManager.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Render/SceneRendererHost.h"
@@ -1243,6 +1244,7 @@ namespace pe
                          scene->SetLocalMatrix(node, matrix);
                          return 1; });
                  }};
+        navscript::Fill(m_api);
     }
 
     void CppScriptSystem::Stop(Instance &instance)
@@ -1268,6 +1270,7 @@ namespace pe
     {
         ClearInstances();
         ClearFullscreenPasses();
+        navscript::DestroyAll();
         m_module.Reset();
         m_handles.Clear();
         m_sceneGeneration = m_scriptGeneration = UINT32_MAX;
@@ -1457,6 +1460,7 @@ namespace pe
             if (playOnly)
                 Stop(instance);
         }
+        navscript::DestroyAll(); // a world a script left behind; the next play builds its own
     }
 
     void CppScriptSystem::Reconcile()

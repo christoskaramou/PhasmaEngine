@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 26;
+    inline constexpr uint32_t ScriptAbiVersion = 27;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -198,6 +198,13 @@ namespace phasma
         Play
     };
 
+    // v27: a navigation mesh's bake inputs (metres, degrees, Y up); 0 takes the engine's default for that field
+    // (0.2 / 0.1 cells, a 0.4 x 1.8 m agent, 0.4 m climb, 45 degrees).
+    struct NavBake
+    {
+        float cellSize, cellHeight, agentRadius, agentHeight, agentMaxClimb, agentMaxSlope;
+    };
+
     // Main-thread calls only. Handles are validated; no engine objects cross this ABI.
     struct ScriptApi
     {
@@ -347,6 +354,28 @@ namespace phasma
         // v26: position and Euler rotation (degrees) in one call: what SetPosition then SetRotation leave, with one
         // node lookup and one transform update (a crowd moves every member every frame).
         uint32_t (*setTransform)(void *, Node node, Vec3 position, Vec3 eulerDegrees) noexcept;
+        // v27: navigation for game code that moves its own bodies, no scene nodes. navCreate bakes a mesh from
+        // world-space triangles (xyz per vertex, three indices per triangle, walkable when cross(v1 - v0, v2 - v0)
+        // points up); swarms on a mesh share it (bake once, a swarm per match). A swarm's members chase one target
+        // with reciprocal avoidance and never push; a radius wider than the bake's agent keeps the difference off the
+        // mesh edges. It runs fixed 60 Hz steps (navUpdate returns how many ran): navGet gives the step's position and
+        // velocity, `drawn` the position blended between the last two steps for drawing, `anchored` whether it holds
+        // at its stop distance. Speed 0 holds a member still and the others route around it; navSetPosition moves one
+        // to the nearest mesh point (knockback, dashes, teleports). Handles are 0 / members -1 on failure; destroying
+        // a mesh destroys its swarms, and whatever a script leaves goes when play stops.
+        uint32_t (*navCreate)(void *, const float *xyz, uint32_t vertexCount, const uint32_t *indices,
+                              uint32_t indexCount, const NavBake *bake) noexcept;
+        void (*navDestroy)(void *, uint32_t mesh) noexcept;
+        uint32_t (*navSwarmCreate)(void *, uint32_t mesh) noexcept;
+        void (*navSwarmDestroy)(void *, uint32_t swarm) noexcept;
+        int32_t (*navAdd)(void *, uint32_t swarm, Vec3 position, float radius, float speed, float stopDistance) noexcept;
+        void (*navRemove)(void *, uint32_t swarm, int32_t member) noexcept;
+        void (*navSetTarget)(void *, uint32_t swarm, Vec3 target) noexcept;
+        uint32_t (*navSetSpeed)(void *, uint32_t swarm, int32_t member, float speed) noexcept;
+        uint32_t (*navSetPosition)(void *, uint32_t swarm, int32_t member, Vec3 position) noexcept;
+        uint32_t (*navUpdate)(void *, uint32_t swarm, float dt) noexcept;
+        uint32_t (*navGet)(void *, uint32_t swarm, int32_t member, Vec3 *position, Vec3 *velocity, Vec3 *drawn,
+                           uint32_t *anchored) noexcept;
     };
     struct ScriptDesc
     {

@@ -10,7 +10,7 @@ namespace pe
         constexpr int kMaxNeighbours = 10; // the nearest ones only
         constexpr float kFloorGap = 2.0f;  // members further apart in height are on different floors
         constexpr float kEpsilon = 1e-5f;
-        constexpr int kMaxStepsPerUpdate = 4;
+        constexpr int kMaxStepsPerUpdate = 6; // a 0.1 s frame (10 fps) still runs in real time
         // Avoid as if 10% wider: packed tight, three-way squeezes and wall clamps leave a few cm of overlap at the
         // true radii; the margin absorbs it without any push.
         constexpr float kAvoidMargin = 1.1f;
@@ -20,6 +20,9 @@ namespace pe
         // holds too: the ones behind a full stop line settle instead of jostling for it.
         constexpr float kSettleSpeed = 0.25f;
         constexpr float kSettleReach = 1.2f;
+        // Walls are gathered this far around each polygon, plus the widest member's radius beyond the bake's: enough
+        // for a step at up to 15 m/s.
+        constexpr float kWallReach = 0.25f;
 
         // ORCA (van den Berg et al., "Reciprocal n-body collision avoidance"): each neighbour bounds the velocity to
         // one side of a line; the velocity nearest the preferred one inside every half-plane and the speed limit wins.
@@ -156,9 +159,10 @@ namespace pe
             float radius = 0.3f, speed = 3.5f, stop = 0.0f;
             dtPolyRef ref = 0;
             int crowdAgent = -1;
-            bool alive = false, anchored = false, settled = false, direct = false;
+            bool alive = false, anchored = false, settled = false, yields = false, direct = false;
+            bool recheck = true; // new or moved: check `direct` on the next step, not its staggered one
 
-            bool Holds() const { return anchored || settled || speed == 0.0f; }
+            bool Holds() const { return (anchored && !yields) || settled || speed == 0.0f; }
         };
 
         const NavMesh::Impl *nav = nullptr;
@@ -174,23 +178,26 @@ namespace pe
         // the edge shared with it.
         std::vector<int> towards;
         std::vector<vec2> portalA, portalB, centres;
-        // Per polygon, the mesh-boundary edges of it and its neighbours: walls[wallStart[p], wallStart[p + 1]).
-        // ponytail: the one ring only; a wall of a polygon that just shares a vertex is left to moveAlongSurface.
+        // The mesh-boundary edges, by owning polygon (walls[ownStart[p], ownStart[p + 1])), and per polygon those of
+        // the connected polygons within wallReach of it: walls[wallIndex[wallStart[p], wallStart[p + 1])].
         struct Wall
         {
             vec2 a{0.0f}, b{0.0f}, out{0.0f}; // out: the normal pointing off the mesh
         };
         std::vector<Wall> walls;
-        std::vector<int> wallStart;
+        std::vector<int> ownStart, wallStart, wallIndex;
+        float wallReach = 0.0f;
 
         float carry = 0.0f;
         uint32_t stepCount = 0;
         NavSwarmStats stats;
 
-        std::vector<int> cellHead, cellNext;       // the neighbour grid
-        std::vector<std::pair<float, int>> nearby; // scratch
-        std::vector<Line> lines, projected;        // scratch
-        std::vector<char> settles;                 // scratch
+        std::vector<int> cellHead, cellNext;        // the neighbour grid
+        std::vector<std::pair<float, int>> nearby;  // scratch
+        std::vector<Line> lines, projected;         // scratch
+        std::vector<char> settles;                  // scratch
+        std::vector<std::pair<vec2, vec2>> corners; // scratch: wall ends nearest a member, with their wall's normal
+        std::vector<int> spans;                     // scratch: walls whose nearest point lies inside them
 
         int PolyIndex(dtPolyRef ref) const
         {
@@ -202,6 +209,54 @@ namespace pe
         }
 
         vec2 Vertex(int index) const { return vec2(tile->verts[index * 3], tile->verts[index * 3 + 2]); }
+
+        static bool IsWall(unsigned short nei) { return nei == 0 || (nei & DT_EXT_LINK); } // no neighbour in this tile
+
+        // Per polygon, a walk over its neighbours whose bounds lie within `reach` of its own; their walls are the ones
+        // a member standing in it can meet within a step (connected only, so another floor's edges never count).
+        // ponytail: run once and again when a wider member arrives; fine for one solo tile's few thousand polygons.
+        void GatherWalls(float reach)
+        {
+            wallReach = reach;
+            const int count = tile->header->polyCount;
+            std::vector<vec2> lo(static_cast<size_t>(count), vec2(std::numeric_limits<float>::max())),
+                hi(static_cast<size_t>(count), vec2(-std::numeric_limits<float>::max()));
+            for (int p = 0; p < count; ++p)
+                for (int v = 0; v < tile->polys[p].vertCount; ++v)
+                {
+                    lo[p] = glm::min(lo[p], Vertex(tile->polys[p].verts[v]));
+                    hi[p] = glm::max(hi[p], Vertex(tile->polys[p].verts[v]));
+                }
+            std::vector<int> seen(static_cast<size_t>(count), -1), queue;
+            wallStart.clear();
+            wallIndex.clear();
+            for (int p = 0; p < count; ++p)
+            {
+                wallStart.push_back(static_cast<int>(wallIndex.size()));
+                queue.assign(1, p);
+                seen[p] = p;
+                for (size_t q = 0; q < queue.size(); ++q)
+                {
+                    const int u = queue[q];
+                    for (int w = ownStart[u]; w < ownStart[u + 1]; ++w)
+                        wallIndex.push_back(w);
+                    const dtPoly &poly = tile->polys[u];
+                    for (int k = 0; k < poly.vertCount; ++k)
+                    {
+                        const int v = poly.neis[k] - 1;
+                        if (IsWall(poly.neis[k]) || seen[v] == p)
+                            continue;
+                        const vec2 gap = glm::max(vec2(0.0f), glm::max(lo[v] - hi[p], lo[p] - hi[v]));
+                        if (glm::length(gap) <= reach)
+                        {
+                            seen[v] = p;
+                            queue.push_back(v);
+                        }
+                    }
+                }
+            }
+            wallStart.push_back(static_cast<int>(wallIndex.size()));
+        }
 
         void BuildField()
         {
@@ -268,8 +323,9 @@ namespace pe
                 return;
             const vec2 p = Flat(m.pos), goal = Flat(target);
             // Straight at the target while the mesh allows it: checked every 4th step, staggered by member.
-            if ((stepCount + static_cast<uint32_t>(index)) % 4 == 0 && targetRef)
+            if (((stepCount + static_cast<uint32_t>(index)) % 4 == 0 || m.recheck) && targetRef)
             {
+                m.recheck = false;
                 float t = 0.0f, normal[3];
                 dtPolyRef visited[16];
                 int visitedCount = 0;
@@ -342,6 +398,26 @@ namespace pe
                 head = i;
             }
 
+            // Each neighbour of member i on its floor with their offset and its square, until `visit` returns false.
+            const auto scan = [&](size_t i, auto &&visit)
+            {
+                const vec2 p = Flat(members[i].pos);
+                int cx = 0, cz = 0;
+                cellOf(p, cx, cz);
+                for (int z = std::max(0, cz - 1); z <= std::min(depth - 1, cz + 1); ++z)
+                    for (int x = std::max(0, cx - 1); x <= std::min(width - 1, cx + 1); ++x)
+                        for (int j = cellHead[static_cast<size_t>(z) * width + x]; j >= 0; j = cellNext[j])
+                        {
+                            const Member &o = members[j];
+                            if (j == static_cast<int>(i) || std::abs(o.pos.y - members[i].pos.y) > kFloorGap)
+                                continue;
+                            const vec2 d = Flat(o.pos) - p;
+                            if (!visit(o, d, glm::dot(d, d)))
+                                return;
+                        }
+            };
+            // An anchored member a neighbour overlaps (its true radii: a spawn on top of it, a knockback, a squeeze)
+            // moves to part from it, then holds again; one holding still at speed 0 never does.
             // Settle: pressed against a held member that stands in the way and nearer the target, barely moving, and
             // outside every neighbour's avoidance margin (only there does holding still satisfy its own lines; inside,
             // a wedge against walls and held bodies would freeze the overlap). Last step's holds are read (Jacobi), so
@@ -349,31 +425,35 @@ namespace pe
             settles.assign(members.size(), 0);
             for (size_t i = 0; i < members.size(); ++i)
             {
-                const Member &m = members[i];
-                if (!m.alive || m.crowdAgent >= 0 || m.anchored || m.speed == 0.0f || glm::dot(m.pref, m.pref) < kEpsilon ||
-                    (!m.settled && glm::length(m.vel) > kSettleSpeed * m.speed))
+                Member &m = members[i];
+                m.yields = false;
+                if (!m.alive || m.crowdAgent >= 0 || m.speed == 0.0f)
                     continue;
-                const vec2 p = Flat(m.pos);
-                const float toTarget = glm::distance(p, Flat(target));
+                if (m.anchored)
+                {
+                    scan(i,
+                         [&](const Member &o, const vec2 &, float d2)
+                         {
+                             m.yields = d2 < (m.radius + o.radius) * (m.radius + o.radius);
+                             return !m.yields;
+                         });
+                    continue;
+                }
+                if (glm::dot(m.pref, m.pref) < kEpsilon || (!m.settled && glm::length(m.vel) > kSettleSpeed * m.speed))
+                    continue;
+                const float toTarget = glm::distance(Flat(m.pos), Flat(target));
                 bool support = false, clear = true;
-                int cx = 0, cz = 0;
-                cellOf(p, cx, cz);
-                for (int z = std::max(0, cz - 1); z <= std::min(depth - 1, cz + 1) && clear; ++z)
-                    for (int x = std::max(0, cx - 1); x <= std::min(width - 1, cx + 1) && clear; ++x)
-                        for (int j = cellHead[static_cast<size_t>(z) * width + x]; j >= 0 && clear; j = cellNext[j])
-                        {
-                            const Member &o = members[j];
-                            if (j == static_cast<int>(i) || std::abs(o.pos.y - m.pos.y) > kFloorGap)
-                                continue;
-                            const vec2 d = Flat(o.pos) - p;
-                            const float d2 = glm::dot(d, d), margin = (m.radius + o.radius) * kAvoidMargin;
-                            const float reach = margin * kSettleReach;
-                            clear = d2 >= margin * margin;
-                            // Support: swarm members holding for the target, not stopped crowd agents.
-                            support = support || (o.crowdAgent < 0 && (o.anchored || o.settled) && d2 < reach * reach &&
-                                                  glm::dot(d, m.pref) > 0.0f &&
-                                                  glm::distance(Flat(o.pos), Flat(target)) < toTarget);
-                        }
+                scan(i,
+                     [&](const Member &o, const vec2 &d, float d2)
+                     {
+                         const float margin = (m.radius + o.radius) * kAvoidMargin, reach = margin * kSettleReach;
+                         clear = d2 >= margin * margin;
+                         // Support: swarm members holding for the target, not stopped crowd agents.
+                         support = support || (o.crowdAgent < 0 && (o.anchored || o.settled) && d2 < reach * reach &&
+                                               glm::dot(d, m.pref) > 0.0f &&
+                                               glm::distance(Flat(o.pos), Flat(target)) < toTarget);
+                         return clear;
+                     });
                 settles[i] = support && clear;
             }
             for (size_t i = 0; i < members.size(); ++i)
@@ -412,17 +492,53 @@ namespace pe
                 lines.clear();
                 // The surface's clamp as hard lines, first: never into a wall faster than this step reaches it, so a
                 // neighbour can count on this member taking its half of their avoidance.
+                // A member wider than the bake keeps the difference off the edges (never pushed: inside it, it only
+                // may not get closer).
+                const float extra = std::max(0.0f, m.radius - nav->settings.agentRadius);
                 if (const int poly = PolyIndex(m.ref); poly >= 0)
+                {
+                    const float reach = m.speed * kStep + extra;
+                    const auto bound = [&](const vec2 &c, float d, const vec2 &out)
+                    {
+                        const vec2 n = d > 1e-4f ? (c - p) / d : out;
+                        lines.push_back({n * (std::max(d - extra, 0.0f) * invStep), vec2(-n.y, n.x)});
+                    };
+                    // A wall whose nearest point lies inside it bounds the velocity along its normal. An end counts
+                    // as a corner only when no wall meeting there has its nearest point inside (an obstacle's corner);
+                    // where a straight edge just goes on in the next segment, the end would block sliding along it.
+                    // Only walls within this step's reach count: one that covers a near corner is nearer still.
+                    corners.clear();
+                    spans.clear();
                     for (int w = wallStart[poly]; w < wallStart[poly + 1]; ++w)
                     {
-                        const Wall &wall = walls[w];
-                        const vec2 c = ClosestOnSegment(p, wall.a, wall.b);
+                        const Wall &wall = walls[wallIndex[w]];
+                        const vec2 ab = wall.b - wall.a;
+                        const float t = glm::dot(p - wall.a, ab) / glm::dot(ab, ab);
+                        const vec2 c = t <= 0.0f ? wall.a : t >= 1.0f ? wall.b
+                                                                      : wall.a + ab * t; // ends exact: matched below
                         const float d = glm::distance(c, p);
-                        if (d >= m.speed * kStep)
+                        if (d >= reach)
                             continue;
-                        const vec2 n = d > 1e-4f ? (c - p) / d : wall.out;
-                        lines.push_back({n * (d * invStep), vec2(-n.y, n.x)});
+                        if (t <= 0.0f || t >= 1.0f)
+                        {
+                            corners.emplace_back(c, wall.out);
+                            continue;
+                        }
+                        spans.push_back(wallIndex[w]);
+                        bound(c, d, wall.out);
                     }
+                    for (size_t k = 0; k < corners.size(); ++k)
+                    {
+                        const vec2 c = corners[k].first;
+                        bool covered = false;
+                        for (size_t q = 0; q < spans.size() && !covered; ++q)
+                            covered = walls[spans[q]].a == c || walls[spans[q]].b == c;
+                        for (size_t e = 0; e < k && !covered; ++e)
+                            covered = corners[e].first == c; // a corner bounds once
+                        if (!covered)
+                            bound(c, glm::distance(c, p), corners[k].second);
+                    }
+                }
                 const size_t wallLines = lines.size();
                 for (const auto &[d2, j] : nearby)
                 {
@@ -614,33 +730,24 @@ namespace pe
                 sum += s.Vertex(poly.verts[v]);
             s.centres[p] = sum / static_cast<float>(std::max<int>(1, poly.vertCount));
         }
-        const auto isWall = [](unsigned short nei)
-        { return nei == 0 || (nei & DT_EXT_LINK); }; // no neighbour in this tile
-        const auto addWalls = [&s, &isWall](int p)
+        for (int p = 0; p < s.tile->header->polyCount; ++p)
         {
+            s.ownStart.push_back(static_cast<int>(s.walls.size()));
             const dtPoly &poly = s.tile->polys[p];
             for (int k = 0; k < poly.vertCount; ++k)
             {
                 const vec2 a = s.Vertex(poly.verts[k]), b = s.Vertex(poly.verts[(k + 1) % poly.vertCount]);
                 const float length = glm::distance(a, b);
-                if (!isWall(poly.neis[k]) || length < kEpsilon)
+                if (!Impl::IsWall(poly.neis[k]) || length < kEpsilon)
                     continue;
                 vec2 out = vec2(b.y - a.y, a.x - b.x) / length;
                 if (glm::dot(out, 0.5f * (a + b) - s.centres[p]) < 0.0f)
                     out = -out;
                 s.walls.push_back({a, b, out});
             }
-        };
-        for (int p = 0; p < s.tile->header->polyCount; ++p)
-        {
-            s.wallStart.push_back(static_cast<int>(s.walls.size()));
-            addWalls(p);
-            const dtPoly &poly = s.tile->polys[p];
-            for (int k = 0; k < poly.vertCount; ++k)
-                if (!isWall(poly.neis[k]))
-                    addWalls(poly.neis[k] - 1);
         }
-        s.wallStart.push_back(static_cast<int>(s.walls.size()));
+        s.ownStart.push_back(static_cast<int>(s.walls.size()));
+        s.GatherWalls(kWallReach);
     }
 
     NavSwarm::~NavSwarm() = default;
@@ -648,17 +755,19 @@ namespace pe
     int NavSwarm::Add(const vec3 &position, const NavSwarmMember &member)
     {
         Impl &s = *m_impl;
-        if (!std::isfinite(member.radius) || member.radius <= 0.0f || member.radius > s.nav->settings.agentRadius ||
+        if (!std::isfinite(member.radius) || member.radius <= 0.0f || member.radius > kNavMaxCoordinate ||
             !std::isfinite(member.speed) || member.speed < 0.0f || member.speed > kNavMaxSpeed ||
             !std::isfinite(member.stopDistance) || member.stopDistance < 0.0f || member.stopDistance > kNavMaxCoordinate)
         {
-            PE_WARN("[Nav] invalid swarm radius/speed/stop distance, or radius larger than the baked size");
+            PE_WARN("[Nav] invalid swarm radius/speed/stop distance");
             return -1;
         }
         dtPolyRef ref = 0;
         vec3 start;
         if (!s.tile || !s.nav->Snap(position, ref, &start.x))
             return -1;
+        if (const float reach = kWallReach + member.radius - s.nav->settings.agentRadius; reach > s.wallReach)
+            s.GatherWalls(reach);
         int index = static_cast<int>(s.members.size());
         if (!s.freeSlots.empty())
         {
@@ -679,6 +788,32 @@ namespace pe
         m.alive = true;
         ++s.alive;
         return index;
+    }
+
+    bool NavSwarm::SetSpeed(int member, float speed)
+    {
+        Impl &s = *m_impl;
+        if (member < 0 || member >= static_cast<int>(s.members.size()) || !s.members[member].alive ||
+            !std::isfinite(speed) || speed < 0.0f || speed > kNavMaxSpeed)
+            return false;
+        s.members[member].speed = speed;
+        return true;
+    }
+
+    bool NavSwarm::SetPosition(int member, const vec3 &position)
+    {
+        Impl &s = *m_impl;
+        dtPolyRef ref = 0;
+        vec3 snapped;
+        if (member < 0 || member >= static_cast<int>(s.members.size()) || !s.members[member].alive ||
+            !s.nav->Snap(position, ref, &snapped.x))
+            return false;
+        Impl::Member &m = s.members[member];
+        m.previous += snapped - m.pos; // drawn shifted by the same offset, not smeared across it
+        m.recheck = true;
+        m.pos = snapped;
+        m.ref = ref;
+        return true;
     }
 
     void NavSwarm::Remove(int member)
@@ -788,6 +923,14 @@ namespace pe
     int NavSwarm::Add(const vec3 &, const NavSwarmMember &)
     {
         return -1;
+    }
+    bool NavSwarm::SetSpeed(int, float)
+    {
+        return false;
+    }
+    bool NavSwarm::SetPosition(int, const vec3 &)
+    {
+        return false;
     }
     void NavSwarm::Remove(int) {}
     void NavSwarm::SetTarget(const vec3 &) {}
