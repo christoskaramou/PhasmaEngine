@@ -7,7 +7,7 @@
 // tool never flashes a black surface when invoked headlessly (editor import, cook_model.py).
 //
 // Modes (dispatched in main):
-//   PhasmaCook <source> <output.pemesh>   one-shot cook (editor single import / cook_model.py)
+//   PhasmaCook <source> <output.pemesh> [--clusters]   one-shot cook
 //   PhasmaCook --batch <manifest>         cook many models in ONE process (one device bring-up);
 //                                         manifest is UTF-8 text, one "<src>\t<out>" per line
 //   PhasmaCook                            open the interactive cook window (CookUI.cpp)
@@ -84,7 +84,7 @@ namespace
         // Returns an empty string on success, else a short failure reason. MUST NOT call PE_ERROR
         // (which throws in this engine): a model Assimp rejects has to be skipped, not crash the
         // whole batch — that was the cause of "cooked 80/104" (one bad model killed the rest).
-        std::string CookOne(const std::filesystem::path &src, const std::filesystem::path &out)
+        std::string CookOne(const std::filesystem::path &src, const std::filesystem::path &out, bool buildClusters)
         {
             try
             {
@@ -96,7 +96,7 @@ namespace
                 }
                 std::error_code ec;
                 std::filesystem::create_directories(out.parent_path(), ec);
-                const bool ok = pe::ModelAssetCooked::WriteToFile(model, out);
+                const bool ok = pe::ModelAssetCooked::WriteToFile(model, out, buildClusters);
                 delete model;
                 if (!ok)
                 {
@@ -124,7 +124,7 @@ namespace
         std::unique_ptr<pe::RuntimeRhiSession> m_rhi;
     };
 
-    int RunCook(const std::filesystem::path &src, const std::filesystem::path &out)
+    int RunCook(const std::filesystem::path &src, const std::filesystem::path &out, bool buildClusters)
     {
         pe::Path::Init();
         pe::Log::Init();
@@ -135,7 +135,7 @@ namespace
         try
         {
             CookSession session;
-            result = session.CookOne(src, out).empty() ? 0 : 1;
+            result = session.CookOne(src, out, buildClusters).empty() ? 0 : 1;
         }
         catch (const std::exception &e)
         {
@@ -150,7 +150,7 @@ namespace
     }
 
     // Cook many models in one device bring-up. Manifest is UTF-8 text, one "<src>\t<out>" per line.
-    int RunBatch(const std::filesystem::path &manifestPath)
+    int RunBatch(const std::filesystem::path &manifestPath, bool buildClusters)
     {
         pe::Path::Init();
         pe::Log::Init();
@@ -196,7 +196,7 @@ namespace
             for (; processed < jobs.size(); ++processed)
             {
                 const auto &job = jobs[processed];
-                const std::string err = session.CookOne(job.first, job.second);
+                const std::string err = session.CookOne(job.first, job.second, buildClusters);
                 if (err.empty())
                     PE_INFO("[Cook] (%zu/%zu) ok: %s", processed + 1, jobs.size(), PathUtf8(job.second).c_str());
                 else
@@ -260,17 +260,17 @@ int main(int argc, char *argv[])
     }
 
     if (args.size() >= 3 && args[1] == L"--batch")
-        return RunBatch(std::filesystem::path(args[2]));
+        return RunBatch(std::filesystem::path(args[2]), args.size() > 3 && args[3] == L"--clusters");
     if (args.size() >= 3)
-        return RunCook(std::filesystem::path(args[1]), std::filesystem::path(args[2]));
+        return RunCook(std::filesystem::path(args[1]), std::filesystem::path(args[2]), args.size() > 3 && args[3] == L"--clusters");
     return pe::RunCookUI();
 #else
     // POSIX argv is UTF-8; build paths from char8_t so they are not re-decoded as a narrow locale.
     if (argc >= 3 && std::strcmp(argv[1], "--batch") == 0)
-        return RunBatch(std::filesystem::path(reinterpret_cast<const char8_t *>(argv[2])));
+        return RunBatch(std::filesystem::path(reinterpret_cast<const char8_t *>(argv[2])), argc > 3 && std::strcmp(argv[3], "--clusters") == 0);
     if (argc >= 3)
         return RunCook(std::filesystem::path(reinterpret_cast<const char8_t *>(argv[1])),
-                       std::filesystem::path(reinterpret_cast<const char8_t *>(argv[2])));
+                       std::filesystem::path(reinterpret_cast<const char8_t *>(argv[2])), argc > 3 && std::strcmp(argv[3], "--clusters") == 0);
     return pe::RunCookUI();
 #endif
 }

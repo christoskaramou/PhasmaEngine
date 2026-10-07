@@ -48,7 +48,23 @@ struct PushConstants
     float lodBias;
     uint skinnedInstancing;
     float4 lodDistances;
+    uint clustersEnabled;
+    float clusterErrorPixels;
+    float clusterProjectionScale;
+    uint clusterOrthographic;
 };
+
+struct GeometryCluster
+{
+    float4 bounds;
+    float4 coarserBounds;
+    float4 finerBounds;
+    float coarserError;
+    float finerError;
+    uint firstIndex;
+    uint indexCount;
+};
+[[vk::binding(20, 0)]] StructuredBuffer<GeometryCluster> GeometryClusters;
 
 #include "InstanceBatch.hlsl"
 
@@ -235,9 +251,57 @@ uint WaveAppend(uint counterIndex, bool emit)
 }
 #endif
 
-[numthreads(64, 1, 1)] void mainCS(uint3 DTid : SV_DispatchThreadID)
+float ClusterProjectedError(float4 bounds, float error, float4x4 world, float scale)
 {
-    uint idx = DTid.x;
+    float3 center = mul(float4(bounds.xyz, 1), world).xyz;
+    float radius = bounds.w * scale;
+    float3 camera = float3(pc.cameraPositionX, pc.cameraPositionY, pc.cameraPositionZ);
+    float distanceToSphere = clusterOrthographic != 0u ? 1.0 : max(distance(center, camera) - radius, 0.01);
+    return error * scale * clusterProjectionScale / distanceToSphere;
+}
+
+groupshared uint ClusterGroupVisible;
+
+void EmitGeometryClusters(DrawIndexedIndirectCommand draw, Mesh_Constants constants, float4x4 world, uint lane)
+{
+    // Gershgorin bounds on A*A^T cover shear and stay exact for orthogonal basis vectors.
+    float3 a = world[0].xyz, b = world[1].xyz, c = world[2].xyz;
+    float ab = abs(dot(a, b)), ac = abs(dot(a, c)), bc = abs(dot(b, c));
+    float scale = sqrt(max(dot(a, a) + ab + ac, max(dot(b, b) + ab + bc, dot(c, c) + ac + bc)));
+    for (uint i = lane; i < constants.clusterCount; i += 64)
+    {
+        GeometryCluster cluster = GeometryClusters[constants.clusterOffset + i];
+        if (ClusterProjectedError(cluster.coarserBounds, cluster.coarserError, world, scale) <= clusterErrorPixels ||
+            ClusterProjectedError(cluster.finerBounds, cluster.finerError, world, scale) > clusterErrorPixels)
+            continue;
+        float3 center = mul(float4(cluster.bounds.xyz, 1), world).xyz;
+        float radius = cluster.bounds.w * scale;
+        if (pc.enableFrustumCulling != 0u && !AABBInFrustum(center - radius, center + radius))
+            continue;
+#if defined(HIZ_OCCLUSION) || defined(PHASE2)
+        if (AABBOccluded(center - radius, center + radius))
+            continue;
+#endif
+        draw.firstIndex = cluster.firstIndex;
+        draw.indexCount = cluster.indexCount;
+        uint slot;
+        if ((constants.editorFlags & 2u) != 0u)
+        {
+            InterlockedAdd(Counters[5], 1u, slot);
+            IndirectOpaqueDS[slot] = draw;
+        }
+        else
+        {
+            InterlockedAdd(Counters[0], 1u, slot);
+            IndirectOpaqueSS[slot] = draw;
+        }
+    }
+}
+
+[numthreads(64, 1, 1)] void mainCS(uint3 group : SV_GroupID, uint3 thread : SV_GroupThreadID)
+{
+    uint groupIndex = group.x + group.y * 65535u;
+    uint idx = clustersEnabled != 0u ? groupIndex : groupIndex * 64u + thread.x;
     if (idx >= pc.maxDrawCount)
         return;
 
@@ -247,6 +311,8 @@ uint WaveAppend(uint counterIndex, bool emit)
         return;
 
     Mesh_Constants constants = MeshConstants[idx];
+    if (clustersEnabled != 0u && thread.x != 0u && (constants.clusterCount == 0u || constants.renderType != 1u || (constants.editorFlags & 20u) != 0u))
+        return;
 
     bool isVoxel = (constants.editorFlags & 4u) != 0u;
     // bit3 = transparent (water) voxel: still a voxel (skips the standard-pbr two-phase buckets) but kept
@@ -274,6 +340,41 @@ uint WaveAppend(uint counterIndex, bool emit)
     {
         aabbMin = asfloat(NodeData.Load3(skinBoundsOffset));
         aabbMax = asfloat(NodeData.Load3(skinBoundsOffset + 16u));
+    }
+
+    if (clustersEnabled != 0u && constants.clusterCount != 0u && constants.renderType == 1u && !isVoxel && !isTerrain)
+    {
+        if (pc.enableFrustumCulling != 0u && !AABBInFrustum(aabbMin, aabbMax))
+            return;
+#if defined(PHASE1)
+        if (Visibility[idx] == 0u)
+            return;
+#elif defined(PHASE2)
+        if (thread.x == 0u)
+        {
+            uint wasVisible = Visibility[idx];
+            bool visibleNow = !AABBOccluded(aabbMin, aabbMax);
+            Visibility[idx] = visibleNow ? 1u : 0u;
+            ClusterGroupVisible = visibleNow && wasVisible == 0u ? 1u : 0u;
+        }
+        GroupMemoryBarrierWithGroupSync();
+        if (ClusterGroupVisible == 0u)
+            return;
+#elif defined(HIZ_OCCLUSION)
+        if (AABBOccluded(aabbMin, aabbMax))
+            return;
+#endif
+        cmd.firstInstance = idx;
+        EmitGeometryClusters(cmd, constants, worldMatrix, thread.x);
+#if !defined(PHASE1) && !defined(PHASE2)
+        if (thread.x == 0u && (constants.editorFlags & 1u) != 0u)
+        {
+            uint selectedSlot;
+            InterlockedAdd(Counters[4], 1u, selectedSlot);
+            IndirectSelectedOut[selectedSlot] = cmd;
+        }
+#endif
+        return;
     }
 
     // Discrete LOD: pick a level by camera distance to the world AABB and override this draw's

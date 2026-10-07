@@ -83,7 +83,7 @@ namespace pe
             return;
 
         Image::Destroy(GUIState::s_sceneViewImage);
-        GUIState::s_sceneViewImage = renderer->CreateFSSampledImage(false);
+        GUIState::s_sceneViewImage = renderer->CreateFSSampledImage(displayRT);
 
         DestroyViewportTextureId(gui);
     }

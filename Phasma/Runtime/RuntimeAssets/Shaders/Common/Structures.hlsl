@@ -137,6 +137,8 @@ struct Mesh_Constants
     uint lodShift;       // per-mesh additive LOD level offset (see Mesh::lodShift)
     uint lodMeshEnabled; // 0 = this mesh ignores LOD (always full detail)
     float lodMeshBias;   // per-mesh camera-distance multiplier (see Mesh::lodBias)
+    uint clusterOffset;
+    uint clusterCount;
 };
 
 struct MaterialGpuData

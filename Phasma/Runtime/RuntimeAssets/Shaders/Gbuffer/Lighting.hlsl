@@ -5,6 +5,8 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/IBL.hlsl"
 #include "PBR.hlsl"
+#define GI_LIGHTING 1
+#include "../GlobalIllumination/ProbeVolume.hlsl"
 #include "Material.hlsl"
 
 #ifndef FORWARD_PLUS_TILE_SIZE
@@ -654,11 +656,11 @@ float3 ImageBasedLighting(Material material,
                         float3 V,
                         TextureCube cube, SamplerState sampler_cube,
                         float2 envBRDF,
-                        float occlusion)
+                        float occlusion, float diffuseWeight = 1.0)
 {
     return ComputeIBL_Common(
         normal, V, material.albedo, material.metallic, material.roughness, material.F0, occlusion,
-        cube, sampler_cube, envBRDF
+        cube, sampler_cube, envBRDF, diffuseWeight
     );
 }
 

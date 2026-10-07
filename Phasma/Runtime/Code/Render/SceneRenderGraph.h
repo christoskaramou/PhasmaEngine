@@ -25,6 +25,7 @@ namespace pe
         SSAO,
         ForwardPlusLightCulling,
         LightOpaque,
+        GlobalIllumination,
         GBufferTransparent,
         LightTransparent,
         Lines,
@@ -66,6 +67,7 @@ namespace pe
         IRenderPassComponent *ssao = nullptr;
         IRenderPassComponent *forwardPlusLightCulling = nullptr;
         IRenderPassComponent *lightOpaque = nullptr;
+        IRenderPassComponent *globalIllumination = nullptr;
         IRenderPassComponent *gbufferTransparent = nullptr;
         IRenderPassComponent *lightTransparent = nullptr;
         IRenderPassComponent *lines = nullptr;
@@ -109,7 +111,8 @@ namespace pe
     void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                          std::span<bool> passInitialized,
                                                          uint32_t width,
-                                                         uint32_t height);
+                                                         uint32_t height,
+                                                         bool rebuildPipelines);
 
     void DestroyInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                           std::span<bool> passInitialized);

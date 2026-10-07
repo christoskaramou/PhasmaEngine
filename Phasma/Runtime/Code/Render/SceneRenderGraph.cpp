@@ -17,6 +17,7 @@
 #include "RenderPasses/GbufferPass.h"
 #include "RenderPasses/GridPass.h"
 #include "RenderPasses/LightPass.h"
+#include "RenderPasses/GlobalIlluminationPass.h"
 #include "RenderPasses/LinesPass.h"
 #include "RenderPasses/MotionBlurPass.h"
 #include "RenderPasses/OcclusionCullingPass.h"
@@ -60,6 +61,7 @@ namespace pe
             {SceneRenderGraphPassId::ForwardPlusLightCulling, 450, "ForwardPlusLightCulling",
              &SceneRenderGraphPassComponents::forwardPlusLightCulling},
             {SceneRenderGraphPassId::LightOpaque, 500, "LightOpaque", &SceneRenderGraphPassComponents::lightOpaque},
+            {SceneRenderGraphPassId::GlobalIllumination, 460, "GlobalIllumination", &SceneRenderGraphPassComponents::globalIllumination},
             {SceneRenderGraphPassId::GBufferTransparent, 600, "GBufferTransparent",
              &SceneRenderGraphPassComponents::gbufferTransparent},
             {SceneRenderGraphPassId::LightTransparent, 700, "LightTransparent",
@@ -70,18 +72,18 @@ namespace pe
             {SceneRenderGraphPassId::ParticleCompute, 900, "ParticleCompute",
              &SceneRenderGraphPassComponents::particleCompute},
             {SceneRenderGraphPassId::SSR, 1000, "SSR", &SceneRenderGraphPassComponents::ssr},
-            {SceneRenderGraphPassId::FXAA, 1100, "FXAA", &SceneRenderGraphPassComponents::fxaa},
             {SceneRenderGraphPassId::Aabbs, 1200, "Aabbs", &SceneRenderGraphPassComponents::aabbs},
             {SceneRenderGraphPassId::TAA, 1300, "TAA", &SceneRenderGraphPassComponents::taa},
-            {SceneRenderGraphPassId::Sharpen, 1400, "Sharpen", &SceneRenderGraphPassComponents::sharpen},
             {SceneRenderGraphPassId::Upsample, 1500, "Upsample", &SceneRenderGraphPassComponents::upsample},
-            {SceneRenderGraphPassId::Tonemap, 1600, "Tonemap", &SceneRenderGraphPassComponents::tonemap},
+            {SceneRenderGraphPassId::Tonemap, 2150, "Tonemap", &SceneRenderGraphPassComponents::tonemap},
+            {SceneRenderGraphPassId::Sharpen, 2160, "Sharpen", &SceneRenderGraphPassComponents::sharpen},
+            {SceneRenderGraphPassId::FXAA, 2170, "FXAA", &SceneRenderGraphPassComponents::fxaa},
             {SceneRenderGraphPassId::BloomBF, 1700, "BloomBF", &SceneRenderGraphPassComponents::bloomBrightFilter},
             {SceneRenderGraphPassId::BloomH, 1800, "BloomH",
              &SceneRenderGraphPassComponents::bloomGaussianBlurHorizontal},
             {SceneRenderGraphPassId::BloomV, 1900, "BloomV",
              &SceneRenderGraphPassComponents::bloomGaussianBlurVertical},
-            {SceneRenderGraphPassId::ColorGrading, 1950, "ColorGrading", &SceneRenderGraphPassComponents::colorGrading},
+            {SceneRenderGraphPassId::ColorGrading, 2180, "ColorGrading", &SceneRenderGraphPassComponents::colorGrading},
             {SceneRenderGraphPassId::DOF, 2000, "DOF", &SceneRenderGraphPassComponents::dof},
             {SceneRenderGraphPassId::MotionBlur, 2100, "MotionBlur", &SceneRenderGraphPassComponents::motionBlur},
             {SceneRenderGraphPassId::Grid, 2200, "Grid", &SceneRenderGraphPassComponents::grid},
@@ -163,6 +165,8 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::LightTransparent);
             if (component == components.lines)
                 return isPassEnabled(SceneRenderGraphPassId::Lines);
+            if (component == components.globalIllumination)
+                return isPassEnabled(SceneRenderGraphPassId::GlobalIllumination);
             if (component == components.rayTracing)
                 return isPassEnabled(SceneRenderGraphPassId::RayTracing);
             if (component == components.rtDepthResolve)
@@ -216,8 +220,20 @@ namespace pe
             {
                 return isPassEnabled(passId);
             };
+            uint32_t order = desc.order;
+            if (!SceneUsesHDR())
+            {
+                if (desc.id == SceneRenderGraphPassId::Tonemap)
+                    order = 1600;
+                if (desc.id == SceneRenderGraphPassId::Sharpen)
+                    order = 1400;
+                if (desc.id == SceneRenderGraphPassId::FXAA)
+                    order = 1100;
+                if (desc.id == SceneRenderGraphPassId::ColorGrading)
+                    order = 1950;
+            }
             renderGraph.AddPass(static_cast<RenderGraph::PassID>(desc.id),
-                                desc.order,
+                                order,
                                 desc.name,
                                 condition,
                                 components.*desc.component);
@@ -261,6 +277,7 @@ namespace pe
         CreateSceneRenderGraphPassComponent<SelectionOutlinePass>(renderPassComponents);
         if (includeRayTracingPass)
         {
+            CreateSceneRenderGraphPassComponent<GlobalIlluminationPass>(renderPassComponents);
             CreateSceneRenderGraphPassComponent<RayTracingPass>(renderPassComponents);
             CreateSceneRenderGraphPassComponent<RTDepthResolvePass>(renderPassComponents);
         }
@@ -292,7 +309,8 @@ namespace pe
     void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                          std::span<bool> passInitialized,
                                                          uint32_t width,
-                                                         uint32_t height)
+                                                         uint32_t height,
+                                                         bool rebuildPipelines)
     {
         PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount,
                   "Scene render graph pass init state span is too small");
@@ -311,6 +329,18 @@ namespace pe
             }
 
             component->Resize(width, height);
+            const auto infos = component->GetPassInfos();
+            const bool usesSceneColor = desc.id == SceneRenderGraphPassId::TAA ||
+                                        std::any_of(infos.begin(), infos.end(), [](const PassInfo *info)
+                                                    { return info && (!info->colorFormats.empty() || info->acceleration.rayGen); });
+            if (rebuildPipelines && usesSceneColor)
+            {
+                for (PassInfo *info : infos)
+                    if (info)
+                        info->DestroyShaders();
+                component->UpdatePassInfo();
+                component->UpdateDescriptorSets();
+            }
         }
     }
 
@@ -350,6 +380,7 @@ namespace pe
         scenePasses.gbufferTransparent = GetGlobalComponent<GbufferTransparentPass>();
         scenePasses.lightTransparent = GetGlobalComponent<LightTransparentPass>();
         scenePasses.lines = GetGlobalComponent<LinesPass>();
+        scenePasses.globalIllumination = GetGlobalComponent<GlobalIlluminationPass>();
         scenePasses.rayTracing = GetGlobalComponent<RayTracingPass>();
         scenePasses.rtDepthResolve = GetGlobalComponent<RTDepthResolvePass>();
         scenePasses.particleCompute = GetGlobalComponent<ParticleComputePass>();
@@ -424,6 +455,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling,
                            gs.forward_plus && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::GlobalIllumination, gs.global_illumination && hasRayTracingGeometry);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, dx12RenderRaster);
@@ -439,7 +471,7 @@ namespace pe
             SetPassEnabled(passEnabled,
                            SceneRenderGraphPassId::Upsample,
                            (!pp.taa && dx12RenderRaster) || (dx12RtOnly && !dx12RenderTAA));
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, pp.tonemapping && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, SceneUsesHDR() || pp.tonemapping);
             SetPassEnabled(passEnabled,
                            SceneRenderGraphPassId::ColorGrading,
                            pp.color_grading && dx12RenderRaster);
@@ -468,6 +500,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSAO, renderSSAO);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling, gs.forward_plus && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::GlobalIllumination, gs.global_illumination && hasRayTracingGeometry);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, renderRaster);
@@ -483,7 +516,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::TAA, pp.taa);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Sharpen, pp.taa && pp.cas_sharpening);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Upsample, !pp.taa);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, pp.tonemapping);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Tonemap, SceneUsesHDR() || pp.tonemapping);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ColorGrading, pp.color_grading);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomBF, pp.bloom);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::BloomH, pp.bloom);
@@ -528,6 +561,7 @@ namespace pe
         SetPassScene<GbufferOpaquePass>(components.gbufferOpaque, scene);
         SetPassScene<VoxelHiZPyramidPass>(components.voxelHiZPyramid, scene);
         SetPassScene<GbufferTransparentPass>(components.gbufferTransparent, scene);
+        SetPassScene<GlobalIlluminationPass>(components.globalIllumination, scene);
         SetPassScene<RayTracingPass>(components.rayTracing, scene);
         SetPassScene<RTDepthResolvePass>(components.rtDepthResolve, scene);
         SetPassScene<ParticleComputePass>(components.particleCompute, scene);

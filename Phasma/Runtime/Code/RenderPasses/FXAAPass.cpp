@@ -6,6 +6,7 @@
 #include "API/RHI.h"
 #include "API/Shader.h"
 #include "Render/SceneRendererHost.h"
+#include "Render/SceneRenderTargets.h"
 
 namespace pe
 {
@@ -17,8 +18,8 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
-        m_viewportRT = rs->GetRenderTarget("viewport");
-        m_frameImage = rs->CreateFSSampledImage(true);
+        m_viewportRT = SceneUsesHDR() ? rs->GetDisplayRT() : rs->GetViewportRT();
+        m_frameImage = rs->CreateFSSampledImage(m_viewportRT);
 
         m_attachments.resize(1);
         m_attachments[0] = {};

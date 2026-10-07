@@ -94,7 +94,7 @@ namespace pe
         Image *GetDisplayRT() override { return m_sceneRenderer.GetDisplayRT(); }
         Image *GetViewportRT() override { return m_sceneRenderer.GetViewportRT(); }
         Image *GetDepthStencilRT() override { return m_sceneRenderer.GetDepthStencilRT(); }
-        Image *CreateFSSampledImage(bool useRenderTergetScale = true) override;
+        Image *CreateFSSampledImage(Image *source) override;
         void Resize(uint32_t width, uint32_t height);
         void PollShaders(std::optional<size_t> hash = std::nullopt);
         void WaitPreviousFrameCommands();

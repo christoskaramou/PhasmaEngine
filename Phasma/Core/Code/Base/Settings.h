@@ -155,6 +155,13 @@ namespace pe
         // casts into view. Off by default (an off-screen tower's shadow can reach the view).
         bool cull_offscreen_animation = false;
         bool lod_enabled = true;
+        bool global_illumination = false;
+        bool hdr = false;
+        float gi_probe_spacing = 2.f;
+        float gi_intensity = 1.f;
+        float gi_hysteresis = 0.999f; // ceiling of the per-probe average; restarts on lighting changes
+        bool cluster_geometry = false;
+        float cluster_error_pixels = 1.f;
         uint32_t lod_count = 4;
         float lod_bias = 1.0f;
         std::array<float, 3> lod_distances{30.0f, 90.0f, 250.0f};

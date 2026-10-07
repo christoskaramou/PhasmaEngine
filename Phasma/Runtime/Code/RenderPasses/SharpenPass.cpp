@@ -7,7 +7,9 @@
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Render/SceneRendererHost.h"
+#include "TonemapPass.h"
 #include "TAAPass.h"
+#include "Render/SceneRenderTargets.h"
 
 namespace pe
 {
@@ -37,11 +39,14 @@ namespace pe
 
     void SharpenPass::UpdateDescriptorSets()
     {
-        TAAPass *taa = GetGlobalComponent<TAAPass>();
+        TonemapPass *tonemap = GetGlobalComponent<TonemapPass>();
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
-        Image *taaResolved = taa->GetResolvedImage();
+        Image *resolved = SceneUsesHDR() ? tonemap->GetResolvedImage() : GetGlobalComponent<TAAPass>()->GetResolvedImage();
         Image *displayRT = rs->GetDisplayRT();
+        m_inputImage = resolved;
+        if (!resolved)
+            return;
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
@@ -49,7 +54,7 @@ namespace pe
             if (!descriptors.empty())
             {
                 Descriptor *dset = descriptors[0];
-                dset->SetImageView(0, taaResolved->GetSRV());
+                dset->SetImageView(0, resolved->GetSRV());
                 dset->SetImageView(1, displayRT->GetUAV(0));
                 dset->Update();
             }
@@ -58,6 +63,9 @@ namespace pe
 
     void SharpenPass::Update()
     {
+        Image *input = SceneUsesHDR() ? GetGlobalComponent<TonemapPass>()->GetResolvedImage() : GetGlobalComponent<TAAPass>()->GetResolvedImage();
+        if (input != m_inputImage)
+            UpdateDescriptorSets();
     }
 
     void SharpenPass::Destroy()
@@ -71,7 +79,7 @@ namespace pe
 
     void SharpenPass::DeclareInputs(RGBuilder &builder)
     {
-        Image *input = GetGlobalComponent<TAAPass>()->GetResolvedImage();
+        Image *input = SceneUsesHDR() ? GetGlobalComponent<TonemapPass>()->GetResolvedImage() : GetGlobalComponent<TAAPass>()->GetResolvedImage();
         Image *output = RequireActiveSceneRendererHost().GetDisplayRT();
         builder.ReadCompute(input);
         builder.WriteCompute(output);
@@ -83,8 +91,6 @@ namespace pe
 
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         Image *output = rs->GetDisplayRT();
-        TAAPass *taa = GetGlobalComponent<TAAPass>();
-        Image *input = taa->GetResolvedImage();
 
         struct PushConstants
         {

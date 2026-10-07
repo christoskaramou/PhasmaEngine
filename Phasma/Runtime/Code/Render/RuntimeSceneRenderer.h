@@ -48,7 +48,7 @@ namespace pe
         Image *GetDisplayRT() override { return m_sceneRenderer.GetDisplayRT(); }
         Image *GetViewportRT() override { return m_sceneRenderer.GetViewportRT(); }
         Image *GetDepthStencilRT() override { return m_sceneRenderer.GetDepthStencilRT(); }
-        Image *CreateFSSampledImage(bool useRenderTergetScale = true) override;
+        Image *CreateFSSampledImage(Image *source) override;
 
     private:
         Image *CreateRenderTarget(const std::string &name,

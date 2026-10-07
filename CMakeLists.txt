@@ -279,27 +279,15 @@ endif()
 include(FetchContent)
 FetchContent_Declare(meshoptimizer
     GIT_REPOSITORY https://github.com/zeux/meshoptimizer.git
-    GIT_TAG        v0.21
+    GIT_TAG        v1.3
     GIT_PROGRESS   TRUE
 )
 FetchContent_GetProperties(meshoptimizer)
 if(NOT meshoptimizer_POPULATED)
     FetchContent_Populate(meshoptimizer)
-    # Create a simple CMakeLists.txt for meshoptimizer since it doesn't have one
-    file(WRITE "${meshoptimizer_SOURCE_DIR}/CMakeLists.txt" "
-cmake_minimum_required(VERSION 3.22)
-project(meshoptimizer CXX)
-file(GLOB SOURCES \"src/*.cpp\")
-add_library(meshoptimizer STATIC \${SOURCES})
-target_include_directories(meshoptimizer PUBLIC \"\${CMAKE_CURRENT_SOURCE_DIR}\")
-set_target_properties(meshoptimizer PROPERTIES POSITION_INDEPENDENT_CODE ON)
-if(MSVC)
-    target_compile_options(meshoptimizer PRIVATE /W0)
-else()
-    target_compile_options(meshoptimizer PRIVATE -w)
-endif()
-")
     add_subdirectory(${meshoptimizer_SOURCE_DIR} ${meshoptimizer_BINARY_DIR} EXCLUDE_FROM_ALL)
+    set_target_properties(meshoptimizer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_include_directories(meshoptimizer SYSTEM INTERFACE "$<BUILD_INTERFACE:${meshoptimizer_SOURCE_DIR}/demo>")
 endif()
 
 # --- Prebuilt Assimp (shared) ---
@@ -452,7 +440,6 @@ target_include_directories(PhasmaEditorModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Editor/Code"
     "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends"
     "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/MCP/third_party"
-    "${PE_THIRD_PARTY_DIR}/meshoptimizer"
     "${PE_THIRD_PARTY_DIR}/rapidjson/include"
     "${PE_THIRD_PARTY_DIR}/spirv_cross"
     "${PE_THIRD_PARTY_DIR}/stb"

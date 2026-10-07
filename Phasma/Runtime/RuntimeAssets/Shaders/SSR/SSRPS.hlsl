@@ -48,7 +48,7 @@ float3 FresnelSchlick(float cosTheta, float3 F0)
 float3 ScreenSpaceReflections(float3 position, float3 normal, float metallic, float roughness, float3 albedo)
 {
     float3 reflection = reflect(normalize(position), normalize(normal));
-    float VdotR       = max(0.0, dot(normalize(position), normalize(reflection)));
+    float VdotR       = saturate(dot(normalize(position), normalize(reflection)));
     float3 F0         = lerp(0.04f, albedo, metallic);
     float3 fresnel    = FresnelSchlick(VdotR, F0) * (1.0f - roughness);
     float3 step       = reflection;
@@ -122,8 +122,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float4 tangent_normal    = float4(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0, 0.0);
     float3 normal            = normalize(mul(tangent_normal, cb_view).xyz);
     float4 metallicRoughness = MetallicRoughness.Sample(sampler_MetallicRoughness, input.uv);
-    float metallic           = metallicRoughness.g;
-    float roughness          = metallicRoughness.b;
+    float metallic           = metallicRoughness.b;
+    float roughness          = metallicRoughness.g;
 
     float3 ssr = ScreenSpaceReflections(position, normal, metallic, roughness, albedo);
     output.color = float4(color.rgb + ssr * saturate(pc.blend), color.a);

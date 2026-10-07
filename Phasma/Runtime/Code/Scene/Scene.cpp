@@ -643,15 +643,15 @@ namespace pe
 
     bool Scene::RtBuildsWanted() const
     {
-        // Acceleration structures only matter while a render mode traces rays; in Raster mode the
-        // dirty flags stay set so switching modes later flushes them.
-        return RHII.GetCaps().rayTracing && Settings::Get<SceneSettings>().render_mode != RenderMode::Raster;
+        // Retain dirty flags until a render mode or GI needs acceleration structures.
+        const auto &settings = Settings::Get<SceneSettings>();
+        return RHII.GetCaps().rayTracing && (settings.render_mode != RenderMode::Raster || settings.global_illumination);
     }
 
     bool Scene::HasPendingRenderUpdate() const
     {
         const bool rtDirty = RtBuildsWanted() && (m_blasDirty || m_tlasDirty);
-        return m_nodesDirty || m_geometryDirty || m_instancesDirty || m_materialDirty || m_texturesDirty || rtDirty;
+        return m_nodesDirty || IsGeometryDirty() || m_instancesDirty || m_materialDirty || m_texturesDirty || rtDirty;
     }
 
     bool Scene::HasDirtyCameras() const
@@ -1341,6 +1341,13 @@ namespace pe
         ubo.enabled = s.lod_enabled ? 1u : 0u;
         ubo.drawCapacity = m_indirectCapacity;
         ubo.skinnedInstancing = s.skinned_instancing ? 1u : 0u;
+        ubo.clustersEnabled = s.cluster_geometry ? 1u : 0u;
+        ubo.clusterErrorPixels = std::isfinite(s.cluster_error_pixels) ? std::clamp(s.cluster_error_pixels, 0.1f, 64.f) : 1.f;
+        if (const Camera *camera = GetActiveCamera())
+        {
+            ubo.projectionScale = std::abs(camera->GetProjectionNoJitter()[1][1]) * RHII.GetHeightf() * s.render_scale * 0.5f;
+            ubo.orthographic = camera->IsOrthographic() ? 1u : 0u;
+        }
         ubo.bias = s.lod_bias > 0.0f ? s.lod_bias : 1.0f;
         ubo.distances[0] = s.lod_distances[0];
         ubo.distances[1] = s.lod_distances[1];
@@ -1521,6 +1528,7 @@ namespace pe
             set->SetBuffer(11, m_sortKeysTransmission[frame]);
             set->SetBuffer(12, GetUniforms(frame));
             set->SetBuffer(19, m_drawInstanceIds[frame]);
+            set->SetBuffer(20, m_clusterBuffer);
             if (set->HasBinding(17))
                 set->SetBuffer(17, m_indirectVoxels[frame]);
             if (set->HasBinding(18))
@@ -1584,10 +1592,10 @@ namespace pe
             cmd->PushConstants();
         }
 
-        uint32_t groupCount = (m_meshCount + 63) / 64;
+        uint32_t groupCount = Settings::Get<SceneSettings>().cluster_geometry ? m_meshCount : (m_meshCount + 63) / 64;
         {
             PE_PROFILE_SCOPE("Culling Dispatch");
-            cmd->Dispatch(groupCount, 1, 1);
+            cmd->Dispatch(std::min(groupCount, 65535u), (groupCount + 65534u) / 65535u, 1);
         }
 
         // Record the compute writes so subsequent Buffer::Barrier calls emit
@@ -1857,6 +1865,7 @@ namespace pe
                     set->SetBuffer(b, buf);
             };
             bind(0, m_indirectAll);
+            bind(20, m_clusterBuffer);
             bind(1, GetMeshConstants());
             bind(2, counters);
             bind(3, opaqueSS);
@@ -1927,7 +1936,8 @@ namespace pe
 
         {
             PE_PROFILE_SCOPE("OccCull Dispatch");
-            cmd->Dispatch((m_meshCount + 63) / 64, 1, 1);
+            const uint32_t groups = Settings::Get<SceneSettings>().cluster_geometry ? m_meshCount : (m_meshCount + 63) / 64;
+            cmd->Dispatch(std::min(groups, 65535u), (groups + 65534u) / 65535u, 1);
         }
 
         {
@@ -2161,8 +2171,96 @@ namespace pe
         return m_nodeRuntime[node->index].dataOffset;
     }
 
+    void Scene::UpdateClusterGeometry()
+    {
+        const bool enabled = Settings::Get<SceneSettings>().cluster_geometry;
+        m_clustersEnabled = enabled;
+        // Rebuilt on every full geometry upload, so deleted meshes drop out and meshes sharing a geometry range
+        // (instances) share one uploaded hierarchy.
+        m_clusterStore.clear();
+        m_clusterIndexStore.clear();
+        for (Mesh &mesh : m_meshes)
+            mesh.clusterOffset = mesh.clusterCount = 0;
+        if (!enabled)
+        {
+            m_clusterStore.shrink_to_fit();
+            m_clusterIndexStore.shrink_to_fit();
+            m_generatedClusters.clear();
+            return;
+        }
+        PE_PROFILE_SCOPE("Cluster Geometry");
+        decltype(m_generatedClusters) generatedInUse;
+        std::map<std::array<uint32_t, 4>, std::pair<uint32_t, uint32_t>> uploaded;
+        for (size_t i = 0; i < m_meshes.size(); ++i)
+        {
+            Mesh &mesh = m_meshes[i];
+            if (mesh.skinned || mesh.renderType != RenderType::Opaque || !mesh.indexCount)
+                continue;
+            if (mesh.vertexOffset > m_vertexStore.size() || mesh.vertexCount > m_vertexStore.size() - mesh.vertexOffset ||
+                mesh.indexOffset > m_indexStore.size() || mesh.indexCount > m_indexStore.size() - mesh.indexOffset)
+                continue;
+            const std::array<uint32_t, 4> range{mesh.vertexOffset, mesh.vertexCount, mesh.indexOffset, mesh.indexCount};
+            if (auto shared = uploaded.find(range); shared != uploaded.end())
+            {
+                mesh.clusterOffset = shared->second.first;
+                mesh.clusterCount = shared->second.second;
+                continue;
+            }
+            const ClusterGeometry *geometry = nullptr;
+            if (i < m_meshSourceInfos.size())
+            {
+                const auto &source = m_meshSourceInfos[i];
+                if (source.sourceIndex >= 0 && source.sourceIndex < static_cast<int>(m_sources.size()))
+                {
+                    auto model = m_models.find(m_sources[source.sourceIndex].modelId);
+                    if (model != m_models.end())
+                    {
+                        const MeshInfo *info = (*model)->GetMeshInfo(source.sourceMeshIndex);
+                        if (info)
+                            geometry = info->clusters.get();
+                    }
+                }
+            }
+            if (!geometry)
+            {
+                auto &cached = generatedInUse[range];
+                if (auto found = m_generatedClusters.find(range); found != m_generatedClusters.end())
+                    cached = found->second;
+                else
+                    cached = std::make_shared<const ClusterGeometry>(
+                        BuildClusterGeometry({m_vertexStore.data() + mesh.vertexOffset, mesh.vertexCount},
+                                             {m_indexStore.data() + mesh.indexOffset, mesh.indexCount}));
+                geometry = cached.get();
+            }
+            // ponytail: resident clusters; add page streaming when the mesh set exceeds VRAM.
+            PE_ERROR_IF(m_clusterIndexStore.size() + geometry->indices.size() > UINT32_MAX ||
+                            m_clusterStore.size() + geometry->clusters.size() > UINT32_MAX,
+                        "Cluster geometry capacity overflow");
+            const uint32_t indexBase = static_cast<uint32_t>(m_clusterIndexStore.size());
+            mesh.clusterOffset = static_cast<uint32_t>(m_clusterStore.size());
+            mesh.clusterCount = static_cast<uint32_t>(geometry->clusters.size());
+            uploaded[range] = {mesh.clusterOffset, mesh.clusterCount};
+            m_clusterIndexStore.insert(m_clusterIndexStore.end(), geometry->indices.begin(), geometry->indices.end());
+            for (const GeometryCluster &cluster : geometry->clusters)
+            {
+                const ClusterGroup &coarser = geometry->groups[cluster.group];
+                const ClusterGroup finer = cluster.refinedGroup >= 0 ? geometry->groups[cluster.refinedGroup] : ClusterGroup{};
+                m_clusterStore.push_back({{cluster.center[0], cluster.center[1], cluster.center[2], cluster.radius},
+                                          {coarser.center[0], coarser.center[1], coarser.center[2], coarser.radius},
+                                          {finer.center[0], finer.center[1], finer.center[2], finer.radius},
+                                          coarser.error,
+                                          finer.error,
+                                          indexBase + cluster.indexOffset,
+                                          cluster.indexCount});
+            }
+        }
+        m_generatedClusters = std::move(generatedInUse);
+    }
+
     void Scene::FlushPendingGpuWork()
     {
+        if (m_clustersEnabled != Settings::Get<SceneSettings>().cluster_geometry)
+            m_geometryDirty = true;
         if (!RHII.GetCaps().rayTracing)
         {
             m_blasDirty = false;

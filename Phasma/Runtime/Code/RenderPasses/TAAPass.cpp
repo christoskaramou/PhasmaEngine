@@ -8,6 +8,7 @@
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Render/SceneRendererHost.h"
+#include "Render/SceneRenderTargets.h"
 
 namespace pe
 {
@@ -29,7 +30,7 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
-        m_displayRT = rs->GetDisplayRT();
+        m_displayRT = rs->GetRenderTarget("hdrDisplay");
         m_viewportRT = rs->GetViewportRT(); // Represents current input color
         m_depthStencil = rs->GetDepthStencilRT();
         m_velocityRT = rs->GetRenderTarget("velocity");
@@ -58,7 +59,7 @@ namespace pe
             m_resetHistory = true;
         }
 
-        if (!m_taaResolved)
+        if (!SceneUsesHDR() && !m_taaResolved)
         {
             ImageDesc desc{};
             desc.format = m_displayRT->GetFormat();
@@ -72,15 +73,15 @@ namespace pe
             m_taaResolved->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
         }
 
+        m_casSharpeningEnabled = ActivePostProcessProfile().cas_sharpening;
         m_jitterIndex = 0;
         m_jitterPhaseCount = 16;
-        m_casSharpeningEnabled = ActivePostProcessProfile().cas_sharpening;
     }
 
     void TAAPass::UpdatePassInfo()
     {
         m_passInfo->name = "TAA_pipeline";
-        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/TAA/TAA.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/TAA/TAA.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = SceneUsesHDR() ? std::vector<Define>{{"HDR_SCENE", "1"}} : std::vector<Define>{}});
         m_passInfo->Update();
     }
 
@@ -91,8 +92,7 @@ namespace pe
 
     void TAAPass::UpdateDescriptorSets()
     {
-        auto &gSettings = ActivePostProcessProfile();
-        Image *taaOutput = gSettings.cas_sharpening ? m_taaResolved : m_displayRT;
+        Image *taaOutput = !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
         if (!m_viewportRT || !m_historyImage || !m_velocityRT || !taaOutput)
             return;
 
@@ -125,7 +125,7 @@ namespace pe
 
     void TAAPass::DeclareInputs(RGBuilder &builder)
     {
-        Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+        Image *taaOutput = !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
         builder.ReadCompute(m_viewportRT);
         if (!m_resetHistory)
             builder.ReadCompute(m_historyImage);
@@ -135,7 +135,7 @@ namespace pe
 
     void TAAPass::DeclareOutputs(RGBuilder &builder)
     {
-        Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+        Image *taaOutput = !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
 
         // ExecutePass transitions taaOutput/history for the copy operation and leaves
         // them in transfer layouts, so declare those as the final tracked states.
@@ -151,7 +151,7 @@ namespace pe
 
     void TAAPass::ExecutePass(CommandBuffer *cmd)
     {
-        Image *taaOutput = m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+        Image *taaOutput = !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
 
         struct TAAConstants
         {

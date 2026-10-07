@@ -15,7 +15,7 @@ namespace pe
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
         m_viewportRT = rs->GetViewportRT();
-        m_displayRT = rs->GetDisplayRT();
+        m_displayRT = rs->GetRenderTarget("hdrDisplay");
 
         m_attachments.resize(1);
         m_attachments[0] = {};
@@ -61,10 +61,6 @@ namespace pe
 
     void UpsamplePass::ExecutePass(CommandBuffer *cmd)
     {
-        // Honor per-frame display override (direct present to swapchain).
-        m_displayRT = RequireActiveSceneRendererHost().GetDisplayRT();
-        m_attachments[0].image = m_displayRT;
-
         cmd->BeginDebugRegion("UpsamplePass");
         cmd->BeginPass(1, m_attachments.data(), "Upsample");
         cmd->BindPipeline(*m_passInfo);

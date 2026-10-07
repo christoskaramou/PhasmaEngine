@@ -371,7 +371,7 @@ namespace pe
             pushConstants.passType = 0u;
 
             uint32_t frame = RHII.GetFrameIndex();
-            const uint32_t mesh = m_scene->GetMeshCount();
+            const uint32_t mesh = m_scene->GetIndirectCapacity();
 
             // Two-phase Hi-Z: when occlusion culling is on, draw set A (CullPhase1@180) then set B
             // (CullPhase2@260). Their depth was written by DepthPass@200 (A) and DepthLatePass@270

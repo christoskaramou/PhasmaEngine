@@ -43,6 +43,7 @@
 #include <random>
 #include <regex>
 #include <set>
+#include <span>
 #include <shared_mutex>
 #include <sstream>
 #include <stack>

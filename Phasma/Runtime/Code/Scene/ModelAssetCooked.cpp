@@ -1,4 +1,5 @@
 #include "Scene/ModelAssetCooked.h"
+#include "Scene/ClusterGeometry.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Material.h"
 #include "Scene/PassInfoAsset.h"
@@ -21,7 +22,8 @@ namespace pe
         constexpr uint32_t kInterpolationVersion = 4;
         constexpr uint32_t kMarkerVersion = 6;
         constexpr uint32_t kPlanarSplineVersion = 7;
-        constexpr uint32_t kVersion = kPlanarSplineVersion;
+        constexpr uint32_t kClusterVersion = 8;
+        constexpr uint32_t kVersion = kClusterVersion;
         constexpr int kTextureSlotCount = 5;
 
         bool ValidSkeletonHierarchy(const Skeleton &skeleton)
@@ -194,6 +196,24 @@ namespace pe
                 return true;
             }
         };
+
+        template <class T>
+        void WriteClusterArray(ByteWriter &writer, const std::vector<T> &values)
+        {
+            writer.Pod(static_cast<uint32_t>(values.size()));
+            if (!values.empty())
+                writer.Raw(values.data(), values.size() * sizeof(T));
+        }
+
+        template <class T>
+        bool ReadClusterArray(ByteReader &reader, std::vector<T> &values)
+        {
+            uint32_t count = 0;
+            if (!reader.Pod(count) || count > (reader.size - reader.cursor) / sizeof(T))
+                return false;
+            values.resize(count);
+            return count == 0 || reader.Raw(values.data(), values.size() * sizeof(T));
+        }
 
         template <typename T>
         struct LegacyAnimationKey
@@ -562,7 +582,7 @@ namespace pe
         return ext == kExtension;
     }
 
-    bool ModelAssetCooked::WriteToFile(const ModelAsset *model, const std::filesystem::path &file)
+    bool ModelAssetCooked::WriteToFile(const ModelAsset *model, const std::filesystem::path &file, bool buildClusters)
     {
         if (!model)
             return false;
@@ -602,11 +622,32 @@ namespace pe
         for (size_t i = 0; i < materials.size(); i++)
             materialIndex[materials[i].get()] = static_cast<int32_t>(i);
 
+        // Re-saving a cluster-cooked model (Animator) keeps hierarchies that still fit their mesh. A mesh that became
+        // skinned or changed its geometry drops them: the reader rejects the whole file otherwise.
+        std::vector<ClusterGeometry> clusters(meshInfos.size());
+        for (size_t i = 0; i < meshInfos.size(); ++i)
+        {
+            const MeshInfo &mesh = meshInfos[i];
+            if (mesh.skinned || mesh.renderType != RenderType::Opaque || !mesh.indicesCount)
+                continue;
+            if (mesh.clusters && ValidateClusterGeometry(*mesh.clusters, mesh.verticesCount))
+                clusters[i] = *mesh.clusters;
+            else if (buildClusters && mesh.vertexOffset <= vertices.size() && mesh.verticesCount <= vertices.size() - mesh.vertexOffset &&
+                     mesh.indexOffset <= indices.size() && mesh.indicesCount <= indices.size() - mesh.indexOffset)
+                clusters[i] = BuildClusterGeometry({vertices.data() + mesh.vertexOffset, mesh.verticesCount},
+                                                   {indices.data() + mesh.indexOffset, mesh.indicesCount});
+            if (!ValidateClusterGeometry(clusters[i], mesh.verticesCount))
+                return false;
+        }
+
         ByteWriter w;
 
         Header header{};
         std::memcpy(header.magic, kMagic, 4);
-        header.version = kVersion;
+        header.version = std::any_of(clusters.begin(), clusters.end(), [](const ClusterGeometry &c)
+                                     { return !c.clusters.empty(); })
+                             ? kVersion
+                             : kPlanarSplineVersion;
         header.flags = 0;
         header.sizeofVertex = static_cast<uint32_t>(sizeof(Vertex));
         header.sizeofPositionUv = static_cast<uint32_t>(sizeof(PositionUvVertex));
@@ -748,6 +789,14 @@ namespace pe
                 w.String(marker.name);
             }
         }
+
+        if (header.version >= kClusterVersion)
+            for (const ClusterGeometry &meshClusters : clusters)
+            {
+                WriteClusterArray(w, meshClusters.groups);
+                WriteClusterArray(w, meshClusters.clusters);
+                WriteClusterArray(w, meshClusters.indices);
+            }
 
         auto pathU8 = path.u8string();
         std::string pathStr(reinterpret_cast<const char *>(pathU8.c_str()));
@@ -1076,6 +1125,24 @@ namespace pe
                         delete model;
                         return nullptr;
                     }
+            }
+        }
+
+        if (header.version >= kClusterVersion)
+        {
+            for (MeshInfo &mesh : model->m_meshInfos)
+            {
+                auto clusters = std::make_shared<ClusterGeometry>();
+                if (!ReadClusterArray(r, clusters->groups) || !ReadClusterArray(r, clusters->clusters) ||
+                    !ReadClusterArray(r, clusters->indices) || !ValidateClusterGeometry(*clusters, mesh.verticesCount) ||
+                    ((!clusters->clusters.empty()) && (mesh.skinned || mesh.renderType != RenderType::Opaque)))
+                {
+                    PE_WARN("[ModelAssetCooked] Invalid cluster hierarchy: %s", pathStr.c_str());
+                    delete model;
+                    return nullptr;
+                }
+                if (!clusters->clusters.empty())
+                    mesh.clusters = std::move(clusters);
             }
         }
 

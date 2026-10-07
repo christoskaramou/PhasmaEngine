@@ -11,7 +11,7 @@ float3 ComputeIBL_Common(
     float3 F0,
     float occlusion,
     TextureCube texCube, SamplerState samplerCube,
-    float2 envBRDF)
+    float2 envBRDF, float diffuseWeight = 1.0)
 {
     float NdotV = saturate(dot(N, V));
     float3 R = reflect(-V, N);
@@ -37,7 +37,7 @@ float3 ComputeIBL_Common(
 
     float3 specular = prefilteredColor * kS * occlusion;
     
-    return kD * diffuse + specular; 
+    return kD * diffuse * diffuseWeight + specular;
 }
 
 #endif // IBL_H_

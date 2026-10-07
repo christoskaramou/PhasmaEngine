@@ -17,10 +17,10 @@ namespace pe
         if (!m_brightFilterRT)
             m_brightFilterRT =
                 rs->CreateRenderTarget("brightFilter",
-                                       RHII.GetSwapchainFormat(),
+                                       rs->GetRenderTarget("hdrDisplay")->GetFormat(),
                                        PE_IMAGE_USAGE_NONE,
                                        rs->GetDisplayRT()->GetWidth() != RHII.GetWidth());
-        m_displayRT = rs->GetRenderTarget("display");
+        m_displayRT = rs->GetRenderTarget("hdrDisplay");
 
         m_attachments.resize(1);
         m_attachments[0] = {};
@@ -93,7 +93,7 @@ namespace pe
         if (!m_gaussianBlurHorizontalRT)
             m_gaussianBlurHorizontalRT =
                 rs->CreateRenderTarget("gaussianBlurHorizontal",
-                                       RHII.GetSwapchainFormat(),
+                                       rs->GetRenderTarget("hdrDisplay")->GetFormat(),
                                        PE_IMAGE_USAGE_NONE,
                                        rs->GetDisplayRT()->GetWidth() != RHII.GetWidth());
         m_brightFilterRT = rs->GetRenderTarget("brightFilter");
@@ -170,7 +170,7 @@ namespace pe
     void BloomGaussianBlurVerticalPass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
-        m_displayRT = rs->GetRenderTarget("display");
+        m_displayRT = rs->GetRenderTarget("hdrDisplay");
         m_gaussianBlurHorizontalRT = rs->GetRenderTarget("gaussianBlurHorizontal");
 
         m_attachments.resize(1);

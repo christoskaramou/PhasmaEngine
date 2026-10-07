@@ -1,4 +1,5 @@
 #pragma once
+#include "Scene/ClusterGeometry.h"
 
 #include "Animation/AnimationTypes.h"
 #include "API/Vertex.h"
@@ -427,6 +428,8 @@ namespace pe
         ModelAsset *GetModelForNode(const NodeId *node) const;
 
         uint64_t GetGeometryVersion() const { return m_geometryVersion; }
+        // Bumped when light data or ray-traced instance transforms change: what probe GI sees, beyond geometry.
+        uint64_t GetGiInputVersion() const { return m_giInputVersion; }
 
         uint32_t GetGeneration() const { return m_generation; }
         // Bumped when a node's script path attaches/clears (or identity-affecting
@@ -437,7 +440,7 @@ namespace pe
         {
             return SceneNodeHandle(node, m_generation, node ? node->revision : 0);
         }
-        bool IsGeometryDirty() const { return m_geometryDirty; }
+        bool IsGeometryDirty() const { return m_geometryDirty || m_clustersEnabled != Settings::Get<SceneSettings>().cluster_geometry; }
         void SetGeometryDirty() { m_geometryDirty = true; }
         void SetInstancesDirty()
         {
@@ -498,6 +501,7 @@ namespace pe
         size_t GetAabbVerticesOffset() const { return m_aabbVerticesOffset; }
         size_t GetAabbIndicesOffset() const { return m_aabbIndicesOffset; }
         Buffer *GetIndirectAll() const { return m_indirectAll; }
+        Buffer *GetClusterBuffer() const { return m_clusterBuffer; }
         void BindDrawIdBuffer(CommandBuffer *cmd) const;
         Buffer *GetCullingCountersBuffer(uint32_t frame) const { return m_cullingCountersBuffers[frame]; }
         Buffer *GetIndirectOpaqueSS(uint32_t frame) const { return m_indirectOpaqueSS[frame]; }
@@ -561,6 +565,7 @@ namespace pe
         float GetTerrainTexScale() const { return m_terrainTexScale; }
         bool HasTerrain() const { return m_terrainSplatView != nullptr && m_terrainLayerViews[0] != nullptr; }
         uint32_t GetMeshCount() const { return m_meshCount; }
+        uint32_t GetIndirectCapacity() const { return m_indirectCapacity; }
         Buffer *GetMeshConstants();
         Buffer *GetMaterialTable() { return m_materialTable; }
         Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
@@ -747,6 +752,7 @@ namespace pe
         void DestroyBuffers();
         void CreateGeometryBuffer();
         void CopyIndices(CommandBuffer *cmd);
+        void UpdateClusterGeometry();
         void CopyVertices(CommandBuffer *cmd);
         void CreateStorageBuffers();
         void MarkUniformsDirty();
@@ -829,6 +835,10 @@ namespace pe
             float bias = 1.0f;
             uint32_t skinnedInstancing = 0;
             float distances[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+            uint32_t clustersEnabled = 0;
+            float clusterErrorPixels = 1.f;
+            float projectionScale = 1.f;
+            uint32_t orthographic = 0;
         };
         std::vector<Buffer *> m_lodUniforms;
 
@@ -980,6 +990,13 @@ namespace pe
         std::vector<PositionUvVertex> m_positionUvStore;
         std::vector<AabbVertex> m_aabbVertexStore;
         std::vector<uint32_t> m_indexStore;
+        std::vector<GeometryClusterGPU> m_clusterStore;
+        std::vector<uint32_t> m_clusterIndexStore;
+        // Generated hierarchies by {vertexOffset, vertexCount, indexOffset, indexCount}: the geometry stores are
+        // append-only until the scene is cleared, so a range always holds the same geometry.
+        std::map<std::array<uint32_t, 4>, std::shared_ptr<const ClusterGeometry>> m_generatedClusters;
+        bool m_clustersEnabled = false;
+        Buffer *m_clusterBuffer = nullptr;
         std::vector<ResourceHandle<Image>> m_imageStore;
         std::vector<Sampler *> m_samplerStore;
 
@@ -1009,6 +1026,8 @@ namespace pe
 
         // --- Light data ---
         LightsUBO m_lightsUBO{};
+        uint64_t m_lightsHash = 0;
+        uint64_t m_giInputVersion = 0;
         std::vector<Buffer *> m_lightUniforms;
         std::vector<Buffer *> m_lightStorageBuffers;
         std::vector<SceneDirectionalLight> m_directionalLights;

@@ -173,6 +173,7 @@ namespace pe
 
     void Scene::UploadBuffers(CommandBuffer *cmd)
     {
+        UpdateClusterGeometry();
         // Geometry and painted weights may have changed since the previous upload.
         for (auto &runtime : m_meshRuntimes)
             runtime.skinBounds.joints.clear();
@@ -222,7 +223,8 @@ namespace pe
             }
         }
 
-        m_indicesCount = static_cast<uint32_t>(m_indexStore.size());
+        PE_ERROR_IF(m_indexStore.size() + m_clusterIndexStore.size() > UINT32_MAX, "Scene index capacity overflow");
+        m_indicesCount = static_cast<uint32_t>(m_indexStore.size() + m_clusterIndexStore.size());
         m_verticesCount = static_cast<uint32_t>(m_vertexStore.size());
         m_positionsCount = static_cast<uint32_t>(m_positionUvStore.size());
         m_aabbVerticesCount = static_cast<uint32_t>(m_aabbVertexStore.size());
@@ -258,9 +260,30 @@ namespace pe
 
     void Scene::CopyIndices(CommandBuffer *cmd)
     {
+        m_clusterBuffer = EnsureBuffer(m_clusterBuffer, {
+                                                            .size = std::max(sizeof(GeometryClusterGPU), m_clusterStore.size() * sizeof(GeometryClusterGPU)),
+                                                            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
+                                                            .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
+                                                            .name = "ClusterGeometry",
+                                                        });
+        if (!m_clusterStore.empty())
+        {
+            auto clusters = m_clusterStore;
+            for (auto &cluster : clusters)
+                cluster.firstIndex += static_cast<uint32_t>(m_indexStore.size());
+            cmd->CopyBufferStaged(m_clusterBuffer, clusters.data(), clusters.size() * sizeof(GeometryClusterGPU), 0);
+            BufferBarrierInfo barrier{};
+            barrier.buffer = m_clusterBuffer;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
+            cmd->BufferBarrier(barrier);
+        }
         if (m_indicesCount > 0)
         {
-            cmd->CopyBufferStaged(m_buffer, m_indexStore.data(), m_indicesCount * sizeof(uint32_t), 0);
+            if (!m_indexStore.empty())
+                cmd->CopyBufferStaged(m_buffer, m_indexStore.data(), m_indexStore.size() * sizeof(uint32_t), 0);
+            if (!m_clusterIndexStore.empty())
+                cmd->CopyBufferStaged(m_buffer, m_clusterIndexStore.data(), m_clusterIndexStore.size() * sizeof(uint32_t), m_indexStore.size() * sizeof(uint32_t));
 
             BufferBarrierInfo indexBarrierInfo{};
             indexBarrierInfo.buffer = m_buffer;
@@ -435,6 +458,7 @@ namespace pe
         std::vector<PeDrawIndexedIndirectCommand> &indirectCommands = m_pendingIndirectCommands;
         indirectCommands.clear();
         indirectCommands.reserve(m_meshCount);
+        uint64_t drawCapacity = 0;
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
@@ -465,13 +489,15 @@ namespace pe
                 indirectCommands.push_back(indirectCommand);
 
                 indirectCount++;
+                drawCapacity += std::max(1u, mesh.clusterCount);
             }
         }
 
         PE_ERROR_IF(indirectCount != m_meshCount, "Scene::UploadBuffers: Indirect count mismatch!");
 
         m_indirectCapacity = 1;
-        while (m_indirectCapacity < std::max(1u, indirectCount))
+        PE_ERROR_IF(drawCapacity > (1u << 29), "Cluster draw capacity exceeds the resident buffer limit");
+        while (m_indirectCapacity < std::max<uint64_t>(1u, drawCapacity))
             m_indirectCapacity <<= 1;
 
         // Every buffer below is kept while it still fits (EnsureBuffer), so an instance-only rebuild
@@ -1345,6 +1371,12 @@ namespace pe
             m_buffer = nullptr;
         }
 
+        if (m_clusterBuffer)
+        {
+            RHII.AddToDeletionQueue([buffer = m_clusterBuffer]() mutable
+                                    { Buffer::Destroy(buffer); });
+            m_clusterBuffer = nullptr;
+        }
         for (auto &storage : m_storages)
         {
             if (storage)
@@ -2316,6 +2348,8 @@ namespace pe
         constants.lodShift = mesh.lodShift;
         constants.lodMeshEnabled = mesh.lodEnabled ? 1u : 0u;
         constants.lodMeshBias = mesh.lodBias;
+        constants.clusterOffset = mesh.clusterOffset;
+        constants.clusterCount = mesh.clusterCount;
         return constants;
     }
 

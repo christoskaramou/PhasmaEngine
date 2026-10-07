@@ -247,6 +247,13 @@ namespace pe
             settings.AddMember("occlusion_culling_bias", gSettings.occlusion_culling_bias, allocator);
             settings.AddMember("skinned_instancing", gSettings.skinned_instancing, allocator);
             settings.AddMember("lod_enabled", gSettings.lod_enabled, allocator);
+            settings.AddMember("global_illumination", gSettings.global_illumination, allocator);
+            settings.AddMember("hdr", gSettings.hdr, allocator);
+            settings.AddMember("gi_probe_spacing", gSettings.gi_probe_spacing, allocator);
+            settings.AddMember("gi_intensity", gSettings.gi_intensity, allocator);
+            settings.AddMember("gi_hysteresis", gSettings.gi_hysteresis, allocator);
+            settings.AddMember("cluster_geometry", gSettings.cluster_geometry, allocator);
+            settings.AddMember("cluster_error_pixels", gSettings.cluster_error_pixels, allocator);
             settings.AddMember("lod_count", gSettings.lod_count, allocator);
             settings.AddMember("lod_bias", gSettings.lod_bias, allocator);
             {
@@ -511,6 +518,19 @@ namespace pe
                                                : false;
             if (settings.HasMember("lod_enabled"))
                 gSettings.lod_enabled = settings["lod_enabled"].GetBool();
+            gSettings.global_illumination = settings.HasMember("global_illumination") && settings["global_illumination"].IsBool() && settings["global_illumination"].GetBool();
+            gSettings.hdr = settings.HasMember("hdr") && settings["hdr"].IsBool() && settings["hdr"].GetBool();
+            auto readFiniteFloat = [&](const char *key, float fallback, float minimum, float maximum)
+            {
+                float value = settings.HasMember(key) && settings[key].IsNumber() ? settings[key].GetFloat() : fallback;
+                return std::isfinite(value) ? std::clamp(value, minimum, maximum) : fallback;
+            };
+            gSettings.gi_probe_spacing = readFiniteFloat("gi_probe_spacing", 2.f, 0.25f, 64.f);
+            gSettings.gi_intensity = readFiniteFloat("gi_intensity", 1.f, 0.f, 16.f);
+            gSettings.gi_hysteresis = readFiniteFloat("gi_hysteresis", 0.999f, 0.f, 0.999f);
+            gSettings.cluster_geometry = settings.HasMember("cluster_geometry") && settings["cluster_geometry"].IsBool() &&
+                                         settings["cluster_geometry"].GetBool();
+            gSettings.cluster_error_pixels = readFiniteFloat("cluster_error_pixels", 1.f, 0.1f, 64.f);
             if (settings.HasMember("lod_count"))
                 gSettings.lod_count = settings["lod_count"].GetUint();
             if (settings.HasMember("lod_bias"))
@@ -2795,6 +2815,9 @@ namespace pe
         m_positionUvStore.clear();
         m_aabbVertexStore.clear();
         m_indexStore.clear();
+        m_clusterStore.clear();
+        m_clusterIndexStore.clear();
+        m_generatedClusters.clear();
         m_imageStore.clear();
         m_samplerStore.clear();
 
@@ -3000,6 +3023,9 @@ namespace pe
         m_positionUvStore.clear();
         m_aabbVertexStore.clear();
         m_indexStore.clear();
+        m_clusterStore.clear();
+        m_clusterIndexStore.clear();
+        m_generatedClusters.clear();
         m_imageStore.clear();
         m_samplerStore.clear();
 
@@ -4814,6 +4840,9 @@ namespace pe
                 m_positionUvStore.clear();
                 m_aabbVertexStore.clear();
                 m_indexStore.clear();
+                m_clusterStore.clear();
+                m_clusterIndexStore.clear();
+                m_generatedClusters.clear();
                 m_imageStore.clear();
                 m_samplerStore.clear();
 

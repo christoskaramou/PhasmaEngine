@@ -1,4 +1,5 @@
 #include "RayTracingPass.h"
+#include "GlobalIlluminationPass.h"
 #include "API/AccelerationStructure.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -29,7 +30,13 @@ namespace pe
 
     void RayTracingPass::UpdatePassInfo()
     {
-        std::vector<Define> defines = {};
+        std::vector<Define> defines;
+        if (m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT)
+            defines.push_back({"HDR_SCENE", "1"});
+        if (m_probeTracing)
+            defines.push_back({"GI_PROBES", "1"});
+        else
+            defines.push_back({"GI_SHADING", "1"});
 
         // Shaders
         Shader *rayGen = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "raygeneration", .stage = PE_SHADER_STAGE_RAYGEN_KHR, .defines = defines});
@@ -37,7 +44,7 @@ namespace pe
         Shader *anyHit = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "anyhit", .stage = PE_SHADER_STAGE_ANY_HIT_KHR, .defines = defines});
         Shader *miss = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "miss", .stage = PE_SHADER_STAGE_MISS_KHR, .defines = defines});
 
-        m_passInfo->name = "RayTracingPipeline";
+        m_passInfo->name = m_probeTracing ? "GI_ProbeTracing" : "RayTracingPipeline";
         m_passInfo->acceleration.rayGen = rayGen;
         m_passInfo->acceleration.miss = {miss};
         m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
@@ -61,6 +68,14 @@ namespace pe
             uniform->Unmap();
         }
 
+        if (!m_probeTracing)
+        {
+            m_giFallbackUniform = Buffer::Create({.size = RHII.AlignUniform(128), .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER, .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU, .name = "GI_DisabledUniform"});
+            m_giFallbackUniform->Map();
+            m_giFallbackUniform->Zero();
+            m_giFallbackUniform->Flush();
+            m_giFallbackUniform->Unmap();
+        }
         UpdateDescriptorSets();
     }
 
@@ -105,7 +120,18 @@ namespace pe
                 desc->SetBuffer(2, scene.GetLightStorage(i));
                 m_boundLightStorage.resize(RHII.GetSwapchainImageCount());
                 m_boundLightStorage[i] = scene.GetLightStorage(i);
-                desc->SetImageView(3, m_rtDepth->GetUAV(0));
+                if (desc->HasBinding(3))
+                    desc->SetImageView(3, m_rtDepth->GetUAV(0));
+                desc->Update();
+            }
+            if (!m_probeTracing && descriptors.size() > 2 && descriptors[2])
+            {
+                auto *desc = descriptors[2];
+                auto *fallback = RequireActiveSceneRendererHost().GetIBL_LUT();
+                desc->SetBuffer(0, m_giFallbackUniform);
+                desc->SetImageView(1, fallback->GetSRV());
+                desc->SetImageView(2, fallback->GetSRV());
+                desc->SetSampler(3, fallback->GetSampler());
                 desc->Update();
             }
         }
@@ -129,7 +155,9 @@ namespace pe
         // in/out smoothly instead of snapping when its IBL toggle flips.
         ubo.ibl_intensity = pp.IBL_intensity * std::clamp(ActivePostProcessBlend().IBL, 0.0f, 1.0f);
         ubo.IBL = pp.IBL ? 1 : 0;
-        ubo.renderMode = static_cast<uint32_t>(gSettings.render_mode);
+        ubo.renderMode = m_probeTracing ? 2u : static_cast<uint32_t>(gSettings.render_mode);
+        if (m_probeTracing && !pp.IBL)
+            ubo.ibl_intensity = 0.f;
         ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
 
         BufferRange range{};
@@ -180,6 +208,26 @@ namespace pe
                 }
             }
         }
+        if (!m_probeTracing)
+        {
+            const auto &sets = m_passInfo->GetDescriptors(frame);
+            auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+            const bool activeGI = gSettings.global_illumination && gi && gi->GetProbeUniform(frame);
+            auto *fallback = RequireActiveSceneRendererHost().GetIBL_LUT();
+            if (sets.size() > 2 && sets[2])
+            {
+                auto *uniform = activeGI ? gi->GetProbeUniform(frame) : m_giFallbackUniform;
+                const auto &bound = sets[2]->GetBoundResources();
+                if (std::any_of(bound.begin(), bound.end(), [uniform](const auto &info)
+                                { return info.binding == 0 && !info.buffers.empty() && info.buffers[0] == uniform; }))
+                    return;
+                sets[2]->SetBuffer(0, uniform);
+                sets[2]->SetImageView(1, activeGI ? gi->GetIrradianceHistory()->GetSRV() : fallback->GetSRV());
+                sets[2]->SetImageView(2, activeGI ? gi->GetDistanceHistory()->GetSRV() : fallback->GetSRV());
+                sets[2]->SetSampler(3, fallback->GetSampler());
+                sets[2]->Update();
+            }
+        }
     }
 
     void RayTracingPass::DeclareInputs(RGBuilder &builder)
@@ -191,6 +239,12 @@ namespace pe
         builder.WriteRayTracing(m_display);
         builder.WriteRayTracing(m_rtDepth);
         builder.ReadRayTracing(depth);
+        auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+        if (!m_probeTracing && Settings::Get<SceneSettings>().global_illumination && gi && gi->GetIrradianceHistory())
+        {
+            builder.ReadRayTracing(gi->GetIrradianceHistory());
+            builder.ReadRayTracing(gi->GetDistanceHistory());
+        }
     }
 
     void RayTracingPass::DeclareOutputs(RGBuilder &builder)
@@ -269,6 +323,8 @@ namespace pe
     {
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
+        Buffer::Destroy(m_giFallbackUniform);
+        m_giFallbackUniform = nullptr;
     }
 
 } // namespace pe

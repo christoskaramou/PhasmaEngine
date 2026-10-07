@@ -444,9 +444,9 @@ namespace pe
         return m_sceneRenderer.GetDepthStencilTarget(hash);
     }
 
-    Image *RendererSystem::CreateFSSampledImage(bool useRenderTergetScale)
+    Image *RendererSystem::CreateFSSampledImage(Image *source)
     {
-        return m_sceneRenderer.CreateFSSampledImage("FSSampledImage", useRenderTergetScale);
+        return m_sceneRenderer.CreateFSSampledImage("FSSampledImage", source);
     }
 
     void RendererSystem::Resize(uint32_t width, uint32_t height)
@@ -480,6 +480,7 @@ namespace pe
                                              submitStageFlags);
 
         m_sceneRenderer.ResizeRenderPassComponents(width, height, hasRTGeom);
+        BuildRenderGraph();
     }
 
     void RendererSystem::ApplyPendingRenderScaleResize()

@@ -1273,7 +1273,7 @@ namespace pe
             if (GUIState::s_viewportTextureId)
                 GUIBackend::ReleaseImageTexture(GUIState::s_viewportTextureId);
             Image::Destroy(image);
-            image = m_renderer.CreateFSSampledImage(false);
+            image = m_renderer.CreateFSSampledImage(displayRT);
         }
         if (!image || !image->HasSRV())
             return false;

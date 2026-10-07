@@ -37,7 +37,6 @@ target_include_directories(PhasmaRuntime PUBLIC
 target_include_directories(PhasmaRuntime PRIVATE
     "${PE_SHARED_THIRD_PARTY_DIR}"
     "${CMAKE_CURRENT_SOURCE_DIR}/../Core/third_party"
-    "${CMAKE_CURRENT_SOURCE_DIR}/../Core/third_party/meshoptimizer"
     "${CMAKE_CURRENT_SOURCE_DIR}/../Core/third_party/rapidjson/include"
     "${CMAKE_CURRENT_SOURCE_DIR}/../Core/third_party/spirv_cross"
     "${CMAKE_CURRENT_SOURCE_DIR}/../Core/third_party/stb"

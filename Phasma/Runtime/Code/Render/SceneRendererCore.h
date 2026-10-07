@@ -46,7 +46,7 @@ namespace pe
         bool DestroyRenderTarget(const std::string &name);
         Image *GetDepthStencilTarget(const std::string &name) const;
         Image *GetDepthStencilTarget(size_t hash) const;
-        Image *CreateFSSampledImage(const std::string &name, bool useRenderTargetScale = true);
+        Image *CreateFSSampledImage(const std::string &name, Image *source);
         void CreateRenderTargets(bool hasRayTracingGeometry = false, bool scaleOutput = false);
         void DestroyRenderTargets();
         bool NeedsRenderScaleResize() const;
@@ -120,6 +120,8 @@ namespace pe
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassInitialized{};
         SceneRenderGraphPassComponents m_scenePasses{};
         float m_renderTargetScale = 0.0f;
+        bool m_hdr = false;
+        bool m_colorFormatChanged = false;
 
         SkyBox m_skyBox;
         Image *m_ibl_brdf_lut = nullptr;

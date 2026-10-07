@@ -257,8 +257,6 @@ namespace pe
         // Record the object-id raster pass (reuses the live GPU-culled indirect draws) into `cmd`.
         void RecordObjectIdPass(CommandBuffer *cmd, ObjectIdDecodeCache &cache, Scene &scene, Image *depth, uint32_t frame, const char *passName)
         {
-            const uint32_t meshCount = scene.GetMeshCount();
-
             Attachment attachments[2]{};
             attachments[0].image = cache.idTarget;
             attachments[0].loadOp = PE_LOAD_OP_CLEAR;
@@ -280,10 +278,10 @@ namespace pe
             scene.BindDrawIdBuffer(cmd);
             cmd->SetConstants(idConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueSS(frame), 0, scene.GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), meshCount);
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutSS(frame), 0, scene.GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), meshCount);
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueDS(frame), 0, scene.GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), meshCount);
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutDS(frame), 0, scene.GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), meshCount);
+            cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueSS(frame), 0, scene.GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), scene.GetIndirectCapacity());
+            cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutSS(frame), 0, scene.GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), scene.GetIndirectCapacity());
+            cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueDS(frame), 0, scene.GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), scene.GetIndirectCapacity());
+            cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutDS(frame), 0, scene.GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), scene.GetIndirectCapacity());
             cmd->EndPass();
         }
 

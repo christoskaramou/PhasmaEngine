@@ -45,7 +45,6 @@ target_include_directories(PhasmaCook PRIVATE
     "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui"
     "${CMAKE_SOURCE_DIR}/Phasma/Core/third_party/assimp/include"
-    "${CMAKE_SOURCE_DIR}/Phasma/Core/third_party/meshoptimizer"
     "${CMAKE_SOURCE_DIR}/Phasma/Core/third_party/rapidjson/include"
     "${CMAKE_SOURCE_DIR}/Phasma/Core/third_party/stb"
     "${CMAKE_SOURCE_DIR}/Phasma/Core/third_party/vma"

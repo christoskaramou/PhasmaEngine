@@ -23,7 +23,7 @@ namespace pe
         m_depth = rs->GetDepthStencilTarget("depthStencil");
         m_srmRT = rs->GetRenderTarget("srm");
         m_albedoRT = rs->GetRenderTarget("albedo");
-        m_frameImage = rs->CreateFSSampledImage(true);
+        m_frameImage = rs->CreateFSSampledImage(m_viewportRT);
 
         m_attachments.resize(1);
         m_attachments[0] = {};

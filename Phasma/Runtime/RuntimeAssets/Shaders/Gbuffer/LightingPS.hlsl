@@ -154,10 +154,17 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     for (uint k = 0; k < cb_numAreaLights; ++k)
         fragColor += ComputeAreaLight(k, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
+    float4 indirect = ProbeLighting(wolrdPos, normal);
+    float indirectWeight = gi_intensity > 0.0 ? indirect.a : 0.0;
+    if (indirectWeight > 0.0)
+    {
+        float3 diffuseWeight = max(0.0, 1.0 - (material.F0 * envBRDF.x + envBRDF.y) * energyCompensation) * (1.0 - material.metallic);
+        fragColor += indirect.rgb * material.albedo * diffuseWeight * occlusion * (gi_intensity * indirectWeight / PI);
+    }
     // Image Based Lighting
     if (cb_IBL)
     {
-        float3 ibl = ImageBasedLighting(material, normal, V, Cube, sampler_Cube, envBRDF, occlusion);
+        float3 ibl = ImageBasedLighting(material, normal, V, Cube, sampler_Cube, envBRDF, occlusion, 1.0 - indirectWeight);
         fragColor += ibl * cb_IBL_intensity;
     }
 

@@ -176,6 +176,31 @@ namespace pe
         Track(ImGui::Checkbox("Skinned Mesh Instancing", &gSettings.skinned_instancing));
         ui::ItemTooltip("Batch repeated animated meshes while preserving individual poses and visibility. "
                         "Compare profiler timings with this enabled and disabled for your scene.");
+        Track(ImGui::Checkbox("Global Illumination", &gSettings.global_illumination));
+        ui::ItemTooltip("Dynamic diffuse lighting from a local grid of ray-traced probes. Requires hardware ray tracing and enables HDR.");
+        if (gSettings.global_illumination)
+        {
+            ImGui::Indent(16.0f);
+            Track(ImGui::SliderFloat(ui::LabelAbove("Probe Spacing"), &gSettings.gi_probe_spacing, 0.25f, 16.f, "%.2f"));
+            ui::ItemTooltip("Scenes up to 7 cells of 4x this spacing per axis get one probe volume fitted to them. "
+                            "Larger scenes use a volume of this spacing that follows the camera.");
+            Track(ImGui::SliderFloat(ui::LabelAbove("GI Intensity"), &gSettings.gi_intensity, 0.f, 4.f, "%.2f"));
+            Track(ImGui::SliderFloat(ui::LabelAbove("GI History"), &gSettings.gi_hysteresis, 0.f, 0.999f, "%.3f"));
+            ui::ItemTooltip("Probes average every frame since the lighting last changed, up to this history. "
+                            "Lower values react faster to undetected changes but let ray noise show.");
+            ImGui::Unindent(16.0f);
+        }
+        Track(ImGui::Checkbox("HDR Scene Color", &gSettings.hdr));
+        ui::ItemTooltip("Preserve bright lighting for tone mapping and scene bloom before the HUD. Uses more GPU memory; GI enables this automatically.");
+        Track(ImGui::Checkbox("Cluster Geometry", &gSettings.cluster_geometry));
+        ui::ItemTooltip("Select static opaque mesh clusters by screen-space error and cull each cluster on the GPU.");
+        if (gSettings.cluster_geometry)
+        {
+            ImGui::Indent(16.0f);
+            Track(ImGui::SliderFloat(ui::LabelAbove("Cluster Error (pixels)"), &gSettings.cluster_error_pixels, 0.1f, 16.0f, "%.2f"));
+            ui::ItemTooltip("Maximum projected simplification error. Lower values keep more triangles.");
+            ImGui::Unindent(16.0f);
+        }
         Track(ImGui::Checkbox("Mesh LOD", &gSettings.lod_enabled));
         ui::ItemTooltip("Discrete mesh level-of-detail: the GPU cull pass swaps each mesh to a simpler index "
                         "set chosen by camera distance. Levels are generated at load via meshopt.");

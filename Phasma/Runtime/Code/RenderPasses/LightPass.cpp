@@ -1,4 +1,5 @@
 #include "LightPass.h"
+#include "GlobalIlluminationPass.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -21,6 +22,40 @@ namespace pe
 {
     namespace
     {
+        void BindProbeLighting(PassInfo &pass, Buffer *fallbackUniform, uint32_t frame, bool force = false)
+        {
+            const auto &sets = pass.GetDescriptors(frame);
+            if (sets.size() < 4)
+                return;
+            auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+            auto *scene = GetActiveScene();
+            const bool active = Settings::Get<SceneSettings>().global_illumination && gi && scene && scene->GetTLAS() && gi->GetProbeUniform(frame);
+            auto *fallback = RequireActiveSceneRendererHost().GetIBL_LUT();
+            auto *set = sets[3];
+            auto *uniform = active ? gi->GetProbeUniform(frame) : fallbackUniform;
+            const auto &bound = set->GetBoundResources();
+            if (!force && std::any_of(bound.begin(), bound.end(), [uniform](const auto &info)
+                                      { return info.binding == 0 && !info.buffers.empty() && info.buffers[0] == uniform; }))
+                return;
+            set->SetBuffer(0, uniform,
+                           active ? 0 : RHII.AlignUniform(sizeof(LightPassUBO)), active ? 0 : 128);
+            set->SetImageView(1, active ? gi->GetIrradianceHistory()->GetSRV() : fallback->GetSRV());
+            set->SetImageView(2, active ? gi->GetDistanceHistory()->GetSRV() : fallback->GetSRV());
+            set->SetSampler(3, fallback->GetSampler());
+            set->Update();
+        }
+
+        void ReadProbeLighting(RGBuilder &builder)
+        {
+            auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+            auto *scene = GetActiveScene();
+            if (Settings::Get<SceneSettings>().global_illumination && gi && scene && scene->GetTLAS() && gi->GetIrradianceHistory())
+            {
+                builder.Read(gi->GetIrradianceHistory());
+                builder.Read(gi->GetDistanceHistory());
+            }
+        }
+
         void DestroyLightShadowFallbackResources(std::vector<Buffer *> &uniforms,
                                                  Image *&texture,
                                                  Sampler *&sampler,
@@ -284,7 +319,7 @@ namespace pe
         for (auto &uniform : m_uniforms)
         {
             uniform = Buffer::Create({
-                .size = RHII.AlignUniform(sizeof(LightPassUBO)),
+                .size = RHII.AlignUniform(sizeof(LightPassUBO)) + RHII.AlignUniform(128),
                 .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
                 .name = "Gbuffer_uniform_buffer",
@@ -354,6 +389,7 @@ namespace pe
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
+            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true);
         }
 
         m_boundShadowsAvailable = useShadowResources;
@@ -408,6 +444,7 @@ namespace pe
         range.size = sizeof(m_ubo);
         range.offset = 0;
         m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
+        BindProbeLighting(*m_passInfo, m_uniforms[RHII.GetFrameIndex()], RHII.GetFrameIndex());
     }
 
     void LightOpaquePass::DeclareInputs(RGBuilder &builder)
@@ -423,6 +460,7 @@ namespace pe
         if (ActivePostProcessProfile().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
+        ReadProbeLighting(builder);
 
         if (shadowsEnabled)
         {
@@ -545,7 +583,7 @@ namespace pe
         for (auto &uniform : m_uniforms)
         {
             uniform = Buffer::Create({
-                .size = RHII.AlignUniform(sizeof(LightPassUBO)),
+                .size = RHII.AlignUniform(sizeof(LightPassUBO)) + RHII.AlignUniform(128),
                 .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
                 .name = "Gbuffer_uniform_buffer",
@@ -614,6 +652,7 @@ namespace pe
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
+            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true);
         }
 
         m_boundShadowsAvailable = useShadowResources;
@@ -668,6 +707,7 @@ namespace pe
         range.size = sizeof(m_ubo);
         range.offset = 0;
         m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
+        BindProbeLighting(*m_passInfo, m_uniforms[RHII.GetFrameIndex()], RHII.GetFrameIndex());
     }
 
     void LightTransparentPass::DeclareInputs(RGBuilder &builder)
@@ -683,6 +723,7 @@ namespace pe
         if (ActivePostProcessProfile().ssao && m_ssaoRT)
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
+        ReadProbeLighting(builder);
 
         if (shadowsEnabled)
         {

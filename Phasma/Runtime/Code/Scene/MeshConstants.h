@@ -28,5 +28,7 @@ namespace pe
         uint32_t lodShift;       // per-mesh additive LOD level offset (see Mesh::lodShift)
         uint32_t lodMeshEnabled; // 0 = this mesh ignores LOD (always full detail)
         float lodMeshBias;       // per-mesh camera-distance multiplier (see Mesh::lodBias)
+        uint32_t clusterOffset;
+        uint32_t clusterCount;
     };
 } // namespace pe

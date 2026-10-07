@@ -68,13 +68,15 @@ namespace pe
         return GetSceneRenderTarget(m_depthStencilTargets, hash);
     }
 
-    Image *SceneRendererCore::CreateFSSampledImage(const std::string &name, bool useRenderTargetScale)
+    Image *SceneRendererCore::CreateFSSampledImage(const std::string &name, Image *source)
     {
-        return CreateSceneFSSampledImage(name, useRenderTargetScale);
+        return CreateSceneFSSampledImage(name, source);
     }
 
     void SceneRendererCore::CreateRenderTargets(bool hasRayTracingGeometry, bool scaleOutput)
     {
+        m_colorFormatChanged = m_viewportRT && m_hdr != SceneUsesHDR();
+        m_hdr = SceneUsesHDR();
         const SceneRenderTargets targets =
             CreateDefaultSceneRenderTargets(m_renderTargets, m_depthStencilTargets, hasRayTracingGeometry, scaleOutput);
         m_depthStencil = targets.depthStencil;
@@ -96,7 +98,7 @@ namespace pe
 
     bool SceneRendererCore::NeedsRenderScaleResize() const
     {
-        return m_displayRT && m_renderTargetScale != Settings::Get<SceneSettings>().render_scale;
+        return m_displayRT && (m_renderTargetScale != Settings::Get<SceneSettings>().render_scale || m_hdr != SceneUsesHDR());
     }
 
     bool SceneRendererCore::SyncOptionalRenderTargets(bool hasRayTracingGeometry)
@@ -147,7 +149,8 @@ namespace pe
     void SceneRendererCore::ResizeRenderPassComponents(uint32_t width, uint32_t height, bool hasRayTracingGeometry)
     {
         pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
-        ResizeInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized, width, height);
+        ResizeInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized, width, height, m_colorFormatChanged);
+        m_colorFormatChanged = false;
         InitEnabledRenderPassComponents(nullptr);
     }
 

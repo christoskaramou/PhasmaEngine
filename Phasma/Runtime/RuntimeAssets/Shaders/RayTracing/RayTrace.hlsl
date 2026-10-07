@@ -49,7 +49,11 @@ struct Vertex
 
 // Set 0
 [[vk::binding(0, 0)]] RaytracingAccelerationStructure tlas;
+#ifdef HDR_SCENE
+[[vk::binding(1, 0)]] [[vk::image_format("rgba16f")]] RWTexture2D<float4> output;
+#else
 [[vk::binding(1, 0)]] [[vk::image_format("rgba8")]] RWTexture2D<float4> output;
+#endif
 [[vk::binding(2, 0)]] ByteAddressBuffer data;
 [[vk::binding(3, 0)]] StructuredBuffer<Mesh_Constants> constants;
 [[vk::binding(4, 0)]] SamplerState material_sampler;
@@ -96,6 +100,10 @@ struct Vertex
 // Primary-hit device depth for RTDepthResolvePass (full RT). Set 1 because set 0 ends with the
 // unbounded texture array (binding 12), which must stay the last binding of its set.
 [[vk::binding(3, 1)]] RWTexture2D<float> rtDepth;
+
+#if defined(GI_PROBES) || defined(GI_SHADING)
+#include "../GlobalIllumination/ProbeVolume.hlsl"
+#endif
 
 // Helper functions for loading lights
 DirectionalLight LoadDirectionalLight(uint index)
@@ -267,11 +275,11 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
 }
 
 // Improved Single-Scatter Energy Compensation (Kulla-Conty approx)
-float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float2 envBRDF)
+float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float2 envBRDF, float diffuseWeight = 1.0)
 {
     return ComputeIBL_Common(
         N, V, albedo, metallic, roughness, F0, 1.0,
-        skybox, material_sampler, envBRDF
+        skybox, material_sampler, envBRDF, diffuseWeight
     );
 }
 
@@ -595,6 +603,23 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
 [shader("raygeneration")]
 void raygeneration()
 {
+#ifdef GI_PROBES
+    uint2 launch = DispatchRaysIndex().xy;
+    RayDesc ray;
+    ray.Origin = ProbePosition(launch.y);
+    ray.Direction = ProbeRayDirection(launch.x);
+    ray.TMin = 0.001;
+    ray.TMax = gi_maxDistance;
+    HitPayload payload = (HitPayload)0;
+    payload.t = -1.0;
+    payload.alpha = 1.0;
+    payload.opaqueTMax = ray.TMax;
+    TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+    float distance = payload.t < 0.0 ? ray.TMax : payload.t;
+    if (payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE && payload.t >= 0.0)
+        distance = -distance;
+    output[launch] = float4(max(payload.radiance, 0.0), distance);
+#else
     uint3 launchIndex = DispatchRaysIndex();
     uint3 launchDim   = DispatchRaysDimensions();
 
@@ -697,11 +722,20 @@ void raygeneration()
         }
         rtDepth[launchIndex.xy] = deviceZ;
     }
+#endif
 }
 
 [shader("anyhit")]
 void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
+#ifdef GI_PROBES
+    uint probeRenderType = meshInfos[InstanceID()].renderType;
+    if (payload.rayType == 0 && (probeRenderType == 3 || probeRenderType == 4))
+    {
+        IgnoreHit();
+        return;
+    }
+#endif
     uint instanceId = InstanceID();
     uint constantsId = meshInfos[instanceId].constantsIndex;
     uint primitiveId = PrimitiveIndex();
@@ -805,7 +839,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     {
         emissive *= GetEmissive(constantsId, uv).xyz;
     }
-    emissive = saturate(emissive);
+    emissive = max(emissive, 0.0);
     // Self-lit is an authoring signal for alpha cards (emissive mirrors albedo to mean "unlit").
     // Genuinely emissive opaque materials must take the standard lit path below, which adds the
     // emissive term; albedo * SelfLitMaterialScale renders dim-albedo/strong-emissive near-black.
@@ -847,8 +881,22 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     }
     else
     {
+        float diffuseIBL = 1.0;
+#if defined(GI_PROBES) || defined(GI_SHADING)
+        float4 indirect = ProbeLighting(positionWorld, N);
+        float indirectScale = 1.0;
+#ifdef GI_SHADING
+        indirectScale = gi_intensity;
+#endif
+        if (indirect.a > 0.0 && indirectScale > 0.0)
+        {
+            float3 diffuseWeight = max(0.0, 1.0 - (F0 * envBRDF.x + envBRDF.y) * energyCompensation) * (1.0 - metallic);
+            lighting += indirect.rgb * combinedColor.rgb * diffuseWeight * (indirectScale * indirect.a / PI);
+            diffuseIBL = 1.0 - indirect.a;
+        }
+#endif
         if (cb_IBL != 0)
-            lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF) * cb_iblIntensity;
+            lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF, diffuseIBL) * cb_iblIntensity;
         lighting *= occlusion;
 
         // Direct Lighting

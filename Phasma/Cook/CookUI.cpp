@@ -165,6 +165,7 @@ namespace
         // browser + inputs (main thread only)
         std::filesystem::path browseDir;
         char outDirBuf[1024] = {};
+        bool buildClusters = false;
     };
 
     std::filesystem::path ComputeOutputPath(const std::string &outDir, const std::filesystem::path &src)
@@ -218,7 +219,7 @@ namespace
         if (st.worker.joinable())
             st.worker.join(); // previous run already finished (cooking was false)
 
-        st.worker = std::thread([&st, exe, jobs = std::move(jobs)]()
+        st.worker = std::thread([&st, exe, jobs = std::move(jobs), buildClusters = st.buildClusters]()
                                 {
             // Cook the whole queue in ONE hidden PhasmaCook process via a UTF-8 manifest (one
             // "<src>\t<out>" per line) — a single device bring-up, no per-model windows.
@@ -259,7 +260,9 @@ namespace
             std::atomic<bool> finished{false};
             std::thread cookThread([&]()
                                    {
-                RunPhasmaCook(exe, {std::filesystem::path("--batch"), manifest});
+                std::vector<std::filesystem::path> cookArgs{std::filesystem::path("--batch"), manifest};
+                if (buildClusters) cookArgs.emplace_back("--clusters");
+                RunPhasmaCook(exe, cookArgs);
                 finished.store(true); });
             while (!finished.load())
             {
@@ -400,6 +403,7 @@ namespace
     void DrawUI(UiState &st, const std::filesystem::path &exe)
     {
         ImGui::TextUnformatted("Cook source models (glTF / FBX / OBJ / ...) to portable .pemesh.");
+        ImGui::Checkbox("Cook Cluster Geometry", &st.buildClusters);
         ImGui::TextDisabled("Browse and click a model to queue it, or drag-drop files onto the window.");
         ImGui::Spacing();
 

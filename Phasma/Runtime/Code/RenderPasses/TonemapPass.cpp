@@ -4,7 +4,10 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
+#include "API/Sampler.h"
+#include "Render/SceneRenderTargets.h"
 #include "Render/SceneRendererHost.h"
 
 namespace pe
@@ -18,11 +21,23 @@ namespace pe
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
         m_displayRT = rs->GetRenderTarget("display");
-        m_frameImage = rs->CreateFSSampledImage(false);
+        m_sceneColor = rs->GetRenderTarget("hdrDisplay");
+
+        ImageDesc desc{};
+        desc.format = m_displayRT->GetFormat();
+        desc.width = m_displayRT->GetWidth();
+        desc.height = m_displayRT->GetHeight();
+        desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_TRANSFER_DST;
+        desc.name = "Tonemap_Resolved";
+        m_resolvedImage = Image::Create(desc);
+        m_resolvedImage->CreateRTV();
+        m_resolvedImage->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+        m_resolvedImage->SetSampler(Sampler::Create(Sampler::CreateInfoInit(), "Tonemap_ResolvedSampler"));
 
         m_attachments.resize(1);
         m_attachments[0] = {};
-        m_attachments[0].image = m_displayRT;
+        m_attachments[0].loadOp = PE_LOAD_OP_DONT_CARE;
+        Update();
     }
 
     void TonemapPass::UpdatePassInfo()
@@ -50,25 +65,41 @@ namespace pe
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             auto *DSet = m_passInfo->GetDescriptors(i)[0];
-            DSet->SetImageView(0, m_frameImage->GetSRV(), m_frameImage->GetSampler());
+            Image *input = SceneUsesHDR() ? m_sceneColor : m_resolvedImage;
+            DSet->SetImageView(0, input->GetSRV(), input->GetSampler());
             DSet->Update();
         }
     }
 
+    void TonemapPass::Update()
+    {
+        const auto &pp = ActivePostProcessProfile();
+        m_displayRT = SceneUsesHDR() && pp.taa && pp.cas_sharpening ? m_resolvedImage : RequireActiveSceneRendererHost().GetDisplayRT();
+        m_attachments[0].image = m_displayRT;
+    }
+
+    void TonemapPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.Read(m_sceneColor);
+    }
+
+    void TonemapPass::DeclareOutputs(RGBuilder &builder)
+    {
+        Update(); // Includes the player's per-frame swapchain override.
+        IRenderPassComponent::DeclareOutputs(builder);
+    }
+
     void TonemapPass::ExecutePass(CommandBuffer *cmd)
     {
-        ImageBarrierInfo barrier{};
-        barrier.image = m_frameImage;
-        barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-        barrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
-
         cmd->BeginDebugRegion("TonemapPass");
-        cmd->CopyImage(m_displayRT, m_frameImage); // Copy RT to image
-        cmd->ImageBarrier(barrier);
+        if (!SceneUsesHDR())
+        {
+            cmd->CopyImage(m_sceneColor, m_resolvedImage);
+            cmd->ImageBarrier({.image = m_resolvedImage, .layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .stageFlags = PE_STAGE_FRAGMENT_SHADER, .accessMask = PE_ACCESS_SHADER_READ});
+        }
 
         TonemapBlendPC pc{};
-        pc.blend = ActivePostProcessBlend().tonemapping;
+        pc.blend = ActivePostProcessProfile().tonemapping ? ActivePostProcessBlend().tonemapping : 0.f;
 
         cmd->BeginPass(1, m_attachments.data(), "Tonemap");
         cmd->BindPipeline(*m_passInfo);
@@ -84,13 +115,13 @@ namespace pe
 
     void TonemapPass::Resize(uint32_t width, uint32_t height)
     {
-        Image::Destroy(m_frameImage);
+        Image::Destroy(m_resolvedImage);
         Init();
         UpdateDescriptorSets();
     }
 
     void TonemapPass::Destroy()
     {
-        Image::Destroy(m_frameImage);
+        Image::Destroy(m_resolvedImage);
     }
 } // namespace pe

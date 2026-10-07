@@ -116,7 +116,7 @@ namespace pe
             pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetMaxJointCount());
 
             uint32_t frame = RHII.GetFrameIndex();
-            const uint32_t mesh = m_scene->GetMeshCount();
+            const uint32_t mesh = m_scene->GetIndirectCapacity();
 
             // Two-phase Hi-Z: when occlusion culling is on, the depth prepass draws only set A
             // (objects visible last frame, produced by CullPhase1@180); set B (newly disoccluded)

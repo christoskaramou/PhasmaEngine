@@ -37,11 +37,15 @@ namespace pe
             }
         }
 
-        // Scene colour targets are written as storage images (TAA, RCAS, ray tracing), so they use a format with
-        // mandatory STORAGE support that the shaders declare; BlitSceneImageToSwapchain converts to the swapchain.
-        constexpr ::PeFormat kSceneColorFormat = PE_FORMAT_R8G8B8A8_UNORM;
+        constexpr ::PeFormat kDisplayColorFormat = PE_FORMAT_R8G8B8A8_UNORM;
 
     } // namespace
+
+    bool SceneUsesHDR()
+    {
+        const auto &settings = Settings::Get<SceneSettings>();
+        return settings.hdr || (settings.global_illumination && RHII.GetCaps().rayTracing);
+    }
 
     bool SceneNeedsVelocityRT(bool hasRayTracingGeometry)
     {
@@ -98,8 +102,8 @@ namespace pe
                                    bool useMips,
                                    vec4 clearColor)
     {
-        if (Image *existing = GetSceneRenderTarget(renderTargets, name))
-            return existing;
+        if (auto existing = renderTargets.find(StringHash(name)); existing != renderTargets.end())
+            return existing->second;
 
         auto &gSettings = Settings::Get<SceneSettings>();
 
@@ -184,6 +188,10 @@ namespace pe
     Image *GetSceneRenderTarget(const SceneRenderTargetMap &renderTargets, size_t hash)
     {
         auto it = renderTargets.find(hash);
+        // Without HDR the scene resolves straight into display, so passes that write "hdrDisplay"
+        // (TAA, upsample, bloom, DOF, motion blur) get display and keep their LDR behaviour.
+        if (it == renderTargets.end() && hash == static_cast<size_t>(StringHash("hdrDisplay")))
+            it = renderTargets.find(StringHash("display"));
         return it != renderTargets.end() ? it->second : nullptr;
     }
 
@@ -202,12 +210,13 @@ namespace pe
         return true;
     }
 
-    Image *CreateSceneFSSampledImage(const std::string &name, bool useRenderTargetScale)
+    Image *CreateSceneFSSampledImage(const std::string &name, Image *source)
     {
+        PE_ASSERT(source, "Full-screen sampling requires a source image");
         ImageDesc desc{};
-        desc.format = kSceneColorFormat;
-        desc.width = GetScaledRenderWidth(useRenderTargetScale);
-        desc.height = GetScaledRenderHeight(useRenderTargetScale);
+        desc.format = source->GetFormat();
+        desc.width = source->GetWidth();
+        desc.height = source->GetHeight();
         desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;
         desc.name = name;
         Image *sampledImage = Image::Create(desc);
@@ -228,30 +237,46 @@ namespace pe
     {
         CommandBuffer::ClearFramebufferCache();
 
+        // GUI may already reference the display this frame when a scene setting changes HDR.
+        Image *display = GetSceneRenderTarget(renderTargets, "display");
+        if (display && display->GetWidth() == GetScaledRenderWidth(scaleOutput) &&
+            display->GetHeight() == GetScaledRenderHeight(scaleOutput) && display->GetFormat() == kDisplayColorFormat)
+            renderTargets.erase(StringHash("display"));
+        else
+            display = nullptr;
         DestroySceneRenderTargets(renderTargets, depthStencilTargets);
         Settings::Get<SceneSettings>().rendering_images.clear();
+        if (display)
+        {
+            renderTargets[StringHash("display")] = display;
+            Settings::Get<SceneSettings>().rendering_images.push_back(display);
+        }
 
         SceneRenderTargets targets{};
+        const ::PeFormat sceneColorFormat = SceneUsesHDR() ? PE_FORMAT_R16G16B16A16_SFLOAT : kDisplayColorFormat;
         targets.depthStencil =
             CreateSceneDepthStencilTarget(depthStencilTargets, "depthStencil", RHII.GetDepthFormat(), PE_IMAGE_USAGE_TRANSFER_DST);
         targets.viewport =
-            CreateSceneRenderTarget(renderTargets, "viewport", kSceneColorFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
+            CreateSceneRenderTarget(renderTargets, "viewport", sceneColorFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
+        if (SceneUsesHDR())
+            CreateSceneRenderTarget(renderTargets, "hdrDisplay", sceneColorFormat,
+                                    PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST, scaleOutput);
         targets.display = CreateSceneRenderTarget(renderTargets,
                                                   "display",
-                                                  kSceneColorFormat,
+                                                  kDisplayColorFormat,
                                                   PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST,
                                                   scaleOutput);
         targets.screenshot = CreateSceneRenderTarget(renderTargets,
                                                      "screenshot",
-                                                     kSceneColorFormat,
+                                                     kDisplayColorFormat,
                                                      PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST,
                                                      scaleOutput);
         CreateSceneRenderTarget(renderTargets, "normal", SceneNormalRTFormat());
-        CreateSceneRenderTarget(renderTargets, "albedo", kSceneColorFormat);
-        CreateSceneRenderTarget(renderTargets, "srm", kSceneColorFormat);
+        CreateSceneRenderTarget(renderTargets, "albedo", kDisplayColorFormat);
+        CreateSceneRenderTarget(renderTargets, "srm", kDisplayColorFormat);
         if (SceneNeedsVelocityRT(hasRayTracingGeometry))
             CreateSceneRenderTarget(renderTargets, "velocity", SceneVelocityRTFormat());
-        CreateSceneRenderTarget(renderTargets, "emissive", kSceneColorFormat);
+        CreateSceneRenderTarget(renderTargets, "emissive", sceneColorFormat);
         CreateSceneRenderTarget(renderTargets, "transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
 
         return targets;

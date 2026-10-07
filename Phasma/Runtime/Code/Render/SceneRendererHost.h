@@ -39,7 +39,7 @@ namespace pe
         virtual Image *GetDisplayRT() = 0;
         virtual Image *GetViewportRT() = 0;
         virtual Image *GetDepthStencilRT() = 0;
-        virtual Image *CreateFSSampledImage(bool useRenderTergetScale = true) = 0;
+        virtual Image *CreateFSSampledImage(Image *source) = 0;
     };
 
     void SetActiveSceneRendererHost(SceneRendererHost *renderer);

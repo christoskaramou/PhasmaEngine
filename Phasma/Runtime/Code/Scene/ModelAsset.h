@@ -4,6 +4,7 @@
 
 namespace pe
 {
+    struct ClusterGeometry;
     struct Vertex;
     struct AabbVertex;
     class Material;
@@ -24,6 +25,7 @@ namespace pe
         // First-class material reference (shared across meshes with same material)
         Material *material = nullptr;
         bool skinned = false;
+        std::shared_ptr<ClusterGeometry> clusters;
     };
 
     struct NodeInfo

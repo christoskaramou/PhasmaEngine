@@ -75,6 +75,8 @@ namespace pe
         uint32_t lodIndexOffset[kMaxLods] = {0, 0, 0, 0};
         uint32_t lodIndexCount[kMaxLods] = {0, 0, 0, 0};
         uint32_t lodCount = 1;
+        uint32_t clusterOffset = 0;
+        uint32_t clusterCount = 0;
         // Per-mesh LOD controls (authored in the Mesh Component panel; gated by the global Scene Settings
         // Mesh LOD master switch). lodEnabled=false makes this mesh always full detail. lodShift is added to
         // the distance-picked level (0 = automatic, 1+ forces that many levels coarser, clamped to lodCount-1).

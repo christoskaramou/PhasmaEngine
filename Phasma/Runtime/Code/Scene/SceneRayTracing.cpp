@@ -481,6 +481,7 @@ namespace pe
     {
         if (!SupportsSceneRayTracing())
             return;
+        m_giInputVersion++;
 
         // Cleanup old TLAS resources (keep BLAS — caller manages those)
         RHII.AddToDeletionQueue([t = m_tlas]()
@@ -720,6 +721,7 @@ namespace pe
         }
         if (!anyRtNodeMoved)
             return;
+        m_giInputVersion++;
 
         const uint32_t frameCount = RHII.GetSwapchainImageCount();
         if (frameCount == 0)

@@ -122,13 +122,13 @@ namespace pe
         cmd->SetConstants(pushConstants);
         cmd->PushConstants();
         // set B (newly-disoccluded), single-sided
-        cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueSSB(frame), 0, m_scene->GetOccCountersB(frame), 0 * sizeof(uint32_t), m_scene->GetMeshCount());
-        cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutSSB(frame), 0, m_scene->GetOccCountersB(frame), 1 * sizeof(uint32_t), m_scene->GetMeshCount());
+        cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueSSB(frame), 0, m_scene->GetOccCountersB(frame), 0 * sizeof(uint32_t), m_scene->GetIndirectCapacity());
+        cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutSSB(frame), 0, m_scene->GetOccCountersB(frame), 1 * sizeof(uint32_t), m_scene->GetIndirectCapacity());
 
         cmd->BindPipeline(*m_passInfoDS);
         // set B, double-sided
-        cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueDSB(frame), 0, m_scene->GetOccCountersB(frame), 5 * sizeof(uint32_t), m_scene->GetMeshCount());
-        cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutDSB(frame), 0, m_scene->GetOccCountersB(frame), 6 * sizeof(uint32_t), m_scene->GetMeshCount());
+        cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueDSB(frame), 0, m_scene->GetOccCountersB(frame), 5 * sizeof(uint32_t), m_scene->GetIndirectCapacity());
+        cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutDSB(frame), 0, m_scene->GetOccCountersB(frame), 6 * sizeof(uint32_t), m_scene->GetIndirectCapacity());
         cmd->EndPass();
 
         m_scene = nullptr;

@@ -17,5 +17,8 @@ namespace pe
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
+
+    private:
+        Image *m_inputImage = nullptr;
     };
 } // namespace pe

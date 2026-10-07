@@ -23,8 +23,8 @@ namespace pe
 
         void GenerateJitter();
         const vec2 &GetProjectionJitter() const { return m_projectionJitter; }
-        Image *GetResolvedImage() { return m_taaResolved; }
         void RequestHistoryReset() { m_resetHistory = true; }
+        Image *GetResolvedImage() const { return m_taaResolved; }
 
     private:
         Image *m_viewportRT = nullptr;
@@ -34,13 +34,13 @@ namespace pe
 
         Image *m_historyImage = nullptr;
         Image *m_taaResolved = nullptr;
+        bool m_casSharpeningEnabled = false;
 
         vec2 m_jitter;
         vec2 m_projectionJitter;
         int m_jitterPhaseCount = 0;
         int m_jitterIndex = 0;
         uint32_t m_jitterFrame = UINT32_MAX; // Frame the Halton index last advanced on
-        bool m_casSharpeningEnabled{false};
         bool m_resetHistory{false};
     };
 } // namespace pe

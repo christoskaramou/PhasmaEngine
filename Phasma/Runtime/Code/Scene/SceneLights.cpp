@@ -157,6 +157,24 @@ namespace pe
             if (nodeEnabled(l.nodeId))
                 m_areaLightsPOD.push_back(l);
 
+        // Probe GI restarts its averaging when any light changes (Scene::GetGiInputVersion).
+        uint64_t lightsHash = 0;
+        auto hashLights = [&lightsHash](const void *data, size_t size)
+        {
+            Hash hash(static_cast<size_t>(lightsHash));
+            hash.Combine(static_cast<size_t>(Fnv1a64(std::string_view(static_cast<const char *>(data), size))));
+            lightsHash = static_cast<size_t>(hash);
+        };
+        hashLights(m_directionalLightsPOD.data(), m_directionalLightsPOD.size() * sizeof(DirectionalLight));
+        hashLights(m_pointLightsPOD.data(), m_pointLightsPOD.size() * sizeof(PointLight));
+        hashLights(m_spotLightsPOD.data(), m_spotLightsPOD.size() * sizeof(SpotLight));
+        hashLights(m_areaLightsPOD.data(), m_areaLightsPOD.size() * sizeof(AreaLight));
+        if (lightsHash != m_lightsHash)
+        {
+            m_lightsHash = lightsHash;
+            m_giInputVersion++;
+        }
+
         // Calculate aligned offsets and total storage size
         const size_t sizeDirectional = m_directionalLightsPOD.size() * sizeof(DirectionalLight);
         const size_t sizePoint = m_pointLightsPOD.size() * sizeof(PointLight);

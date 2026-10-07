@@ -37,7 +37,7 @@ namespace pe
         // (ModelAssetAssimp import, Primitives). Returns false on I/O failure. Skeleton and animation
         // clips are cooked too (skinned meshes); embedded textures (.glb) are extracted and written
         // next to the file as well (compressed PNG/JPG verbatim; raw embedded slots fall back to default).
-        static bool WriteToFile(const ModelAsset *model, const std::filesystem::path &file);
+        static bool WriteToFile(const ModelAsset *model, const std::filesystem::path &file, bool buildClusters = false);
 
         static bool IsCookedPath(const std::filesystem::path &file);
 

@@ -39,7 +39,9 @@ namespace pe
 
         void SetScene(Scene *scene) { m_scene = scene; }
 
-    private:
+    protected:
+        bool m_probeTracing = false;
+        Buffer *m_giFallbackUniform = nullptr;
         Scene *m_scene = nullptr;
         Image *m_display = nullptr;
         Image *m_rtDepth = nullptr;                // primary-hit depth for RTDepthResolvePass (full RT mode)

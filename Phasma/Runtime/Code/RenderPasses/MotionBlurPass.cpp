@@ -17,11 +17,11 @@ namespace pe
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
-        m_displayRT = rs->GetRenderTarget("display");
+        m_displayRT = rs->GetRenderTarget("hdrDisplay");
         m_velocityRT = rs->GetRenderTarget("velocity");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
 
-        m_frameImage = rs->CreateFSSampledImage(false);
+        m_frameImage = rs->CreateFSSampledImage(m_displayRT);
 
         m_attachments.resize(1);
         m_attachments[0] = {};
