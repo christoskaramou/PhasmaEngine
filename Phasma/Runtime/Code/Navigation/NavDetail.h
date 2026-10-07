@@ -52,6 +52,10 @@ namespace pe
     {
         const NavMesh::Impl *nav = nullptr;
         dtCrowd *crowd = nullptr;
+        // For GetInterpolated: where each agent stood before its last step, and the share of a step since then that
+        // is not yet simulated (a swarm's fixed steps; 1 when the crowd steps on the frame delta itself).
+        vec3 previous[NavCrowd::kMaxAgents] = {};
+        float alpha = 1.0f;
 
         ~Impl() { dtFreeCrowd(crowd); }
     };

@@ -239,8 +239,8 @@ namespace pe
 
     void NavigationSystem::DropMovers()
     {
-        m_agents.clear();
-        m_members.clear();
+        m_agents = {};
+        m_members = {};
         m_crowd.reset();
         m_swarm.reset();
     }
@@ -260,13 +260,39 @@ namespace pe
         return true;
     }
 
-    const NavigationSystem::Binding *NavigationSystem::Find(const std::vector<Binding> &bindings,
-                                                            const SceneNodeHandle &node)
+    size_t NavigationSystem::HandleHash::operator()(const SceneNodeHandle &h) const noexcept
     {
-        for (const Binding &b : bindings)
-            if (b.node == node)
-                return &b;
-        return nullptr;
+        return std::hash<const void *>{}(h.nodeId) ^ (static_cast<size_t>(h.nodeRevision) * 0x9e3779b97f4a7c15ull) ^
+               h.generation;
+    }
+
+    const NavigationSystem::Binding *NavigationSystem::Bindings::Find(const SceneNodeHandle &node) const
+    {
+        const auto it = slot.find(node);
+        return it == slot.end() ? nullptr : &list[it->second];
+    }
+
+    void NavigationSystem::Bindings::Add(const SceneNodeHandle &node, int index)
+    {
+        slot[node] = list.size();
+        list.push_back({node, index});
+    }
+
+    int NavigationSystem::Bindings::Take(const SceneNodeHandle &node)
+    {
+        const auto it = slot.find(node);
+        if (it == slot.end())
+            return -1;
+        const size_t at = it->second;
+        const int index = list[at].index;
+        slot.erase(it);
+        if (at + 1 < list.size())
+        {
+            list[at] = list.back();
+            slot[list[at].node] = at;
+        }
+        list.pop_back();
+        return index;
     }
 
     bool NavigationSystem::AddAgent(const SceneNodeHandle &node, const NavAgentParams &params)
@@ -283,19 +309,19 @@ namespace pe
             PE_WARN("[Nav] add_agent: the node is off the mesh, or %d agents already walk", NavCrowd::kMaxAgents);
             return false;
         }
-        m_agents.push_back({node, index});
+        m_agents.Add(node, index);
         return true;
     }
 
     bool NavigationSystem::SetAgentTarget(const SceneNodeHandle &node, const vec3 &target)
     {
-        const Binding *b = Find(m_agents, node);
+        const Binding *b = m_agents.Find(node);
         return b && m_crowd && m_crowd->SetTarget(b->index, target);
     }
 
     void NavigationSystem::StopAgent(const SceneNodeHandle &node)
     {
-        if (const Binding *b = Find(m_agents, node); b && m_crowd)
+        if (const Binding *b = m_agents.Find(node); b && m_crowd)
             m_crowd->Stop(b->index);
     }
 
@@ -313,7 +339,7 @@ namespace pe
             PE_WARN("[Nav] swarm_add: the node is off the mesh");
             return false;
         }
-        m_members.push_back({node, index});
+        m_members.Add(node, index);
         return true;
     }
 
@@ -327,37 +353,25 @@ namespace pe
 
     void NavigationSystem::Remove(const SceneNodeHandle &node)
     {
-        for (size_t i = 0; i < m_agents.size(); ++i)
-            if (m_agents[i].node == node)
-            {
-                if (m_crowd)
-                    m_crowd->Remove(m_agents[i].index);
-                m_agents.erase(m_agents.begin() + static_cast<std::ptrdiff_t>(i));
-                break;
-            }
-        for (size_t i = 0; i < m_members.size(); ++i)
-            if (m_members[i].node == node)
-            {
-                if (m_swarm)
-                    m_swarm->Remove(m_members[i].index);
-                m_members.erase(m_members.begin() + static_cast<std::ptrdiff_t>(i));
-                break;
-            }
+        if (const int agent = m_agents.Take(node); agent >= 0 && m_crowd)
+            m_crowd->Remove(agent);
+        if (const int member = m_members.Take(node); member >= 0 && m_swarm)
+            m_swarm->Remove(member);
     }
 
     bool NavigationSystem::GetVelocity(const SceneNodeHandle &node, vec3 &velocity) const
     {
         vec3 position;
-        if (const Binding *b = Find(m_agents, node); b && m_crowd)
+        if (const Binding *b = m_agents.Find(node); b && m_crowd)
             return m_crowd->Get(b->index, position, velocity);
-        if (const Binding *b = Find(m_members, node); b && m_swarm)
+        if (const Binding *b = m_members.Find(node); b && m_swarm)
             return m_swarm->Get(b->index, position, velocity);
         return false;
     }
 
     bool NavigationSystem::IsAnchored(const SceneNodeHandle &node) const
     {
-        const Binding *b = Find(m_members, node);
+        const Binding *b = m_members.Find(node);
         return b && m_swarm && m_swarm->IsAnchored(b->index);
     }
 
@@ -379,7 +393,7 @@ namespace pe
 
     void NavigationSystem::Update()
     {
-        if (!IsScriptPlayMode() || m_paused || (m_agents.empty() && m_members.empty()))
+        if (!IsScriptPlayMode() || m_paused || (m_agents.list.empty() && m_members.list.empty()))
             return;
         Scene *scene = GetActiveScene();
         if (!scene || !Mesh())
@@ -394,22 +408,22 @@ namespace pe
         PE_PROFILE_SCOPE("Navigation");
         // A deleted node leaves the crowd or the swarm before anything moves.
         std::vector<SceneNodeHandle> gone;
-        for (const auto *bindings : {&m_agents, &m_members})
+        for (const auto *bindings : {&m_agents.list, &m_members.list})
             for (const Binding &b : *bindings)
                 if (!b.node.IsValid(*scene))
                     gone.push_back(b.node);
         for (const SceneNodeHandle &node : gone)
             Remove(node);
-        if (m_crowd && !m_agents.empty() && m_members.empty())
+        if (m_crowd && !m_agents.list.empty() && m_members.list.empty())
             m_crowd->Update(dt);
-        if (m_swarm && !m_members.empty())
+        if (m_swarm && !m_members.list.empty())
             m_swarm->Update(dt, m_crowd.get());
-        vec3 position, velocity;
-        for (const Binding &b : m_agents)
-            if (m_crowd->Get(b.index, position, velocity))
+        vec3 position;
+        for (const Binding &b : m_agents.list)
+            if (m_crowd->GetInterpolated(b.index, position))
                 Place(*scene, b.node, position);
-        for (const Binding &b : m_members)
-            if (m_swarm->Get(b.index, position, velocity))
+        for (const Binding &b : m_members.list)
+            if (m_swarm->GetInterpolated(b.index, position))
                 Place(*scene, b.node, position);
     }
 } // namespace pe

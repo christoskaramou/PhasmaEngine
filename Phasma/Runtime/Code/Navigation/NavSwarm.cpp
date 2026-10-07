@@ -16,6 +16,10 @@ namespace pe
         constexpr float kAvoidMargin = 1.1f;
         constexpr float kAnchorHysteresis = 0.3f; // an anchored member lets go only this far past its stop line
         constexpr float kEdgeLookAhead = 1.0f;    // this close to an exit edge, a member aims one polygon further
+        // A member slower than this share of its speed, within this many avoidance widths of a held body in its way,
+        // holds too: the ones behind a full stop line settle instead of jostling for it.
+        constexpr float kSettleSpeed = 0.25f;
+        constexpr float kSettleReach = 1.2f;
 
         // ORCA (van den Berg et al., "Reciprocal n-body collision avoidance"): each neighbour bounds the velocity to
         // one side of a line; the velocity nearest the preferred one inside every half-plane and the speed limit wins.
@@ -92,8 +96,9 @@ namespace pe
             return lines.size();
         }
 
-        // Infeasible (packed too tight): the velocity that violates the lines least, from line `begin` on.
-        void LinearProgram3(const std::vector<Line> &lines, size_t begin, float radius, vec2 &result,
+        // Infeasible (packed too tight): the velocity that violates the lines least, from line `begin` on; the first
+        // `walls` lines stay hard.
+        void LinearProgram3(const std::vector<Line> &lines, size_t walls, size_t begin, float radius, vec2 &result,
                             std::vector<Line> &projected)
         {
             float distance = 0.0f;
@@ -101,8 +106,8 @@ namespace pe
             {
                 if (Det(lines[i].direction, lines[i].point - result) <= distance)
                     continue;
-                projected.clear();
-                for (size_t j = 0; j < i; ++j)
+                projected.assign(lines.begin(), lines.begin() + static_cast<std::ptrdiff_t>(walls));
+                for (size_t j = walls; j < i; ++j)
                 {
                     Line line;
                     const float determinant = Det(lines[i].direction, lines[j].direction);
@@ -146,12 +151,14 @@ namespace pe
     {
         struct Member
         {
-            vec3 pos{0.0f};
+            vec3 pos{0.0f}, previous{0.0f}; // previous: before the last step, for GetInterpolated
             vec2 vel{0.0f}, next{0.0f}, pref{0.0f};
             float radius = 0.3f, speed = 3.5f, stop = 0.0f;
             dtPolyRef ref = 0;
             int crowdAgent = -1;
-            bool alive = false, anchored = false, direct = false;
+            bool alive = false, anchored = false, settled = false, direct = false;
+
+            bool Holds() const { return anchored || settled || speed == 0.0f; }
         };
 
         const NavMesh::Impl *nav = nullptr;
@@ -167,6 +174,14 @@ namespace pe
         // the edge shared with it.
         std::vector<int> towards;
         std::vector<vec2> portalA, portalB, centres;
+        // Per polygon, the mesh-boundary edges of it and its neighbours: walls[wallStart[p], wallStart[p + 1]).
+        // ponytail: the one ring only; a wall of a polygon that just shares a vertex is left to moveAlongSurface.
+        struct Wall
+        {
+            vec2 a{0.0f}, b{0.0f}, out{0.0f}; // out: the normal pointing off the mesh
+        };
+        std::vector<Wall> walls;
+        std::vector<int> wallStart;
 
         float carry = 0.0f;
         uint32_t stepCount = 0;
@@ -175,6 +190,7 @@ namespace pe
         std::vector<int> cellHead, cellNext;       // the neighbour grid
         std::vector<std::pair<float, int>> nearby; // scratch
         std::vector<Line> lines, projected;        // scratch
+        std::vector<char> settles;                 // scratch
 
         int PolyIndex(dtPolyRef ref) const
         {
@@ -258,10 +274,12 @@ namespace pe
                 dtPolyRef visited[16];
                 int visitedCount = 0;
                 nav->query->raycast(m.ref, &m.pos.x, &target.x, &nav->filter, &t, normal, visited, &visitedCount, 16);
-                float height = 0.0f;
+                // closestPointOnPoly, not getPolyHeight: a target snapped onto a +x/+z edge counts as outside
+                float on[3];
                 m.direct = t > 1.0f && visitedCount > 0 &&
-                           dtStatusSucceed(nav->query->getPolyHeight(visited[visitedCount - 1], &target.x, &height)) &&
-                           std::abs(height - target.y) <= std::max(0.1f, nav->settings.cellHeight * 2.0f);
+                           dtStatusSucceed(nav->query->closestPointOnPoly(visited[visitedCount - 1], &target.x, on, nullptr)) &&
+                           glm::distance(vec2(on[0], on[2]), goal) < 0.01f &&
+                           std::abs(on[1] - target.y) <= std::max(0.1f, nav->settings.cellHeight * 2.0f);
             }
             const bool onTargetFloor = targetRef ? m.direct : std::abs(m.pos.y - target.y) <= nav->settings.agentMaxClimb;
             m.anchored = onTargetFloor && glm::distance(m.pos, target) <= m.stop + (m.anchored ? kAnchorHysteresis : 0.0f);
@@ -324,6 +342,43 @@ namespace pe
                 head = i;
             }
 
+            // Settle: pressed against a held member that stands in the way and nearer the target, barely moving, and
+            // outside every neighbour's avoidance margin (only there does holding still satisfy its own lines; inside,
+            // a wedge against walls and held bodies would freeze the overlap). Last step's holds are read (Jacobi), so
+            // a held front spreads back one rank per step and lets go the same way.
+            settles.assign(members.size(), 0);
+            for (size_t i = 0; i < members.size(); ++i)
+            {
+                const Member &m = members[i];
+                if (!m.alive || m.crowdAgent >= 0 || m.anchored || m.speed == 0.0f || glm::dot(m.pref, m.pref) < kEpsilon ||
+                    (!m.settled && glm::length(m.vel) > kSettleSpeed * m.speed))
+                    continue;
+                const vec2 p = Flat(m.pos);
+                const float toTarget = glm::distance(p, Flat(target));
+                bool support = false, clear = true;
+                int cx = 0, cz = 0;
+                cellOf(p, cx, cz);
+                for (int z = std::max(0, cz - 1); z <= std::min(depth - 1, cz + 1) && clear; ++z)
+                    for (int x = std::max(0, cx - 1); x <= std::min(width - 1, cx + 1) && clear; ++x)
+                        for (int j = cellHead[static_cast<size_t>(z) * width + x]; j >= 0 && clear; j = cellNext[j])
+                        {
+                            const Member &o = members[j];
+                            if (j == static_cast<int>(i) || std::abs(o.pos.y - m.pos.y) > kFloorGap)
+                                continue;
+                            const vec2 d = Flat(o.pos) - p;
+                            const float d2 = glm::dot(d, d), margin = (m.radius + o.radius) * kAvoidMargin;
+                            const float reach = margin * kSettleReach;
+                            clear = d2 >= margin * margin;
+                            // Support: swarm members holding for the target, not stopped crowd agents.
+                            support = support || (o.crowdAgent < 0 && (o.anchored || o.settled) && d2 < reach * reach &&
+                                                  glm::dot(d, m.pref) > 0.0f &&
+                                                  glm::distance(Flat(o.pos), Flat(target)) < toTarget);
+                        }
+                settles[i] = support && clear;
+            }
+            for (size_t i = 0; i < members.size(); ++i)
+                members[i].settled = settles[i] != 0;
+
             const float invHorizon = 1.0f / kHorizon, invStep = 1.0f / kStep;
             for (size_t i = 0; i < members.size(); ++i)
             {
@@ -331,7 +386,7 @@ namespace pe
                 if (!m.alive)
                     continue;
                 m.next = vec2(0.0f);
-                if (m.anchored || m.speed == 0.0f)
+                if (m.Holds())
                     continue; // holds still; the others take the whole avoidance
                 const vec2 p = Flat(m.pos);
                 nearby.clear();
@@ -355,6 +410,20 @@ namespace pe
                     nearby.resize(kMaxNeighbours);
                 }
                 lines.clear();
+                // The surface's clamp as hard lines, first: never into a wall faster than this step reaches it, so a
+                // neighbour can count on this member taking its half of their avoidance.
+                if (const int poly = PolyIndex(m.ref); poly >= 0)
+                    for (int w = wallStart[poly]; w < wallStart[poly + 1]; ++w)
+                    {
+                        const Wall &wall = walls[w];
+                        const vec2 c = ClosestOnSegment(p, wall.a, wall.b);
+                        const float d = glm::distance(c, p);
+                        if (d >= m.speed * kStep)
+                            continue;
+                        const vec2 n = d > 1e-4f ? (c - p) / d : wall.out;
+                        lines.push_back({n * (d * invStep), vec2(-n.y, n.x)});
+                    }
+                const size_t wallLines = lines.size();
                 for (const auto &[d2, j] : nearby)
                 {
                     const Member &o = members[j];
@@ -411,7 +480,7 @@ namespace pe
                         u = (combined * invStep - wLength) * unitW;
                     }
                     // Reciprocal: each takes half; a member holding still takes none, so this one takes it all.
-                    line.point = m.vel + (o.anchored || o.speed == 0.0f ? 1.0f : 0.5f) * u;
+                    line.point = m.vel + (o.Holds() ? 1.0f : 0.5f) * u;
                     lines.push_back(line);
                 }
                 vec2 result(0.0f);
@@ -422,19 +491,20 @@ namespace pe
                         const Member &o = members[j];
                         const vec2 delta = Flat(o.pos) - p;
                         const float radius = (m.radius + o.radius) * kAvoidMargin;
-                        if ((o.anchored || o.speed == 0.0f) && d2 > kEpsilon && glm::dot(optimal, delta) > 0.0f &&
+                        if (o.Holds() && d2 > kEpsilon && glm::dot(optimal, delta) > 0.0f &&
                             std::abs(Det(glm::normalize(optimal), delta)) < radius)
                         {
                             // ponytail: local tangential preference for held bodies; replan around dynamic obstacles
-                            // if a crowd blocks an entire passage. ORCA alone can choose zero dead ahead.
-                            const vec2 side = vec2(-delta.y, delta.x) / std::sqrt(d2);
+                            // if a crowd blocks an entire passage. ORCA alone can choose zero dead ahead. Pass on the
+                            // side this member is already offset to: one fixed hand swirls a whole pack.
+                            const vec2 side = vec2(-delta.y, delta.x) / std::sqrt(d2) * (Det(optimal, delta) > 0.0f ? -1.0f : 1.0f);
                             optimal = glm::normalize(optimal + side * m.speed) * m.speed;
                             break;
                         }
                     }
                 const size_t failed = LinearProgram2(lines, m.speed, optimal, false, result);
                 if (failed < lines.size())
-                    LinearProgram3(lines, failed, m.speed, result, projected);
+                    LinearProgram3(lines, wallLines, failed, m.speed, result, projected);
                 m.next = result;
             }
         }
@@ -470,7 +540,10 @@ namespace pe
             const size_t swarmSize = members.size();
             for (size_t i = 0; i < swarmSize; ++i)
                 if (members[i].alive)
+                {
+                    members[i].previous = members[i].pos;
                     Steer(members[i], static_cast<int>(i));
+                }
             if (crowd && crowd->crowd)
             {
                 for (int i = 0; i < NavCrowd::kMaxAgents; ++i)
@@ -480,6 +553,7 @@ namespace pe
                         continue;
                     Member m;
                     m.pos = vec3(a->npos[0], a->npos[1], a->npos[2]);
+                    crowd->previous[i] = m.pos;
                     m.vel = vec2(a->vel[0], a->vel[2]);
                     m.radius = a->params.radius;
                     m.speed = a->params.maxSpeed;
@@ -540,6 +614,33 @@ namespace pe
                 sum += s.Vertex(poly.verts[v]);
             s.centres[p] = sum / static_cast<float>(std::max<int>(1, poly.vertCount));
         }
+        const auto isWall = [](unsigned short nei)
+        { return nei == 0 || (nei & DT_EXT_LINK); }; // no neighbour in this tile
+        const auto addWalls = [&s, &isWall](int p)
+        {
+            const dtPoly &poly = s.tile->polys[p];
+            for (int k = 0; k < poly.vertCount; ++k)
+            {
+                const vec2 a = s.Vertex(poly.verts[k]), b = s.Vertex(poly.verts[(k + 1) % poly.vertCount]);
+                const float length = glm::distance(a, b);
+                if (!isWall(poly.neis[k]) || length < kEpsilon)
+                    continue;
+                vec2 out = vec2(b.y - a.y, a.x - b.x) / length;
+                if (glm::dot(out, 0.5f * (a + b) - s.centres[p]) < 0.0f)
+                    out = -out;
+                s.walls.push_back({a, b, out});
+            }
+        };
+        for (int p = 0; p < s.tile->header->polyCount; ++p)
+        {
+            s.wallStart.push_back(static_cast<int>(s.walls.size()));
+            addWalls(p);
+            const dtPoly &poly = s.tile->polys[p];
+            for (int k = 0; k < poly.vertCount; ++k)
+                if (!isWall(poly.neis[k]))
+                    addWalls(poly.neis[k] - 1);
+        }
+        s.wallStart.push_back(static_cast<int>(s.walls.size()));
     }
 
     NavSwarm::~NavSwarm() = default;
@@ -570,7 +671,7 @@ namespace pe
         }
         Impl::Member &m = s.members[index];
         m = Impl::Member{};
-        m.pos = start;
+        m.pos = m.previous = start;
         m.radius = member.radius;
         m.speed = member.speed;
         m.stop = member.stopDistance;
@@ -637,6 +738,8 @@ namespace pe
         }
         if (s.stats.steps == kMaxStepsPerUpdate)
             s.carry = std::min(s.carry, kStep); // a hitch: drop the backlog instead of spiralling
+        if (c)
+            c->alpha = s.carry / kStep; // the crowd took these steps too
         if (s.stats.steps > 0)
             s.stats.stepMs = std::chrono::duration<float, std::milli>(std::chrono::steady_clock::now() - started).count() /
                              static_cast<float>(s.stats.steps);
@@ -651,6 +754,15 @@ namespace pe
         const Impl::Member &m = s.members[member];
         position = m.pos;
         velocity = vec3(m.vel.x, 0.0f, m.vel.y);
+        return true;
+    }
+
+    bool NavSwarm::GetInterpolated(int member, vec3 &position) const
+    {
+        const Impl &s = *m_impl;
+        if (member < 0 || member >= static_cast<int>(s.members.size()) || !s.members[member].alive)
+            return false;
+        position = glm::mix(s.members[member].previous, s.members[member].pos, s.carry / kStep);
         return true;
     }
 
@@ -684,6 +796,10 @@ namespace pe
         return 0;
     }
     bool NavSwarm::Get(int, vec3 &, vec3 &) const
+    {
+        return false;
+    }
+    bool NavSwarm::GetInterpolated(int, vec3 &) const
     {
         return false;
     }

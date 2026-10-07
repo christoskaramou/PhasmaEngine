@@ -35,6 +35,9 @@ namespace pe
         void Stop(int agent);
         void Update(float dt);
         bool Get(int agent, vec3 &position, vec3 &velocity) const;
+        // Where to draw the agent: Get's position, except while a swarm steps the crowd at 60 Hz, when it is blended
+        // between the last two steps by the time since (one step behind, smooth at any frame rate).
+        bool GetInterpolated(int agent, vec3 &position) const;
 
     private:
         friend class NavSwarm;

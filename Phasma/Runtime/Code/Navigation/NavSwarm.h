@@ -22,9 +22,11 @@ namespace pe
     // A horde chasing one target over the navmesh. Each fixed step: a flow field over the mesh's polygons toward the
     // target (Dijkstra, recomputed when the target changes polygon) gives every member the next polygon edge to aim
     // for; reciprocal velocity obstacles (ORCA) between neighbours pick each member's velocity, so bodies flow around
-    // each other instead of pushing; members move along the mesh surface and never leave it. Members within their
-    // stop distance hold still and the rest route around them. Deterministic for one sequence of calls: fixed
-    // 60 Hz steps, members in index order, last-step velocities read (Jacobi).
+    // each other instead of pushing; members move along the mesh surface and never leave it, and avoidance treats the
+    // mesh edges as walls. Members within their stop distance hold still and the rest route around them; a member
+    // pressed against a held one between it and the target holds too, so a pack settles instead of jostling, and lets
+    // go when the front does. Deterministic for one sequence of calls: fixed 60 Hz steps, members in index order,
+    // last-step velocities read (Jacobi).
     // ponytail: one solo tile (what NavMesh bakes), 2D avoidance per floor (members over 2 m apart in height ignore
     // each other); tiled meshes and per-member heights when a consumer needs them.
     class NavSwarm
@@ -46,6 +48,9 @@ namespace pe
         // A supplied crowd steps with the swarm and shares its avoidance pass.
         int Update(float dt, NavCrowd *crowd = nullptr);
         bool Get(int member, vec3 &position, vec3 &velocity) const;
+        // Where to draw the member: blended between its last two steps by the time since (one step behind, smooth at
+        // any frame rate). Get is the simulation's own state; game logic reads that.
+        bool GetInterpolated(int member, vec3 &position) const;
         // Within its stop distance of the target.
         [[nodiscard]] bool IsAnchored(int member) const;
         [[nodiscard]] const NavSwarmStats &Stats() const;

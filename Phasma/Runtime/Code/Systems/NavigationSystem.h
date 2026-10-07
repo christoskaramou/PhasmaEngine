@@ -15,7 +15,8 @@ namespace pe
     // it: path-following agents (NavCrowd, each to its own target) and one swarm (NavSwarm, all chasing one target).
     // Movers step every frame on the time-scaled delta (gameplay slow motion slows them, like animation and scripts;
     // Jolt ignores time_scale) and write their nodes' positions; a deleted node drops out.
-    // When both kinds coexist, the crowd takes the swarm's fixed steps and shares its ORCA avoidance.
+    // When both kinds coexist, the crowd takes the swarm's fixed steps and shares its ORCA avoidance. Nodes on those
+    // 60 Hz steps are drawn blended between the last two (GetInterpolated), so they move every frame.
     // ponytail: baked only on request (the editor's Bake, Lua nav.bake), held in memory, dropped by a scene load
     // (generation check); a bake or the end of play drops every mover. Terrain tiles and play-only trigger-zone
     // colliders are not gathered; movers do not turn their nodes (scripts read nav.get_velocity).
@@ -57,11 +58,25 @@ namespace pe
             SceneNodeHandle node;
             int index = -1;
         };
+        struct HandleHash
+        {
+            size_t operator()(const SceneNodeHandle &h) const noexcept;
+        };
+        // The movers of one kind: a list to step and place in order, and each node's slot in it, so per-node
+        // queries (nav.get_velocity / is_anchored for every member each frame) cost the same at any swarm size.
+        struct Bindings
+        {
+            std::vector<Binding> list;
+            std::unordered_map<SceneNodeHandle, size_t, HandleHash> slot;
+
+            const Binding *Find(const SceneNodeHandle &node) const;
+            void Add(const SceneNodeHandle &node, int index);
+            int Take(const SceneNodeHandle &node); // the mover index removed, or -1; the last binding fills the gap
+        };
 
         bool ReadyForMovers(const char *what);
         void DropMovers();
         void Place(Scene &scene, const SceneNodeHandle &node, const vec3 &world);
-        static const Binding *Find(const std::vector<Binding> &bindings, const SceneNodeHandle &node);
 
         NavMesh m_mesh;
         std::vector<vec3> m_debugSegments;
@@ -70,6 +85,6 @@ namespace pe
         bool m_paused = false;
         std::unique_ptr<NavCrowd> m_crowd;
         std::unique_ptr<NavSwarm> m_swarm;
-        std::vector<Binding> m_agents, m_members;
+        Bindings m_agents, m_members;
     };
 } // namespace pe

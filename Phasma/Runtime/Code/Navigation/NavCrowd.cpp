@@ -52,7 +52,10 @@ namespace pe
                         DT_CROWD_OPTIMIZE_TOPO;
         p.obstacleAvoidanceType = 0; // dtCrowd::init gives every slot the same default sampling
         p.separationWeight = 0.0f;
-        return m_impl->crowd->addAgent(&start.x, &p);
+        const int index = m_impl->crowd->addAgent(&start.x, &p);
+        if (index >= 0)
+            m_impl->previous[index] = start;
+        return index;
     }
 
     void NavCrowd::Remove(int agent)
@@ -78,9 +81,17 @@ namespace pe
 
     void NavCrowd::Update(float dt)
     {
-        if (m_impl->crowd && std::isfinite(dt) && dt > 0.0f)
-            // ponytail: drop time beyond a 250 ms hitch; use fixed substeps if low-frame-rate simulation is required.
-            m_impl->crowd->update(std::min(dt, 0.25f), nullptr);
+        if (!m_impl->crowd || !std::isfinite(dt) || dt <= 0.0f)
+            return;
+        // ponytail: drop time beyond a 250 ms hitch; use fixed substeps if low-frame-rate simulation is required.
+        m_impl->crowd->update(std::min(dt, 0.25f), nullptr);
+        m_impl->alpha = 1.0f; // drawn where it is; a swarm stepping it later starts from here
+        for (int i = 0; i < kMaxAgents; ++i)
+        {
+            const dtCrowdAgent *a = m_impl->crowd->getAgent(i);
+            if (a->active)
+                m_impl->previous[i] = vec3(a->npos[0], a->npos[1], a->npos[2]);
+        }
     }
 
     bool NavCrowd::Get(int agent, vec3 &position, vec3 &velocity) const
@@ -90,6 +101,15 @@ namespace pe
             return false;
         position = vec3(a->npos[0], a->npos[1], a->npos[2]);
         velocity = vec3(a->vel[0], a->vel[1], a->vel[2]);
+        return true;
+    }
+
+    bool NavCrowd::GetInterpolated(int agent, vec3 &position) const
+    {
+        vec3 velocity;
+        if (!Get(agent, position, velocity))
+            return false;
+        position = glm::mix(m_impl->previous[agent], position, m_impl->alpha);
         return true;
     }
 #else
@@ -111,6 +131,10 @@ namespace pe
     void NavCrowd::Stop(int) {}
     void NavCrowd::Update(float) {}
     bool NavCrowd::Get(int, vec3 &, vec3 &) const
+    {
+        return false;
+    }
+    bool NavCrowd::GetInterpolated(int, vec3 &) const
     {
         return false;
     }
