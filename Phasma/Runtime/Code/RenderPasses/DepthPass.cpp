@@ -4,6 +4,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -100,6 +101,16 @@ namespace pe
     {
         // Force geometry-dependent descriptor rebind on next Update()
         m_lastGeometryVersion = ~0ull;
+    }
+
+    void DepthPass::DeclareInputs(RGBuilder &builder)
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene)
+            return;
+        const uint32_t frame = RHII.GetFrameIndex();
+        builder.ReadBuffer(Settings::Get<SceneSettings>().occlusion_culling ? scene->GetOccCountersA(frame)
+                                                                            : scene->GetCullingCountersBuffer(frame));
     }
 
     void DepthPass::ExecutePass(CommandBuffer *cmd)

@@ -5,10 +5,12 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Render/SceneRendererHost.h"
 
 namespace pe
@@ -109,6 +111,12 @@ namespace pe
                 m_lastBufferVersion = m_scene->GetParticleManager()->GetBufferVersion();
             }
         }
+    }
+
+    void ParticlePass::DeclareInputs(RGBuilder &builder)
+    {
+        if (Scene *scene = GetActiveScene(); scene && scene->GetParticleManager())
+            builder.ReadBuffer(scene->GetParticleManager()->GetParticleBuffer());
     }
 
     void ParticlePass::ExecutePass(CommandBuffer *cmd)

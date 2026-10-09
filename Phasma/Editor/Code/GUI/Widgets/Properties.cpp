@@ -12,6 +12,7 @@
 #include "LightWidget.h"
 #include "MeshWidget.h"
 #include "Particles.h"
+#include "PipelineControls.h"
 #include "PostProcessControls.h"
 #include "SceneSettingsControls.h"
 #include "Particles/ParticleManager.h"
@@ -404,49 +405,12 @@ namespace pe
             sol::table exposed(L, -1);
             lua_pop(L, 1);
 
-            for (auto &var : inst->exposedVars)
-            {
-                ImGui::PushID(var.name.c_str());
-                switch (var.type)
-                {
-                case ExposedVar::Type::Number:
-                {
-                    sol::optional<double> opt = exposed[var.name];
-                    if (!opt)
-                        break;
-                    float val = static_cast<float>(*opt);
-                    if (ImGui::DragFloat(ui::LabelAbove(var.name.c_str()), &val, 0.1f))
-                        exposed[var.name] = static_cast<double>(val);
-                    ui::ItemTooltip("Edit this numeric value exposed by the node script.");
-                    break;
-                }
-                case ExposedVar::Type::Bool:
-                {
-                    sol::optional<bool> opt = exposed[var.name];
-                    if (!opt)
-                        break;
-                    bool val = *opt;
-                    if (ImGui::Checkbox(var.name.c_str(), &val))
-                        exposed[var.name] = val;
-                    ui::ItemTooltip("Toggle this boolean value exposed by the node script.");
-                    break;
-                }
-                case ExposedVar::Type::String:
-                {
-                    sol::optional<std::string> opt = exposed[var.name];
-                    if (!opt)
-                        break;
-                    std::string val = *opt;
-                    char buf[256];
-                    std::snprintf(buf, sizeof(buf), "%s", val.c_str());
-                    if (ImGui::InputText(ui::LabelAbove(var.name.c_str()), buf, sizeof(buf)))
-                        exposed[var.name] = std::string(buf);
-                    ui::ItemTooltip("Edit this string value exposed by the node script.");
-                    break;
-                }
-                }
-                ImGui::PopID();
-            }
+            DrawExposedValues(
+                inst->exposedVars, L, [&exposed](const ExposedVar &var) -> sol::object
+                { return exposed[var.name]; },
+                [&exposed](const ExposedVar &var, const sol::object &value)
+                { exposed[var.name] = value; },
+                "Edit this value exposed by the node script.");
         };
 
         auto drawCamera = [&]()
@@ -1581,11 +1545,12 @@ namespace pe
                 if (ImGui::CollapsingHeader("Scene Settings", ImGuiTreeNodeFlags_DefaultOpen))
                 {
                     ImGui::Indent(8.f);
-                    bool changed = DrawSceneSettingsControls();
-                    ImGui::SeparatorText("Post Processing (scene default)");
-                    ui::ItemTooltip("Default post-process profile, used when the camera is in no post-process zone.");
-                    changed |= DrawPostProcessControls(static_cast<PostProcessProfile &>(Settings::Get<SceneSettings>()));
-                    if (changed)
+                    if (DrawSceneSettingsControls())
+                        scene.MarkDirty();
+                    const bool pipelineOpen = ImGui::CollapsingHeader("Pipeline");
+                    ui::ItemTooltip("Render path, the pipeline script and every value it exposes: the passes' settings "
+                                    "and the default post-process profile (used outside post-process zones).");
+                    if (pipelineOpen && DrawPipelineControls())
                         scene.MarkDirty();
                     ImGui::Unindent(8.f);
                 }

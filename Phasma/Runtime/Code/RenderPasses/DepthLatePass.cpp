@@ -5,6 +5,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
@@ -95,6 +96,12 @@ namespace pe
     void DepthLatePass::UpdateDescriptorSets()
     {
         m_lastGeometryVersion = ~0ull;
+    }
+
+    void DepthLatePass::DeclareInputs(RGBuilder &builder)
+    {
+        if (Scene *scene = GetActiveScene())
+            builder.ReadBuffer(scene->GetOccCountersB(RHII.GetFrameIndex()));
     }
 
     void DepthLatePass::ExecutePass(CommandBuffer *cmd)

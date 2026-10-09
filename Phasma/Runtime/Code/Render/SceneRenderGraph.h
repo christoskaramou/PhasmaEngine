@@ -94,6 +94,12 @@ namespace pe
 
     using SceneRenderGraphPassCondition = std::function<bool(SceneRenderGraphPassId)>;
 
+    // Sort-number overrides saved with the scene (SceneSettings::render_pass_orders, keyed by pass name,
+    // "script:<name>" for script passes).
+    uint32_t GetSceneRenderGraphPassOrder(RenderGraph::PassID passId, const std::string &name, uint32_t defaultOrder);
+    // The built-in sort number (HDR and LDR place tone mapping, sharpening, FXAA and colour grading differently).
+    uint32_t DefaultSceneRenderGraphPassOrder(SceneRenderGraphPassId passId);
+
     void AddSceneRenderGraphPasses(RenderGraph &renderGraph,
                                    const SceneRenderGraphPassComponents &components,
                                    SceneRenderGraphPassCondition isPassEnabled);

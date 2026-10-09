@@ -16,6 +16,26 @@ namespace pe::ui
         return x < 0.f ? 0.f : (x > 1.f ? 1.f : x);
     }
 
+    // A script value's label: its words split at '_', each starting upper case, the rest kept
+    // (cas_sharpness -> "Cas Sharpness", IBL_intensity -> "IBL Intensity").
+    inline std::string ExposedLabel(std::string_view name)
+    {
+        std::string label;
+        bool wordStart = true;
+        for (const char c : name)
+        {
+            if (c == '_')
+            {
+                label += ' ';
+                wordStart = true;
+                continue;
+            }
+            label += wordStart ? static_cast<char>(std::toupper(static_cast<unsigned char>(c))) : c;
+            wordStart = false;
+        }
+        return label;
+    }
+
     inline std::string FormatBytes(uint64_t b)
     {
         const double KB = 1024.0, MB = KB * KB, GB = KB * KB * KB;

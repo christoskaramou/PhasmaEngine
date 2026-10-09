@@ -109,6 +109,22 @@ Scene paths have two conventions in this flow, captured by paired constants in
 path, such as `Assets/Scenes/sponza.pescene`, while Lua executes from the asset
 root and therefore loads the same scene as `Scenes/sponza.pescene`.
 
+Checked 2026-10-08: no build tree on the main workstation holds the Sponza fixture
+(`build-ninja-physics` and `build-review-native` have only `new.pescene`; the copy
+under `Phasma/Player/android/app/src/main/assets` has no `Models/Sponza`), so these
+Sponza smokes cannot run there until the fixture is restored. The usable 3D smoke
+scene is AgainstTheHero's `spud_fields_3d_v1.pescene` (build-ninja-physics points
+at that project); back up and restore its `Assets/Agent/agent_config.json` when
+enabling MCP for a run.
+
+Checked 2026-10-08: `build-ninja-physics` (MSVC) and `build-review-native` (clang,
+the pool's `engine-build` default) share the dependency build dirs under
+`.fetchcontent-ninja`. Building one after the other rebuilds every dependency, and a
+clang build after an MSVC one can stop with "cmake_pch.hxx has been modified since the
+precompiled header" (Jolt). Delete `.fetchcontent-ninja/joltphysics-build/CMakeFiles/Jolt.dir/*/cmake_pch.hxx.pch`
+and rebuild. The editor MCP port is fixed (8765): while another editor or player holds
+it, MCP-driven runs talk to that process, so check the port before launching one.
+
 The deeper behavior probes are opt-in rather than part of the default commit
 gate: `--play-lifecycle` drives editor start/pause/resume/stop over MCP,
 `--script-tests` runs the editor script test action and scans the log, and

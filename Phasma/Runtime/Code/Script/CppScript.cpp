@@ -13,6 +13,7 @@
 #include "Camera/Camera.h"
 #include "Navigation/NavScriptApi.h"
 #include "Particles/ParticleManager.h"
+#include "Render/FullscreenPasses.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Material.h"
@@ -1245,6 +1246,72 @@ namespace pe
                          return 1; });
                  }};
         navscript::Fill(m_api);
+        m_api.exposeNumber = [](void *ctx, const char *name, double fallback, const char *shownWhen) noexcept -> double
+        {
+            auto *self = static_cast<CppScriptSystem *>(ctx);
+            if (!name || !*name || !self->m_pipelineOwner || !self->pipelineExpose || !std::isfinite(fallback))
+                return fallback;
+            const double value = GuardApi([&]() -> double
+                                          { return self->pipelineExpose(name, fallback, shownWhen, false); });
+            return std::isfinite(value) ? value : fallback;
+        };
+        m_api.exposeBool = [](void *ctx, const char *name, uint32_t fallback, const char *shownWhen) noexcept -> uint32_t
+        {
+            auto *self = static_cast<CppScriptSystem *>(ctx);
+            if (!name || !*name || !self->m_pipelineOwner || !self->pipelineExpose)
+                return fallback ? 1u : 0u;
+            return GuardApi([&]() -> uint32_t
+                            { return self->pipelineExpose(name, fallback ? 1.0 : 0.0, shownWhen, true) != 0.0 ? 1u : 0u; });
+        };
+        m_api.exposeBase = [](void *ctx) noexcept
+        {
+            auto *self = static_cast<CppScriptSystem *>(ctx);
+            if (self->m_pipelineOwner && self->pipelineExposeBase)
+                GuardApi([&]() -> uint32_t
+                         {
+                    self->pipelineExposeBase();
+                    return 1; });
+        };
+    }
+
+    bool CppScriptSystem::HasModule() const
+    {
+        return m_module.Active() != nullptr;
+    }
+
+    bool CppScriptSystem::CreatePipeline(const std::string &name, const void *owner)
+    {
+        DestroyPipeline();
+        const auto *module = m_module.Active();
+        if (!module)
+            return false;
+        for (uint32_t i = 0; i < module->scriptCount; ++i)
+        {
+            const phasma::ScriptDesc &desc = module->scripts[i];
+            if (desc.kind != phasma::ScriptKind::Pipeline || !MatchesCppScript(name, desc.name, desc.sourceFile))
+                continue;
+            m_pipeline = {&desc};
+            m_pipeline.started = true;
+            m_pipelineOwner = owner;
+            uint32_t fault = 0;
+            if (!GuardedCreate(desc.create, &m_api, 0, &m_pipeline.state, &fault))
+            {
+                m_pipeline.failed = true;
+                m_pipeline.faulted = fault != 0;
+                ScriptError(desc.name, fault);
+            }
+            m_pipelineOwner = nullptr;
+            CloseScriptProfileScopes();
+            return true;
+        }
+        return false;
+    }
+
+    void CppScriptSystem::DestroyPipeline()
+    {
+        if (m_pipeline.script)
+            Stop(m_pipeline);
+        m_pipeline = {};
     }
 
     void CppScriptSystem::Stop(Instance &instance)
@@ -1268,6 +1335,7 @@ namespace pe
 
     void CppScriptSystem::Destroy()
     {
+        DestroyPipeline();
         ClearInstances();
         ClearFullscreenPasses();
         navscript::DestroyAll();
@@ -1279,138 +1347,32 @@ namespace pe
 
     uint32_t CppScriptSystem::AddFullscreenPass(const std::string &name, const phasma::FullscreenPass &cfg)
     {
-        FullscreenPassEntry &entry = m_fullscreenPasses[name];
-        // Re-added with another shader, or after its shader failed: rebuilt on next use.
-        if (entry.pass && (entry.failed || entry.shaderPath != cfg.shader))
-        {
-            RHII.WaitDeviceIdle();
-            delete entry.pass;
-            entry.pass = nullptr;
-        }
-        entry.failed = false;
-        entry.shaderPath = cfg.shader;
-        entry.thicknessAt1080 = cfg.thicknessAt1080;
-        entry.minThickness = cfg.minThickness;
-        std::memcpy(entry.params, cfg.params, sizeof(entry.params));
-
-        RegisterScriptRenderPass(
-            name, cfg.order,
-            [this, name](CommandBuffer *cmd)
-            {
-                auto it = m_fullscreenPasses.find(name);
-                if (it == m_fullscreenPasses.end() || it->second.failed)
-                    return;
-                // A shader that fails to load must not take the host down; Lua's protected call
-                // catches the same for render_graph passes.
-                try
-                {
-                    RecordFullscreenPass(name, it->second, cmd);
-                }
-                catch (const std::exception &error)
-                {
-                    it->second.failed = true;
-                    Log::Error("[CppScript] fullscreen pass '" + name + "' failed; pass disabled: " + error.what());
-                }
-            },
-            this);
+        FullscreenPassDesc desc;
+        desc.shader = cfg.shader;
+        desc.order = cfg.order;
+        desc.thicknessAt1080 = cfg.thicknessAt1080;
+        desc.minThickness = cfg.minThickness;
+        std::memcpy(desc.params, cfg.params, sizeof(desc.params));
+        pe::AddFullscreenPass(name, desc, m_pipelineOwner ? m_pipelineOwner : this);
         return 1;
-    }
-
-    void CppScriptSystem::RecordFullscreenPass(const std::string &name, FullscreenPassEntry &e, CommandBuffer *cmd)
-    {
-        // Resolved every frame: render targets are recreated on resize.
-        SceneRendererHost *host = GetActiveSceneRendererHost();
-        if (!host)
-            return;
-        Image *target = host->GetRenderTarget("viewport");
-        Image *depth = host->GetDepthStencilTarget("depthStencil");
-        Image *normal = host->GetRenderTarget("normal");
-        if (!target || !depth || !normal)
-            return;
-        if (!e.pass)
-        {
-            e.pass = new PassInfo();
-            e.pass->name = name;
-            e.pass->pVertShader = Shader::Create({.sourcePath = Path::ResolveAsset(e.shaderPath),
-                                                  .entryPoint = "mainVS",
-                                                  .stage = PE_SHADER_STAGE_VERTEX});
-            e.pass->pFragShader = Shader::Create({.sourcePath = Path::ResolveAsset(e.shaderPath),
-                                                  .entryPoint = "mainPS",
-                                                  .stage = PE_SHADER_STAGE_FRAGMENT});
-            e.pass->colorFormats = {target->GetFormat()};
-            e.pass->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
-            e.pass->cullMode = PE_CULL_MODE_NONE;
-            e.pass->depthTestEnable = false;
-            e.pass->depthWriteEnable = false;
-            e.pass->blendEnable = true;
-            e.pass->colorBlendAttachments = {BlendState::Default};
-            e.pass->Update();
-        }
-        const auto &descs = e.pass->GetDescriptors(RHII.GetFrameIndex());
-        if (descs.empty())
-            return;
-        Descriptor *desc = descs[0];
-        desc->SetImageView(0, depth->GetSRV(), depth->GetSampler());
-        desc->SetImageView(1, normal->GetSRV(), normal->GetSampler());
-        desc->Update();
-        ImageBarrierInfo depthBarrier{};
-        depthBarrier.image = depth;
-        depthBarrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        depthBarrier.stageFlags = PE_STAGE_FRAGMENT_SHADER;
-        depthBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
-        cmd->ImageBarrier(depthBarrier);
-        ImageBarrierInfo normalBarrier = depthBarrier;
-        normalBarrier.image = normal;
-        cmd->ImageBarrier(normalBarrier);
-        const float w = target->GetWidth_f(), h = target->GetHeight_f();
-        Attachment att{};
-        att.image = target;
-        att.loadOp = PE_LOAD_OP_LOAD;
-        att.storeOp = PE_STORE_OP_STORE;
-        cmd->BeginPass(1, &att, name);
-        cmd->BindPipeline(*e.pass);
-        cmd->SetViewport(0, 0, w, h, 0.0f, 1.0f);
-        cmd->SetScissor(0, 0, static_cast<uint32_t>(w), static_cast<uint32_t>(h));
-        Scene *scene = GetActiveScene();
-        Camera *camera = scene ? scene->GetActiveCamera() : nullptr;
-        const float nearPlane = camera ? camera->GetNearPlane() : 0.0f;
-        const float thickness = std::max(e.minThickness, e.thicknessAt1080 * h / 1080.0f);
-        cmd->SetConstantAt(0, vec4(1.0f / w, 1.0f / h, thickness, nearPlane));
-        cmd->SetConstantAt(4, vec4(e.params[0], e.params[1], e.params[2], e.params[3]));
-        cmd->PushConstants();
-        cmd->Draw(3, 1, 0, 0);
-        cmd->EndPass();
     }
 
     uint32_t CppScriptSystem::RemoveFullscreenPass(const std::string &name)
     {
-        auto it = m_fullscreenPasses.find(name);
-        if (it == m_fullscreenPasses.end())
-            return 0;
-        UnregisterScriptRenderPass(name);
-        RHII.WaitDeviceIdle();
-        delete it->second.pass;
-        m_fullscreenPasses.erase(it);
-        return 1;
+        return pe::RemoveFullscreenPass(name) ? 1 : 0;
     }
 
     void CppScriptSystem::ClearFullscreenPasses()
     {
-        if (m_fullscreenPasses.empty())
-            return;
-        ClearScriptRenderPasses(this);
-        RHII.WaitDeviceIdle();
-        for (auto &[name, entry] : m_fullscreenPasses)
-            delete entry.pass;
-        m_fullscreenPasses.clear();
+        pe::ClearFullscreenPasses(this);
     }
 
-    std::vector<std::string> CppScriptSystem::ListNodeScripts() const
+    std::vector<std::string> CppScriptSystem::ListScripts(phasma::ScriptKind kind) const
     {
         std::vector<std::string> names;
         if (const auto *module = m_module.Active())
             for (uint32_t i = 0; i < module->scriptCount; ++i)
-                if (module->scripts[i].kind == phasma::ScriptKind::Node)
+                if (module->scripts[i].kind == kind)
                     names.emplace_back(module->scripts[i].name);
         return names;
     }
@@ -1537,8 +1499,10 @@ namespace pe
         const auto status = m_module.Status();
         if (loaded)
         {
+            DestroyPipeline(); // with its module still loaded; ScriptSystem creates it again from the new one
             ClearInstances();
             m_module.Commit();
+            ++m_moduleLoads;
             m_sceneGeneration = UINT32_MAX;
             Log::Info(status.liveReload && liveReload ? "[CppScript] module reloaded; private script state reset" : "[CppScript] module loaded");
         }

@@ -47,7 +47,6 @@ TexSamplerDecl(6, 0, Emission)
     uint        cb_ssr;
     uint        cb_IBL;
     float       cb_IBL_intensity;
-    float       cb_lightsIntensity;
     uint        cb_shadows;
     uint        cb_use_Disney_PBR;
     uint        cb_orthographicCamera;
@@ -56,9 +55,6 @@ TexSamplerDecl(6, 0, Emission)
     uint        cb_forwardPlus;
     float       cb_fogDensity; // 0 = fog off
     float       cb_fogStart;
-    float       cb_fogPad0;
-    float       cb_fogPad1;
-    float       cb_fogPad2;
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)
@@ -365,7 +361,7 @@ float3 ComputePointLight(int lightIndex, Material material, float3 worldPos, flo
     }
     float3 lightDir         = normalize(-lightDirFull);
     float3 pointColor       = light.color.xyz * attenuation; // color is .xyz
-    pointColor              *= light.color.w * cb_lightsIntensity; // intensity is .w
+    pointColor              *= light.color.w; // intensity is .w
 
     float roughness = max(material.roughness, 0.04);
 
@@ -445,7 +441,7 @@ float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, floa
     attenuation             *= attenuation;
 
     float3 spotColor = light.color.xyz * attenuation * spotIntensity;
-    spotColor       *= light.color.w * cb_lightsIntensity; // intensity is .w
+    spotColor       *= light.color.w; // intensity is .w
 
     float roughness = max(material.roughness, 0.04);
     float3 V = normalize(cameraPos - worldPos);
@@ -561,7 +557,7 @@ float3 ComputeAreaLight(int lightIndex, Material material, float3 worldPos, floa
     float lightOutputCos = dot(-L, lightForward);
     if (lightOutputCos <= 0.0) return 0.0;
 
-    float3 areaColor = light.color.xyz * light.color.w * cb_lightsIntensity * attenuation * lightOutputCos;
+    float3 areaColor = light.color.xyz * light.color.w * attenuation * lightOutputCos;
 
     // Standard PBR ...
     float roughness = max(material.roughness, 0.04);

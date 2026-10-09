@@ -84,14 +84,14 @@ struct Vertex
     float4x4 cb_invView;
     float4x4 cb_invProj;
     float4 cb_camPos;
-    float cb_lightsIntensity;
     uint cb_shadows;
     uint cb_use_Disney_PBR;
     float cb_iblIntensity;
     uint cb_IBL;
     uint cb_renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
     uint cb_orthographicCamera;
-    uint cb_rtPassPad;
+    uint cb_rtPassPad0;
+    uint cb_rtPassPad1;
 };
 
 // Set 2
@@ -385,7 +385,7 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     float NoL_clamped = clamp(NoL_raw, 0.001, 1.0);
     float HoV = clamp(dot(H, V), 0.001, 1.0);
 
-    float intensity = light.color.w * cb_lightsIntensity;
+    float intensity = light.color.w;
 
     float3 specularFresnel = Fresnel(F0, HoV);
 
@@ -447,7 +447,7 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     // Shadow
     float shadow = TraceShadowRay(worldPos, L, dist);
 
-    float intensity = light.color.w * cb_lightsIntensity; // intensity is .w
+    float intensity = light.color.w; // intensity is .w
 
     // PBR calc
     float3 H = normalize(V + L);
@@ -564,7 +564,7 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
     // Shadow (using L to target point)
     float shadow = TraceShadowRay(worldPos, L, distToTarget);
 
-    float3 areaColor = light.color.xyz * light.color.w * cb_lightsIntensity * attenuation * lightOutputCos;
+    float3 areaColor = light.color.xyz * light.color.w * attenuation * lightOutputCos;
 
     // Standard PBR ...
     float3 H = normalize(V + L);

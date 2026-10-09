@@ -71,6 +71,7 @@ namespace pe
         void SetPassDeferred(SceneRenderGraphPassId passId, bool deferred);
         bool IsPassDeferred(SceneRenderGraphPassId passId) const;
         void AddScenePassesToRenderGraph();
+        bool NeedsRenderGraphOrderRebuild() const { return m_renderPassOrdersRevision != Settings::Get<SceneSettings>().render_pass_orders_revision; }
         void UpdateRenderPassComponents();
         void SetRenderPassScene(Scene &scene);
         void ExecuteRenderGraph(CommandBuffer *cmd);
@@ -98,6 +99,7 @@ namespace pe
         void InitEnabledRenderPassComponents(CommandBuffer *cmd);
 
         RenderGraph m_renderGraph;
+        uint64_t m_renderPassOrdersRevision = 0;
         RenderGraph m_deferredRenderGraph;
         Image *m_displayRT = nullptr;
         Image *m_frameDisplayOverride = nullptr;

@@ -81,7 +81,6 @@ namespace pe
         {"color_grading_contrast", &SceneSettings::color_grading_contrast},
         {"color_grading_intensity", &SceneSettings::color_grading_intensity},
         {"IBL_intensity", &SceneSettings::IBL_intensity},
-        {"lights_intensity", &SceneSettings::lights_intensity},
         {"time_scale", &SceneSettings::time_scale},
         {"shadow_distance", &SceneSettings::shadow_distance},
         {"shadow_cascade_lambda", &SceneSettings::shadow_cascade_lambda},
@@ -135,12 +134,40 @@ namespace pe
         return true;
     }
 
+    // The array settings, one number per element (lod_distances, depth_bias).
+    static float *ArraySetting(SceneSettings &gs, std::string_view name)
+    {
+        if (name == "lod_distance_1" || name == "lod_distance_2" || name == "lod_distance_3")
+            return &gs.lod_distances[name.back() - '1'];
+        if (name == "depth_bias_constant")
+            return &gs.depth_bias[0];
+        if (name == "depth_bias_clamp")
+            return &gs.depth_bias[1];
+        if (name == "depth_bias_slope")
+            return &gs.depth_bias[2];
+        return nullptr;
+    }
+
+    std::string *SceneSettingString(std::string_view name)
+    {
+        auto &gs = Settings::Get<SceneSettings>();
+        if (name == "normal_format")
+            return &gs.normal_format;
+        if (name == "velocity_format")
+            return &gs.velocity_format;
+        if (name == "color_grading_mask")
+            return &gs.color_grading_mask;
+        return nullptr;
+    }
+
     bool GetSceneSettingNumber(std::string_view name, double &value)
     {
         if (UiReferenceSetting(name, nullptr, value))
             return true;
-        const auto &gs = Settings::Get<SceneSettings>();
-        if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
+        auto &gs = Settings::Get<SceneSettings>();
+        if (const float *element = ArraySetting(gs, name))
+            value = *element;
+        else if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
             value = gs.*(it->second) ? 1.0 : 0.0;
         else if (const auto it = s_floatSettings.find(name); it != s_floatSettings.end())
             value = gs.*(it->second);
@@ -160,7 +187,9 @@ namespace pe
         if (double applied = 0.0; UiReferenceSetting(name, &value, applied))
             return true;
         auto &gs = Settings::Get<SceneSettings>();
-        if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
+        if (float *element = ArraySetting(gs, name))
+            *element = static_cast<float>(value);
+        else if (const auto it = s_boolSettings.find(name); it != s_boolSettings.end())
             gs.*(it->second) = value != 0.0;
         else if (const auto it = s_floatSettings.find(name); it != s_floatSettings.end())
             gs.*(it->second) = name == "render_scale" ? ClampRenderScale(static_cast<float>(value)) : static_cast<float>(value);

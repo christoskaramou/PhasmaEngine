@@ -80,7 +80,11 @@ namespace pe
 
     void TonemapPass::DeclareInputs(RGBuilder &builder)
     {
-        builder.Read(m_sceneColor);
+        // LDR copies the scene colour (it is the display target) and samples the copy.
+        if (SceneUsesHDR())
+            builder.Read(m_sceneColor);
+        else
+            builder.Barrier(m_sceneColor, PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_READ);
     }
 
     void TonemapPass::DeclareOutputs(RGBuilder &builder)

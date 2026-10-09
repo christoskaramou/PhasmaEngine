@@ -30,6 +30,7 @@ namespace pe
         void CreateUniforms(CommandBuffer *cmd) override {};
         void UpdateDescriptorSets() override { m_lastGeometryVersion = ~0ull; }
         void Update() override;
+        void DeclareInputs(RGBuilder &builder) override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
@@ -83,6 +84,7 @@ namespace pe
         void CreateUniforms(CommandBuffer *cmd) override {};
         void UpdateDescriptorSets() override { m_lastGeometryVersion = ~0ull; }
         void Update() override;
+        void DeclareInputs(RGBuilder &builder) override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;

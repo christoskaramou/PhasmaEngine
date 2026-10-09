@@ -20,10 +20,11 @@ namespace pe
         {
             if (!att.image)
                 continue;
+            const bool loads = att.loadOp == PE_LOAD_OP_LOAD;
             if (::PeFormatHasDepth(att.image->GetFormat()))
-                builder.OutputDepth(att.image);
+                builder.OutputDepth(att.image, loads);
             else
-                builder.OutputColor(att.image);
+                builder.OutputColor(att.image, loads);
         }
     }
 } // namespace pe

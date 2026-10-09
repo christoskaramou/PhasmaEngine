@@ -10,7 +10,6 @@ namespace pe
         constexpr int kMaxNeighbours = 10; // the nearest ones only
         constexpr float kFloorGap = 2.0f;  // members further apart in height are on different floors
         constexpr float kEpsilon = 1e-5f;
-        constexpr int kMaxStepsPerUpdate = 6; // a 0.1 s frame (10 fps) still runs in real time
         // Avoid as if 10% wider: packed tight, three-way squeezes and wall clamps leave a few cm of overlap at the
         // true radii; the margin absorbs it without any push.
         constexpr float kAvoidMargin = 1.1f;
@@ -448,10 +447,11 @@ namespace pe
                      {
                          const float margin = (m.radius + o.radius) * kAvoidMargin, reach = margin * kSettleReach;
                          clear = d2 >= margin * margin;
-                         // Support: swarm members holding for the target, not stopped crowd agents.
+                         // Support: swarm members holding for the target, not stopped crowd agents, nor a body standing
+                         // on the target (a game's hero): there it walks on to its stop line, which may lie inside reach.
+                         const float held = glm::distance(Flat(o.pos), Flat(target));
                          support = support || (o.crowdAgent < 0 && (o.anchored || o.settled) && d2 < reach * reach &&
-                                               glm::dot(d, m.pref) > 0.0f &&
-                                               glm::distance(Flat(o.pos), Flat(target)) < toTarget);
+                                               glm::dot(d, m.pref) > 0.0f && held >= margin && held < toTarget);
                          return clear;
                      });
                 settles[i] = support && clear;
@@ -607,8 +607,11 @@ namespace pe
                         const Member &o = members[j];
                         const vec2 delta = Flat(o.pos) - p;
                         const float radius = (m.radius + o.radius) * kAvoidMargin;
+                        // Never round a body standing on the target (a game's hero): passing it gets no nearer, and
+                        // the member would slide round it at full speed instead of stopping at its stop line.
                         if (o.Holds() && d2 > kEpsilon && glm::dot(optimal, delta) > 0.0f &&
-                            std::abs(Det(glm::normalize(optimal), delta)) < radius)
+                            std::abs(Det(glm::normalize(optimal), delta)) < radius &&
+                            glm::distance(Flat(o.pos), Flat(target)) >= radius)
                         {
                             // ponytail: local tangential preference for held bodies; replan around dynamic obstacles
                             // if a crowd blocks an entire passage. ORCA alone can choose zero dead ahead. Pass on the
@@ -863,15 +866,15 @@ namespace pe
             s.stats.stepMs = 0.0f;
             return 0;
         }
-        s.carry += std::min(dt, kStep * kMaxStepsPerUpdate);
+        s.carry += std::min(dt, kStep * kNavMaxStepsPerUpdate);
         const auto started = std::chrono::steady_clock::now();
-        while (s.carry >= kStep && s.stats.steps < kMaxStepsPerUpdate)
+        while (s.carry >= kStep && s.stats.steps < kNavMaxStepsPerUpdate)
         {
             s.Step(c);
             s.carry -= kStep;
             ++s.stats.steps;
         }
-        if (s.stats.steps == kMaxStepsPerUpdate)
+        if (s.stats.steps == kNavMaxStepsPerUpdate)
             s.carry = std::min(s.carry, kStep); // a hitch: drop the backlog instead of spiralling
         if (c)
             c->alpha = s.carry / kStep; // the crowd took these steps too

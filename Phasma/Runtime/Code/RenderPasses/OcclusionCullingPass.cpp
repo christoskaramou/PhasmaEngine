@@ -96,6 +96,8 @@ namespace pe
         // Order this cull after the depth-pyramid build (250) wrote the pyramid.
         if (m_pyramid)
             builder.ReadCompute(m_pyramid);
+        if (Scene *scene = GetActiveScene())
+            builder.WriteBuffer(scene->GetOccCountersB(RHII.GetFrameIndex()));
     }
 
     void OcclusionCullingPass::ExecutePass(CommandBuffer *cmd)

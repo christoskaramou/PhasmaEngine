@@ -1,8 +1,11 @@
 #include "CullPhase1Pass.h"
 #include "API/Command.h"
 #include "API/Pipeline.h"
+#include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 
 namespace pe
 {
@@ -25,6 +28,12 @@ namespace pe
             m_passInfo->pCompShader = oldComp;
             throw;
         }
+    }
+
+    void CullPhase1Pass::DeclareInputs(RGBuilder &builder)
+    {
+        if (Scene *scene = GetActiveScene())
+            builder.WriteBuffer(scene->GetOccCountersA(RHII.GetFrameIndex()));
     }
 
     void CullPhase1Pass::ExecutePass(CommandBuffer *cmd)

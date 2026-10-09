@@ -6,10 +6,21 @@ namespace pe
     {
         std::vector<ScriptRenderPass> s_scriptRenderPasses;
         uint64_t s_scriptRenderPassesRevision = 0;
+        const void *s_luaRenderPassOwner = nullptr;
     } // namespace
 
+    void SetLuaRenderPassOwner(const void *owner)
+    {
+        s_luaRenderPassOwner = owner;
+    }
+
+    const void *GetLuaRenderPassOwner()
+    {
+        return s_luaRenderPassOwner;
+    }
+
     void RegisterScriptRenderPass(const std::string &name, uint32_t order, std::function<void(CommandBuffer *)> execute,
-                                  const void *owner)
+                                  const void *owner, std::vector<std::string> reads, std::vector<std::string> writes)
     {
         for (auto &pass : s_scriptRenderPasses)
         {
@@ -18,11 +29,13 @@ namespace pe
                 pass.order = order;
                 pass.execute = std::move(execute);
                 pass.owner = owner;
+                pass.reads = std::move(reads);
+                pass.writes = std::move(writes);
                 s_scriptRenderPassesRevision++;
                 return;
             }
         }
-        s_scriptRenderPasses.push_back({name, order, std::move(execute), owner});
+        s_scriptRenderPasses.push_back({name, order, std::move(execute), owner, std::move(reads), std::move(writes)});
         s_scriptRenderPassesRevision++;
     }
 

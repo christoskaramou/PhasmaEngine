@@ -13,14 +13,13 @@ namespace pe
         mat4 invView;
         mat4 invProj;
         vec4 camPos;
-        float lights_intensity;
         uint32_t shadows;
         uint32_t use_Disney_PBR;
         float ibl_intensity;
         uint32_t IBL;
         uint32_t renderMode; // 0=Raster, 1=Hybrid, 2=RayTracing
         uint32_t orthographicCamera;
-        uint32_t padding; // Alignment padding
+        uint32_t padding[2]; // Alignment padding
     };
 
     class RayTracingPass : public IRenderPassComponent

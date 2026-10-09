@@ -7,8 +7,11 @@ namespace pe
     // Lua settings.get / settings.set on the bool and number keys, a bool as 0 or 1 (the native script view);
     // false for any other key or a non-finite value. render_scale is clamped like rhi.set_render_scale.
     // ui_reference_width / ui_reference_height reach RuntimeUiSystem::SetReferenceSurface (0 = off).
+    // Also lod_distance_1..3 and depth_bias_constant / _clamp / _slope, one array element each.
     [[nodiscard]] bool GetSceneSettingNumber(std::string_view name, double &value);
     bool SetSceneSettingNumber(std::string_view name, double value);
+    // normal_format, velocity_format, color_grading_mask; nullptr for any other name.
+    [[nodiscard]] std::string *SceneSettingString(std::string_view name);
     // rhi.change_present_mode: a surface without the mode falls back; returns the mode in effect (none without
     // a surface).
     std::optional<PePresentMode> RequestPresentModeChange(PePresentMode mode);

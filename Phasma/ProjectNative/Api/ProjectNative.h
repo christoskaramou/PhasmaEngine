@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 27;
+    inline constexpr uint32_t ScriptAbiVersion = 28;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -189,7 +189,10 @@ namespace phasma
     enum class ScriptKind : uint32_t
     {
         Global,
-        Node
+        Node,
+        // v28: a scene pipeline script, run only when a scene names it (pipeline_script "cpp:<name>"): created at scene
+        // load in edit and play mode and again after one of its own values changes; Update is never called.
+        Pipeline
     };
     enum class ScriptMode : uint32_t
     {
@@ -376,6 +379,14 @@ namespace phasma
         uint32_t (*navUpdate)(void *, uint32_t swarm, float dt) noexcept;
         uint32_t (*navGet)(void *, uint32_t swarm, int32_t member, Vec3 *position, Vec3 *velocity, Vec3 *drawn,
                            uint32_t *anchored) noexcept;
+        // v28: a pipeline script's values (ScriptKind::Pipeline), as Lua's exposed {} / exposed_when {} / pipeline.base().
+        // exposeNumber / exposeBool show a value in Scene Settings > Pipeline (shownWhen: a bool value that hides it while
+        // off, or null) and return its current value: the scene setting of that name, the scene's saved value, or the
+        // default. exposeBase shows the engine default pipeline's values. Fullscreen passes a pipeline adds belong to it
+        // and outlive Play Stop. Outside a pipeline's create these return the default and show nothing.
+        double (*exposeNumber)(void *, const char *name, double defaultValue, const char *shownWhen) noexcept;
+        uint32_t (*exposeBool)(void *, const char *name, uint32_t defaultValue, const char *shownWhen) noexcept;
+        void (*exposeBase)(void *) noexcept;
     };
     struct ScriptDesc
     {
@@ -506,6 +517,9 @@ namespace phasma
         }
         bool SetRenderType(Node node, const char *type) const { return m_api.setRenderType(m_api.context, node, type) != 0; }
         bool AddFullscreenPass(const char *name, const FullscreenPass &pass) const { return m_api.addFullscreenPass(m_api.context, name, &pass) != 0; }
+        double ExposeNumber(const char *name, double fallback, const char *shownWhen = nullptr) const { return m_api.exposeNumber(m_api.context, name, fallback, shownWhen); }
+        bool ExposeBool(const char *name, bool fallback, const char *shownWhen = nullptr) const { return m_api.exposeBool(m_api.context, name, fallback ? 1u : 0u, shownWhen) != 0; }
+        void ExposeBase() const { m_api.exposeBase(m_api.context); }
         bool RemoveFullscreenPass(const char *name) const { return m_api.removeFullscreenPass(m_api.context, name) != 0; }
         bool SetVolume(AudioBus bus, float value) const { return m_api.setVolume(m_api.context, bus, value) != 0; }
         bool GetVolume(AudioBus bus, float &value) const { return m_api.getVolume(m_api.context, bus, &value) != 0; }

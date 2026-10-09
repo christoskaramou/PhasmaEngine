@@ -9,6 +9,7 @@
 #include "Camera/Camera.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 
 namespace pe
 {
@@ -136,6 +137,9 @@ namespace pe
         // Read last frame's voxel pyramid (WRITE->READ barrier). Only when it actually feeds the cull.
         if (VoxelOcclusionActive())
             builder.ReadCompute(m_voxelHiZ);
+        // The frustum draw lists; their consumers read this counters buffer.
+        if (Scene *scene = GetActiveScene())
+            builder.WriteBuffer(scene->GetCullingCountersBuffer(RHII.GetFrameIndex()));
     }
 
     void CullingPass::ExecutePass(CommandBuffer *cmd)

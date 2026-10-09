@@ -16,6 +16,7 @@ namespace pe
     inline constexpr float kNavExtents[3] = {2.0f, 4.0f, 2.0f}; // how far off the mesh a query point may lie
     inline constexpr float kNavMaxCoordinate = 1e6f;
     inline constexpr float kNavMaxSpeed = 1e4f;
+    inline constexpr int kNavMaxStepsPerUpdate = 6; // fixed steps per update: a 0.1 s frame (10 fps) still runs in real time
 
     inline bool ValidNavPoint(const vec3 &p)
     {
@@ -52,10 +53,10 @@ namespace pe
     {
         const NavMesh::Impl *nav = nullptr;
         dtCrowd *crowd = nullptr;
-        // For GetInterpolated: where each agent stood before its last step, and the share of a step since then that
-        // is not yet simulated (a swarm's fixed steps; 1 when the crowd steps on the frame delta itself).
+        // For GetInterpolated: where each agent stood before its last fixed step, and the share of a step since then
+        // that is not yet simulated (its own steps, or a swarm's when one steps it).
         vec3 previous[NavCrowd::kMaxAgents] = {};
-        float alpha = 1.0f;
+        float alpha = 1.0f, carry = 0.0f;
 
         ~Impl() { dtFreeCrowd(crowd); }
     };

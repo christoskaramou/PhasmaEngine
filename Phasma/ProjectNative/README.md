@@ -110,7 +110,9 @@ normal at binding 1); the pass resolves its render targets every frame (resize-s
 once they exist. Passes are torn down (with a device-idle wait, like the Lua `render_graph.remove_pass` +
 `rhi.wait_device_idle()` stop sequence) on Play Stop and on native module unload, so a script can never
 leak one past its own lifetime. Re-adding a name with another shader rebuilds the pass; a Lua reload
-keeps it (Lua's `render_graph.has_pass(name)` sees it).
+keeps it (Lua's `render_graph.has_pass(name)` sees it). A scene's pipeline script adds the same kind of pass with
+Lua's `render_graph.add_fullscreen_pass` (the code is shared: `Render/FullscreenPasses.cpp`), and its passes also draw
+while editing; prefer that for passes a scene always has.
 
 ABI 13 adds `SetVolume(AudioBus, value)` / `GetVolume(AudioBus, value)` over the four buses Lua's
 `audio.set_master_volume` / `set_music_volume` / `set_sfx_volume` / `set_ambient_volume` drive, so a C++
@@ -166,6 +168,14 @@ Names are interned on first use; an end without a begin is ignored, and scopes l
 
 ABI 26 adds `SetTransform(node, position, eulerDegrees)`: the transform `SetPosition` then `SetRotation` leave,
 bit for bit, with one node lookup and one transform update, for code that moves a crowd every frame.
+
+ABI 28 adds scene pipeline scripts: `ScriptKind::Pipeline` (register with `PHASMA_PIPELINE_SCRIPT(Type)`), run only
+when a scene's `pipeline_script` names it as `cpp:Type`. The engine constructs it at scene load in the editor and the
+player, in edit and play mode, and again after one of its own values changes in Scene Settings > Pipeline; `Update`
+is never called. `ExposeNumber(name, default, shownWhen)` / `ExposeBool(...)` show a value in the Pipeline panel and
+return its current value (the scene setting of that name, the scene's saved value, or the default); `ExposeBase()`
+shows the engine default pipeline's values. Fullscreen passes it adds belong to the pipeline and survive Play Stop.
+The Lua equivalent is a `.lua` pipeline script (`exposed {}`, `exposed_when {}`, `pipeline.base()`).
 
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are

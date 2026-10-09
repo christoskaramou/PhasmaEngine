@@ -143,7 +143,7 @@ namespace pe
         Hash inputs(static_cast<size_t>(scene->GetGiInputVersion()));
         inputs.Combine(static_cast<size_t>(scene->GetGeometryVersion()));
         const auto &pp = ActivePostProcessProfile();
-        for (float value : {pp.IBL ? 1.f : 0.f, pp.IBL_intensity * ActivePostProcessBlend().IBL, settings.lights_intensity,
+        for (float value : {pp.IBL ? 1.f : 0.f, pp.IBL_intensity * ActivePostProcessBlend().IBL,
                             settings.shadows ? 1.f : 0.f, settings.use_Disney_PBR ? 1.f : 0.f})
             inputs.Combine(value);
         const bool restart = static_cast<size_t>(inputs) != m_historyInputs;

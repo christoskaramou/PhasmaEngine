@@ -36,6 +36,7 @@ namespace pe
         void SetRuntimeSettingsForced(bool forced) { m_forceRuntimeSettings = forced; }
 
         Scene &GetScene() override { return m_scene; }
+        const RenderGraph &GetRenderGraph() const { return m_sceneRenderer.GetRenderGraph(); }
         const SkyBox &GetSkyBox() const override { return m_sceneRenderer.GetSkyBox(); }
         Image *GetIBL_LUT() const override { return m_sceneRenderer.GetIBL_LUT(); }
         void ReloadSkyFromSettings() override { m_sceneRenderer.ReloadSkyFromSettings(); }

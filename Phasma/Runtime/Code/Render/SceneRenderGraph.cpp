@@ -2,6 +2,7 @@
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "Render/SceneRenderTargets.h"
+#include "Render/ScriptRenderPasses.h"
 #include "RenderPasses/AabbsPass.h"
 #include "RenderPasses/BloomPass.h"
 #include "RenderPasses/CullPhase1Pass.h"
@@ -210,6 +211,37 @@ namespace pe
         }
     } // namespace
 
+    std::string SceneRenderGraphPassOrderKey(RenderGraph::PassID passId, const std::string &name)
+    {
+        return passId >= kScriptRenderPassIdBase ? "script:" + name : name;
+    }
+
+    uint32_t GetSceneRenderGraphPassOrder(RenderGraph::PassID passId, const std::string &name, uint32_t defaultOrder)
+    {
+        const auto &orders = Settings::Get<SceneSettings>().render_pass_orders;
+        const auto it = orders.find(SceneRenderGraphPassOrderKey(passId, name));
+        return it != orders.end() ? it->second : defaultOrder;
+    }
+
+    uint32_t DefaultSceneRenderGraphPassOrder(SceneRenderGraphPassId passId)
+    {
+        if (!SceneUsesHDR())
+        {
+            if (passId == SceneRenderGraphPassId::Tonemap)
+                return 1600;
+            if (passId == SceneRenderGraphPassId::Sharpen)
+                return 1400;
+            if (passId == SceneRenderGraphPassId::FXAA)
+                return 1100;
+            if (passId == SceneRenderGraphPassId::ColorGrading)
+                return 1950;
+        }
+        for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
+            if (desc.id == passId)
+                return desc.order;
+        return 0;
+    }
+
     void AddSceneRenderGraphPasses(RenderGraph &renderGraph,
                                    const SceneRenderGraphPassComponents &components,
                                    SceneRenderGraphPassCondition isPassEnabled)
@@ -220,20 +252,9 @@ namespace pe
             {
                 return isPassEnabled(passId);
             };
-            uint32_t order = desc.order;
-            if (!SceneUsesHDR())
-            {
-                if (desc.id == SceneRenderGraphPassId::Tonemap)
-                    order = 1600;
-                if (desc.id == SceneRenderGraphPassId::Sharpen)
-                    order = 1400;
-                if (desc.id == SceneRenderGraphPassId::FXAA)
-                    order = 1100;
-                if (desc.id == SceneRenderGraphPassId::ColorGrading)
-                    order = 1950;
-            }
             renderGraph.AddPass(static_cast<RenderGraph::PassID>(desc.id),
-                                order,
+                                GetSceneRenderGraphPassOrder(static_cast<RenderGraph::PassID>(desc.id), desc.name,
+                                                             DefaultSceneRenderGraphPassOrder(desc.id)),
                                 desc.name,
                                 condition,
                                 components.*desc.component);

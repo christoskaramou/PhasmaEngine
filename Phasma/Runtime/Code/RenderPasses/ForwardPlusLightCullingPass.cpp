@@ -5,6 +5,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Render/SceneRendererHost.h"
@@ -129,6 +130,11 @@ namespace pe
         range.size = sizeof(m_ubo);
         range.offset = 0;
         m_uniforms[frame]->Copy(1, &range, false);
+    }
+
+    void ForwardPlusLightCullingPass::DeclareInputs(RGBuilder &builder)
+    {
+        builder.WriteBuffer(GetTileLightData(RHII.GetFrameIndex()));
     }
 
     void ForwardPlusLightCullingPass::ExecutePass(CommandBuffer *cmd)

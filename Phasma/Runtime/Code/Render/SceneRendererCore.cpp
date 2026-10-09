@@ -7,6 +7,7 @@
 #include "Render/RenderPassShaderReload.h"
 #include "Render/SceneScreenshot.h"
 #include "Render/SceneSky.h"
+#include "Render/SceneRendererHost.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/MaterialReflection.h"
 #include "Scene/Scene.h"
@@ -186,6 +187,7 @@ namespace pe
 
     void SceneRendererCore::AddScenePassesToRenderGraph()
     {
+        m_renderPassOrdersRevision = Settings::Get<SceneSettings>().render_pass_orders_revision;
         AddSceneRenderGraphPasses(m_renderGraph,
                                   m_scenePasses,
                                   [this](SceneRenderGraphPassId passId)
@@ -199,7 +201,8 @@ namespace pe
                                   m_scenePasses,
                                   [this](SceneRenderGraphPassId passId)
                                   { return IsPassEnabled(passId) && IsPassDeferred(passId); });
-        m_deferredRenderGraph.Compile();
+        // Its images come from the main graph, so its reads and loads have no writer here: nothing to report.
+        m_deferredRenderGraph.Compile(false);
 
         // Script-registered passes (render_graph.add_pass): inserted by order among
         // the built-in passes; RenderGraph::Compile sorts them into place. The graph
@@ -207,15 +210,69 @@ namespace pe
         // registry, so script reloads can release Lua state safely; a stale graph
         // entry resolves to nothing and no-ops until the next rebuild.
         const std::vector<ScriptRenderPass> &scriptPasses = GetScriptRenderPasses();
+        auto scriptDefaultOrder = [&](size_t i)
+        {
+            return scriptPasses[i].order == kScriptRenderPassUnplacedOrder ? kScriptRenderPassUnplacedOrder + static_cast<uint32_t>(i) * 10u
+                                                                           : scriptPasses[i].order;
+        };
         for (size_t i = 0; i < scriptPasses.size(); i++)
         {
             std::string passName = scriptPasses[i].name;
-            m_renderGraph.AddPass(static_cast<RenderGraph::PassID>(kScriptRenderPassIdBase + i), scriptPasses[i].order, passName, []()
+            const auto passId = static_cast<RenderGraph::PassID>(kScriptRenderPassIdBase + i);
+            std::function<void(RGBuilder &)> declare;
+            if (!scriptPasses[i].reads.empty() || !scriptPasses[i].writes.empty())
+            {
+                declare = [reads = scriptPasses[i].reads, writes = scriptPasses[i].writes](RGBuilder &builder)
+                {
+                    SceneRendererHost *host = GetActiveSceneRendererHost();
+                    if (!host)
+                        return;
+                    const auto image = [host](const std::string &name)
+                    {
+                        Image *found = host->GetRenderTarget(name);
+                        return found ? found : host->GetDepthStencilTarget(name);
+                    };
+                    for (const std::string &name : reads)
+                        builder.Read(image(name));
+                    for (const std::string &name : writes)
+                    {
+                        if (Image *target = image(name); target && PeFormatHasDepth(target->GetFormat()))
+                            builder.OutputDepth(target, true);
+                        else
+                            builder.OutputColor(target, true);
+                    }
+                };
+            }
+            m_renderGraph.AddPass(passId, GetSceneRenderGraphPassOrder(passId, passName, scriptDefaultOrder(i)), passName, []()
                                   { return true; }, [passName](CommandBuffer *cmd)
                                   {
                                       const ScriptRenderPass *pass = FindScriptRenderPass(passName);
                                       if (pass && pass->execute)
-                                          pass->execute(cmd); });
+                                          pass->execute(cmd); }, std::move(declare));
+        }
+
+        // Saved sort numbers that break the frame (a read before its writer, a column clash) render with the default
+        // order instead; the saved numbers are kept. Build time only, and only when the pipeline overrides orders.
+        if (!Settings::Get<SceneSettings>().render_pass_orders.empty())
+        {
+            std::unordered_map<RenderGraph::PassID, uint32_t> defaults;
+            std::unordered_map<RenderGraph::PassID, uint32_t> saved;
+            for (const RenderGraph::Pass &pass : m_renderGraph.GetPasses())
+            {
+                saved[pass.id] = pass.order;
+                defaults[pass.id] = pass.id >= kScriptRenderPassIdBase
+                                        ? scriptDefaultOrder(pass.id - kScriptRenderPassIdBase)
+                                        : DefaultSceneRenderGraphPassOrder(static_cast<SceneRenderGraphPassId>(pass.id));
+            }
+            RenderGraph atDefaults = m_renderGraph;
+            atDefaults.SetPassOrders(defaults);
+            if (const auto added = atDefaults.NewProblems(saved); !added.empty())
+            {
+                PE_WARN("[Pipeline] Saved pass order is not valid (%s); rendering with the default order", added.front().text.c_str());
+                m_renderGraph.SetPassOrders(defaults);
+                m_deferredRenderGraph.SetPassOrders(defaults);
+                m_deferredRenderGraph.Compile(false);
+            }
         }
     }
 

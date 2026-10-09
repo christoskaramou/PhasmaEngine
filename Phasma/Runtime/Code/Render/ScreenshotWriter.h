@@ -2,7 +2,6 @@
 
 #include "API/RHITypes.h"
 
-
 namespace pe
 {
     struct ScreenshotWriteDesc

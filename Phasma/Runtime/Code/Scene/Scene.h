@@ -1096,4 +1096,8 @@ namespace pe
     };
 
     SceneDigest ComputeSceneDigest(Scene &scene);
+
+    // Pipeline assets (.pepipeline, Assets-relative paths): the render path, pass toggles and orders
+    // and the default post-process profile, in the keys a scene's inline settings use. Load applies the
+    // asset to SceneSettings and makes it the scene's pipeline; Save writes the given settings.
 } // namespace pe

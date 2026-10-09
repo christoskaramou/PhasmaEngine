@@ -162,7 +162,8 @@ go idle before deleting a pass's shaders, exactly like the Lua stop sequence's `
 `destroy_pass_info(pass)`. Script passes carry an owner in the shared registry
 ([ScriptRenderPasses.h](../../../../Phasma/Runtime/Code/Render/ScriptRenderPasses.h)): the Lua system's
 teardown clears only Lua's, so a Lua reload keeps the C++ scripts' passes (before 2026-09-27 it cleared
-all of them). A pass whose shader fails to load logs one `[CppScript] fullscreen pass ... failed; pass disabled` error and stays off until re-added, instead of throwing out of the render graph (the editor died on it before 2026-09-27). `ApiProbe` bit 27 adds a pass with a real shader
+all of them). The shared fullscreen-pass code lives in `Render/FullscreenPasses.cpp` since 2026-10-09; Lua's
+`render_graph.add_fullscreen_pass` and the scene pipeline script ([rendering.md](../rendering.md)) use it too. A pass whose shader fails to load logs one `[Render] fullscreen pass ... failed; pass disabled` error and stays off until re-added, instead of throwing out of the render graph (the editor died on it before 2026-09-27). `ApiProbe` bit 27 adds a pass with a real shader
 ([FullscreenTest.hlsl](../../../../tools/tests/native-scripts/FullscreenTest.hlsl), copied into the project
 Assets by the smoke, never shipped) and rejects a null name/shader and a NaN param; the pass draws until
 stage 2, across a Lua reload the smoke checks with `render_graph.has_pass`, and bit 28 removes it and

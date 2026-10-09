@@ -5,6 +5,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Scene/PassInfoAsset.h"
@@ -351,6 +352,21 @@ namespace pe
     {
     }
 
+    void GbufferOpaquePass::DeclareInputs(RGBuilder &builder)
+    {
+        Scene *scene = GetActiveScene();
+        if (!scene)
+            return;
+        // Voxels and terrain always draw from the frustum lists; meshes from A + B under occlusion.
+        const uint32_t frame = RHII.GetFrameIndex();
+        builder.ReadBuffer(scene->GetCullingCountersBuffer(frame));
+        if (Settings::Get<SceneSettings>().occlusion_culling)
+        {
+            builder.ReadBuffer(scene->GetOccCountersA(frame));
+            builder.ReadBuffer(scene->GetOccCountersB(frame));
+        }
+    }
+
     void GbufferOpaquePass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
@@ -695,6 +711,12 @@ namespace pe
 
     void GbufferTransparentPass::PassBarriers(CommandBuffer *cmd)
     {
+    }
+
+    void GbufferTransparentPass::DeclareInputs(RGBuilder &builder)
+    {
+        if (Scene *scene = GetActiveScene())
+            builder.ReadBuffer(scene->GetCullingCountersBuffer(RHII.GetFrameIndex()));
     }
 
     void GbufferTransparentPass::ExecutePass(CommandBuffer *cmd)

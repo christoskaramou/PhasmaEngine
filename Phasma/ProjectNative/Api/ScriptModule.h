@@ -31,3 +31,11 @@ namespace phasma
     {                                                                                           \
         const bool registered_##Type = phasma::RegisterScript<Type>(#Type, PHASMA_SOURCE_NAME); \
     }
+
+// A scene pipeline script (ScriptKind::Pipeline): a scene names it as pipeline_script "cpp:Type". Its constructor
+// exposes values and adds passes; it needs a Update(double) the engine never calls.
+#define PHASMA_PIPELINE_SCRIPT(Type)                                                                                          \
+    namespace                                                                                                                 \
+    {                                                                                                                         \
+        const bool registered_##Type = phasma::RegisterScript<Type>(#Type, PHASMA_SOURCE_NAME, phasma::ScriptKind::Pipeline); \
+    }

@@ -148,7 +148,6 @@ namespace pe
         ubo.invView = camera->GetInvView();
         ubo.invProj = camera->GetInvProjection();
         ubo.camPos = vec4(camera->GetPosition(), 1.0f);
-        ubo.lights_intensity = gSettings.lights_intensity;
         ubo.shadows = gSettings.shadows ? 1 : 0;
         ubo.use_Disney_PBR = gSettings.use_Disney_PBR ? 1 : 0;
         // Scale by the per-effect volume blend factor (matches LightPass) so a trigger zone fades IBL

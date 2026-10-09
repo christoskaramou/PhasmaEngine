@@ -5,6 +5,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
@@ -124,6 +125,12 @@ namespace pe
         sets[0]->Update();
     }
 
+    void SelectionOutlinePass::DeclareInputs(RGBuilder &builder)
+    {
+        if (Scene *scene = GetActiveScene())
+            builder.ReadBuffer(scene->GetCullingCountersBuffer(RHII.GetFrameIndex()));
+    }
+
     void SelectionOutlinePass::ExecutePass(CommandBuffer *cmd)
     {
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
@@ -174,8 +181,7 @@ namespace pe
 
         // 3) Composite outline over the display image.
         PushConstants_SelectionOutline pc{};
-        pc.color = vec4(gs.selection_outline_color_r, gs.selection_outline_color_g, gs.selection_outline_color_b,
-                        gs.selection_outline_color_a);
+        pc.color = vec4(gs.selection_outline_color_r, gs.selection_outline_color_g, gs.selection_outline_color_b, gs.selection_outline_color_a);
         pc.params0 = vec4(1.f / m_maskRT->GetWidth_f(), 1.f / m_maskRT->GetHeight_f(), gs.selection_outline_thickness,
                           gs.selection_outline_inner_fade);
         pc.params1 = vec4(gs.selection_outline_outer_fade, 0.f, 0.f, 0.f);

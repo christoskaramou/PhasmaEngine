@@ -72,6 +72,7 @@ namespace pe
         void ReloadSkyFromSettings() override { m_sceneRenderer.ReloadSkyFromSettings(); }
         const GUI &GetGUI() const { return m_gui; }
         GUI &GetGUI() { return m_gui; }
+        const RenderGraph &GetRenderGraph() const { return m_sceneRenderer.GetRenderGraph(); }
         void ToggleGUI() { m_gui.ToggleRender(); }
 
         Image *CreateRenderTarget(const std::string &name,

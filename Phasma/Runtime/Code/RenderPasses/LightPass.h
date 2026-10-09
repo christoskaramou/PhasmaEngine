@@ -11,7 +11,6 @@ namespace pe
         uint32_t ssr = 0;
         uint32_t IBL = 1;
         float IBL_intensity = 0.75f;
-        float lights_intensity = 7.0f;
         uint32_t shadows = 1;
         uint32_t use_Disney_PBR = 1;
         uint32_t orthographicCamera = 0;
@@ -20,9 +19,6 @@ namespace pe
         uint32_t forward_plus = 1;
         float fog_density = 0.0f; // 0 = fog off (enable bool resolved CPU-side)
         float fog_start = 0.0f;
-        float fog_pad0 = 0.0f;
-        float fog_pad1 = 0.0f;
-        float fog_pad2 = 0.0f;
     };
 
     class Image;

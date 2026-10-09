@@ -127,7 +127,7 @@ namespace pe
 
         // Scripts added/removed render passes (render_graph.add_pass): rebuild the
         // graph before this frame records. Pure CPU pass-list rebuild, no GPU wait.
-        if (m_scriptRenderPassesRevision != GetScriptRenderPassesRevision())
+        if (m_scriptRenderPassesRevision != GetScriptRenderPassesRevision() || m_sceneRenderer.NeedsRenderGraphOrderRebuild())
             BuildRenderGraph();
         ApplyPendingRenderScaleResize();
 

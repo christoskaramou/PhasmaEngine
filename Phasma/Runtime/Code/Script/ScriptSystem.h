@@ -62,6 +62,7 @@ namespace pe
         };
         std::string name;
         Type type;
+        std::string shownWhen; // exposed_when: the bool value it is shown (and nested) under, or empty
     };
 
     enum class ScriptLifecycle
@@ -149,7 +150,8 @@ namespace pe
         bool IsInitialized() const { return m_initialized; }
         static bool IsTestScriptPath(const std::string &path);
         std::vector<std::string> ListLuaFunctions();
-        std::vector<std::string> ListCppNodeScripts() const { return m_cppScripts.ListNodeScripts(); }
+        std::vector<std::string> ListCppNodeScripts() const { return m_cppScripts.ListScripts(phasma::ScriptKind::Node); }
+        std::vector<std::string> ListCppPipelineScripts() const { return m_cppScripts.ListScripts(phasma::ScriptKind::Pipeline); }
         std::string CppSourceFile(const std::string &path) const { return m_cppScripts.SourceFile(path); }
         CppScriptStatus CppScriptStatusSnapshot() const { return m_cppScripts.Status(); }
 
@@ -193,7 +195,28 @@ namespace pe
         // are plain on-demand calls, independent of play mode.
         bool InvokeSceneAction(const std::string &id);
 
+        // The scene's pipeline script (SceneSettings::pipeline_script: a .lua, cpp:<name> for a ScriptKind::Pipeline C++
+        // script, or kDefaultPipelineScript): run at every scene load in the editor and the player, in edit and play
+        // mode, its passes cleared with it. Its values (Lua exposed {}, C++ ExposeNumber / ExposeBool) named after a scene
+        // setting mirror that setting (a loaded scene keeps its own); the others persist in SceneSettings::pipeline_values.
+        // The script runs again (Lua init(), a C++ pipeline is created anew) after one of those changes.
+        static constexpr const char *kDefaultPipelineScript = "Scripts/Pipeline/default_pipeline.lua";
+        // In name order; nullptr until the script has loaded.
+        const std::vector<ExposedVar> *GetPipelineValues() const { return m_pipelineLoaded ? &m_pipelineVars : nullptr; }
+        sol::object GetPipelineValue(const ExposedVar &var);
+        void SetPipelineValue(const ExposedVar &var, const sol::object &value);
+        // After SceneSettings::pipeline_script changes: the new script's exposed literals become the settings.
+        void ReloadPipelineScript() { LoadPipelineScript(true); }
+
     private:
+        void SyncPipelineScript();
+        void LoadPipelineScript(bool applyScriptDefaults);
+        void UnloadPipelineScript();
+        void RunPipeline();
+        // Lists the value for the panel (once) and returns its current value: setting, saved or fallback.
+        sol::object ExposePipelineValue(const ExposedVar &var, const sol::object &fallback);
+        void ExposeDefaultPipelineValues(); // a C++ pipeline's ExposeBase
+
         void LoadScripts();
         // Re-register the active scene's on_play scripts when the scene changes (tracked by
         // generation). on_play scripts run with PlayerOnly lifecycle through the normal loops.
@@ -254,5 +277,13 @@ namespace pe
         // synced into m_scripts; m_actionEnvs caches lazily-loaded action script environments.
         uint32_t m_sceneScriptGeneration = UINT32_MAX;
         std::unordered_map<std::string, sol::environment> m_actionEnvs;
+        ScriptEntry m_pipeline;    // the Lua pipeline (empty for a C++ one); its address owns the pipeline's passes
+        std::string m_cppPipeline; // the scene's cpp:<name> pipeline, else empty
+        std::vector<ExposedVar> m_pipelineVars;
+        std::unordered_map<std::string, sol::object> m_pipelineDefaults;
+        bool m_pipelineLoaded = false;
+        bool m_pipelineApplyDefaults = false; // while a newly picked script loads: its defaults become the settings
+        uint32_t m_pipelineSceneGeneration = UINT32_MAX;
+        uint64_t m_pipelineModuleLoads = 0;
     };
 } // namespace pe

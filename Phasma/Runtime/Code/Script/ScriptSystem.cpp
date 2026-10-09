@@ -5,6 +5,7 @@
 #endif
 #include "Camera/Camera.h"
 #include "Base/GamePack.h"
+#include "Render/FullscreenPasses.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/ModelAsset.h"
 #if defined(PE_ENABLE_ASSIMP)
@@ -15,6 +16,7 @@
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/SceneHost.h"
 #include "Script/Bindings/Input/InputState.h"
+#include "Script/Bindings/Settings/SettingsBindings.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/Bindings/Lerp/Tween.h"
 #include "UI/RuntimeUi.h"
@@ -389,6 +391,36 @@ namespace pe
         return protectedFn(std::forward<Args>(args)...);
     }
 
+    static sol::object RawGetLiteral(lua_State *L, sol::table &tbl, const char *key);
+
+    // Adds exposed_when entries to env's own table (a copy, so a source table is never shared).
+    static void MergeExposedWhen(lua_State *L, sol::environment &env, const sol::table &entries)
+    {
+        sol::object existing = RawGetLiteral(L, env, "__exposed_when");
+        sol::table target = existing.is<sol::table>() ? existing.as<sol::table>() : sol::state_view(L).create_table();
+        for (auto &[key, value] : entries)
+            target[key] = value;
+        if (existing.is<sol::table>())
+            return;
+        env.push(L);
+        lua_pushliteral(L, "__exposed_when");
+        target.push(L);
+        lua_rawset(L, -3);
+        lua_pop(L, 1);
+    }
+
+    // exposed_when {}: each value's shownWhen.
+    static void ReadExposedWhen(lua_State *L, sol::table &env, std::vector<ExposedVar> &vars)
+    {
+        sol::object when = RawGetLiteral(L, env, "__exposed_when");
+        if (!when.is<sol::table>())
+            return;
+        sol::table table = when.as<sol::table>();
+        for (ExposedVar &var : vars)
+            if (sol::optional<std::string> toggle = table[var.name])
+                var.shownWhen = *toggle;
+    }
+
     void ScriptSystem::Init(CommandBuffer *cmd)
     {
         m_lua.open_libraries(
@@ -465,6 +497,35 @@ namespace pe
             lua_pop(L, 1);
             return t; });
 
+        // pipeline.base(): a fresh table of the engine default pipeline script's exposed values, for a project's
+        // pipeline script to extend: local p = exposed(pipeline.base()); p.ink = 0.8
+        sol::table pipeline = m_lua.create_named_table("pipeline");
+        pipeline.set_function("base", [this](sol::this_environment te) -> sol::object
+                              {
+            sol::environment env(m_lua, sol::create, m_lua.globals());
+            const std::string path = Path::RuntimeAssetsPath() + kDefaultPipelineScript;
+            auto result = RunScriptFile(m_lua, path, env);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] pipeline.base(): '%s' failed: %s", path.c_str(), err.what()));
+                return sol::lua_nil;
+            }
+            // The default's exposed_when come along, under the caller's own.
+            if (sol::object when = RawGetLiteral(m_lua.lua_state(), env, "__exposed_when"); when.is<sol::table>() && te)
+            {
+                sol::environment caller = te;
+                MergeExposedWhen(m_lua.lua_state(), caller, when.as<sol::table>());
+            }
+            return RawGetLiteral(m_lua.lua_state(), env, "__exposed"); });
+
+        // exposed_when { cas_sharpness = "cas_sharpening" }: the editor shows a value only while the bool value named
+        // here is on (it nests under it). Calls merge, so a script can add to pipeline.base()'s.
+        m_lua.set_function("exposed_when", [](sol::table t, sol::this_environment te)
+                           {
+            sol::environment env = te;
+            MergeExposedWhen(env.lua_state(), env, t); });
+
         sol::table script = m_lua.create_named_table("script");
         script.set_function("on_update",
                             [this](const std::string &id, sol::function fn, sol::optional<std::string> mode)
@@ -497,6 +558,20 @@ namespace pe
         LoadScripts();
 
         m_cppScripts.Init();
+        // A C++ pipeline script's ExposeNumber / ExposeBool / ExposeBase reach the same values Lua's do.
+        m_cppScripts.pipelineExpose = [this](const char *name, double fallback, const char *shownWhen, bool isBool)
+        {
+            lua_State *L = m_lua.lua_state();
+            ExposedVar var{name, isBool ? ExposedVar::Type::Bool : ExposedVar::Type::Number};
+            var.shownWhen = shownWhen ? shownWhen : "";
+            const sol::object value =
+                ExposePipelineValue(var, isBool ? sol::make_object(L, fallback != 0.0) : sol::make_object(L, fallback));
+            if (value.is<bool>())
+                return value.as<bool>() ? 1.0 : 0.0;
+            return value.is<double>() ? value.as<double>() : fallback;
+        };
+        m_cppScripts.pipelineExposeBase = [this]()
+        { ExposeDefaultPipelineValues(); };
 
         m_initialized = true;
     }
@@ -562,6 +637,7 @@ namespace pe
 
             entry.exposedVars.push_back(std::move(var));
         }
+        ReadExposedWhen(m_lua.lua_state(), entry.env, entry.exposedVars);
     }
 
     void ScriptSystem::CollectHooks(NodeScriptInstance &inst)
@@ -658,6 +734,7 @@ namespace pe
 
             inst.exposedVars.push_back(std::move(var));
         }
+        ReadExposedWhen(L, inst.env, inst.exposedVars);
     }
 
     // Resolve a project-root-relative script path (e.g. "Assets/Scripts/x.lua") to a normalized
@@ -1306,6 +1383,243 @@ namespace pe
         }
     }
 
+    namespace
+    {
+        bool IsSceneSettingName(const std::string &name)
+        {
+            double number = 0.0;
+            return SceneSettingString(name) || GetSceneSettingNumber(name, number);
+        }
+
+        // A scene setting as the exposed value's type; nil for a name that is not one.
+        sol::object SceneSettingObject(lua_State *L, const ExposedVar &var)
+        {
+            if (const std::string *text = SceneSettingString(var.name))
+                return sol::make_object(L, *text);
+            if (double number = 0.0; GetSceneSettingNumber(var.name, number))
+                return var.type == ExposedVar::Type::Bool ? sol::make_object(L, number != 0.0) : sol::make_object(L, number);
+            return sol::lua_nil;
+        }
+
+        void SetSceneSettingObject(const ExposedVar &var, const sol::object &value)
+        {
+            if (std::string *text = SceneSettingString(var.name))
+            {
+                if (value.is<std::string>())
+                    *text = value.as<std::string>();
+            }
+            else if (value.is<bool>()) // before number: sol2 booleans also satisfy is<double>()
+            {
+                SetSceneSettingNumber(var.name, value.as<bool>() ? 1.0 : 0.0);
+            }
+            else if (value.is<double>())
+            {
+                SetSceneSettingNumber(var.name, value.as<double>());
+            }
+        }
+    } // namespace
+
+    void ScriptSystem::SyncPipelineScript()
+    {
+        Scene *scene = GetActiveScene();
+        if ((scene ? scene->GetGeneration() : UINT32_MAX) != m_pipelineSceneGeneration ||
+            (!m_cppPipeline.empty() && m_cppScripts.ModuleLoads() != m_pipelineModuleLoads))
+            LoadPipelineScript(false);
+    }
+
+    sol::object ScriptSystem::ExposePipelineValue(const ExposedVar &var, const sol::object &fallback)
+    {
+        if (std::none_of(m_pipelineVars.begin(), m_pipelineVars.end(), [&](const ExposedVar &v)
+                         { return v.name == var.name; }))
+        {
+            m_pipelineVars.push_back(var);
+            m_pipelineDefaults[var.name] = fallback;
+        }
+        lua_State *L = m_lua.lua_state();
+        if (IsSceneSettingName(var.name))
+        {
+            if (m_pipelineApplyDefaults)
+                SetSceneSettingObject(var, fallback);
+            return SceneSettingObject(L, var);
+        }
+        const auto &values = Settings::Get<SceneSettings>().pipeline_values;
+        if (const auto saved = values.find(var.name); saved != values.end())
+        {
+            if (const auto *flag = std::get_if<bool>(&saved->second); flag && var.type == ExposedVar::Type::Bool)
+                return sol::make_object(L, *flag);
+            if (const auto *number = std::get_if<double>(&saved->second); number && var.type == ExposedVar::Type::Number)
+                return sol::make_object(L, *number);
+            if (const auto *text = std::get_if<std::string>(&saved->second); text && var.type == ExposedVar::Type::String)
+                return sol::make_object(L, *text);
+        }
+        return fallback;
+    }
+
+    void ScriptSystem::ExposeDefaultPipelineValues()
+    {
+        ScriptEntry base;
+        base.env = sol::environment(m_lua, sol::create, m_lua.globals());
+        const std::string path = Path::RuntimeAssetsPath() + kDefaultPipelineScript;
+        if (auto result = RunScriptFile(m_lua, path, base.env); !result.valid())
+        {
+            sol::error err = result;
+            Log::Error(PeFormat("[Lua] default pipeline script error in '%s': %s", path.c_str(), err.what()));
+            return;
+        }
+        CollectExposedVars(base);
+        lua_State *L = m_lua.lua_state();
+        sol::object exposedObj = RawGetLiteral(L, base.env, "__exposed");
+        if (!exposedObj.is<sol::table>())
+            return;
+        sol::table exposed = exposedObj.as<sol::table>();
+        for (const ExposedVar &var : base.exposedVars)
+        {
+            const sol::object literal = exposed[var.name];
+            ExposePipelineValue(var, literal);
+        }
+    }
+
+    void ScriptSystem::LoadPipelineScript(bool applyScriptDefaults)
+    {
+        UnloadPipelineScript();
+        Scene *scene = GetActiveScene();
+        m_pipelineSceneGeneration = scene ? scene->GetGeneration() : UINT32_MAX;
+        if (!scene)
+            return;
+
+        // Values named after a scene setting: a loaded scene keeps its own, a newly picked script sets its
+        // literals. The script's own values come back from pipeline_values (a new script starts from its literals).
+        auto &gs = Settings::Get<SceneSettings>();
+        if (applyScriptDefaults)
+            gs.pipeline_values.clear();
+        m_pipelineApplyDefaults = applyScriptDefaults;
+        const std::string &script = gs.pipeline_script.empty() ? std::string(kDefaultPipelineScript) : gs.pipeline_script;
+        if (IsCppScriptPath(script))
+        {
+            m_cppPipeline = script;
+            m_pipelineModuleLoads = m_cppScripts.ModuleLoads();
+            if (m_cppScripts.HasModule()) // without one it is created when the module loads
+            {
+                m_pipelineLoaded = true;
+                if (!m_cppScripts.CreatePipeline(script, &m_pipeline))
+                    Log::Error(PeFormat("[CppScript] pipeline script '%s' is not a pipeline script in the game module", script.c_str()));
+                PE_INFO("Loaded pipeline script: %s", script.c_str());
+            }
+        }
+        else
+        {
+            const std::string path = Path::ResolveAsset(script);
+            sol::environment env(m_lua, sol::create, m_lua.globals());
+            SetLuaRenderPassOwner(&m_pipeline);
+            auto result = RunScriptFile(m_lua, path, env);
+            SetLuaRenderPassOwner(nullptr);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] pipeline script error in '%s': %s", path.c_str(), err.what()));
+                m_pipelineApplyDefaults = false;
+                return;
+            }
+            m_pipeline.path = path;
+            m_pipeline.env = std::move(env);
+            m_pipeline.lifecycle = ScriptLifecycle::Always;
+            CollectHooks(m_pipeline);
+            CollectExposedVars(m_pipeline);
+            if (sol::object exposedObj = RawGetLiteral(m_lua.lua_state(), m_pipeline.env, "__exposed"); exposedObj.is<sol::table>())
+            {
+                sol::table exposed = exposedObj.as<sol::table>();
+                for (const ExposedVar &var : m_pipeline.exposedVars)
+                {
+                    const sol::object literal = exposed[var.name];
+                    exposed[var.name] = ExposePipelineValue(var, literal);
+                }
+            }
+            m_pipelineLoaded = true;
+            RunPipeline();
+            PE_INFO("Loaded pipeline script: %s", path.c_str());
+        }
+        m_pipelineApplyDefaults = false;
+        std::sort(m_pipelineVars.begin(), m_pipelineVars.end(), [](const ExposedVar &a, const ExposedVar &b)
+                  { return a.name < b.name; });
+    }
+
+    void ScriptSystem::RunPipeline()
+    {
+        if (!m_pipelineLoaded)
+            return;
+        if (!m_cppPipeline.empty())
+        {
+            m_cppScripts.CreatePipeline(m_cppPipeline, &m_pipeline);
+            return;
+        }
+        if (!m_pipeline.initFn.valid())
+            return;
+        SetLuaRenderPassOwner(&m_pipeline);
+        auto result = CallProtected(m_pipeline.initFn);
+        SetLuaRenderPassOwner(nullptr);
+        if (!result.valid())
+        {
+            sol::error err = result;
+            Log::Error(PeFormat("[Lua] init() error in pipeline script '%s': %s", m_pipeline.path.c_str(), err.what()));
+            return;
+        }
+        m_pipeline.initialized = true;
+    }
+
+    void ScriptSystem::UnloadPipelineScript()
+    {
+        if (m_pipelineLoaded && m_pipeline.initialized && m_pipeline.destroyFn.valid())
+        {
+            auto result = CallProtected(m_pipeline.destroyFn);
+            if (!result.valid())
+            {
+                sol::error err = result;
+                Log::Error(PeFormat("[Lua] destroy() error in pipeline script '%s': %s", m_pipeline.path.c_str(), err.what()));
+            }
+        }
+        m_cppScripts.DestroyPipeline();
+        ClearScriptRenderPasses(&m_pipeline);
+        ClearFullscreenPasses(&m_pipeline);
+        m_pipeline = ScriptEntry{};
+        m_cppPipeline.clear();
+        m_pipelineVars.clear();
+        m_pipelineDefaults.clear();
+        m_pipelineLoaded = false;
+    }
+
+    sol::object ScriptSystem::GetPipelineValue(const ExposedVar &var)
+    {
+        if (!m_pipelineLoaded)
+            return sol::lua_nil;
+        lua_State *L = m_lua.lua_state();
+        if (IsSceneSettingName(var.name))
+            return SceneSettingObject(L, var);
+        const auto defaults = m_pipelineDefaults.find(var.name);
+        return ExposePipelineValue(var, defaults != m_pipelineDefaults.end() ? defaults->second : sol::object(sol::lua_nil));
+    }
+
+    void ScriptSystem::SetPipelineValue(const ExposedVar &var, const sol::object &value)
+    {
+        if (!m_pipelineLoaded)
+            return;
+        if (m_cppPipeline.empty())
+            if (sol::object exposedObj = RawGetLiteral(m_lua.lua_state(), m_pipeline.env, "__exposed"); exposedObj.is<sol::table>())
+                exposedObj.as<sol::table>()[var.name] = value;
+        if (IsSceneSettingName(var.name))
+        {
+            SetSceneSettingObject(var, value);
+            return;
+        }
+        auto &stored = Settings::Get<SceneSettings>().pipeline_values[var.name];
+        if (value.is<bool>())
+            stored = value.as<bool>();
+        else if (value.is<double>())
+            stored = value.as<double>();
+        else if (value.is<std::string>())
+            stored = value.as<std::string>();
+        RunPipeline();
+    }
+
     bool ScriptSystem::InvokeSceneAction(const std::string &id)
     {
         Scene *scene = GetActiveScene();
@@ -1657,6 +1971,7 @@ namespace pe
 
         // Re-register the active scene's on_play scripts when the scene changes
         SyncSceneScripts();
+        SyncPipelineScript();
 
         // Reconcile per-node script instances with the scene. Skip the full node
         // scan when script membership + scene identity are unchanged (ATH combat
@@ -1849,6 +2164,9 @@ namespace pe
         m_registeredUpdates.clear();
         m_scripts.clear();
         // Script render passes capture sol functions; release them before the state.
+        UnloadPipelineScript();
+        m_pipelineSceneGeneration = UINT32_MAX; // the reloaded state runs it again
+        ClearFullscreenPasses(nullptr);
         ClearScriptRenderPasses();
         m_lua = sol::state();
         m_initialized = false;

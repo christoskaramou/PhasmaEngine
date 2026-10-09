@@ -228,6 +228,14 @@ namespace pe
             return boundLiveForwardPlusResources;
         }
 
+        void ReadForwardPlusTiles(RGBuilder &builder)
+        {
+            if (!Settings::Get<SceneSettings>().forward_plus)
+                return;
+            if (ForwardPlusLightCullingPass *forwardPlus = GetGlobalComponent<ForwardPlusLightCullingPass>())
+                builder.ReadBuffer(forwardPlus->GetTileLightData(RHII.GetFrameIndex()));
+        }
+
         void AddForwardPlusReadBarriers(CommandBuffer *cmd, uint32_t frame)
         {
             if (!Settings::Get<SceneSettings>().forward_plus)
@@ -429,7 +437,6 @@ namespace pe
         m_ubo.IBL = pp.IBL;
         // Volume blend: scale IBL by the per-effect factor (0 -> no IBL contribution) so it fades.
         m_ubo.IBL_intensity = pp.IBL_intensity * std::clamp(ActivePostProcessBlend().IBL, 0.0f, 1.0f);
-        m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
         m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
@@ -461,6 +468,7 @@ namespace pe
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
         ReadProbeLighting(builder);
+        ReadForwardPlusTiles(builder);
 
         if (shadowsEnabled)
         {
@@ -692,7 +700,6 @@ namespace pe
         m_ubo.IBL = pp.IBL;
         // Volume blend: scale IBL by the per-effect factor (0 -> no IBL contribution) so it fades.
         m_ubo.IBL_intensity = pp.IBL_intensity * std::clamp(ActivePostProcessBlend().IBL, 0.0f, 1.0f);
-        m_ubo.lights_intensity = gSettings.lights_intensity;
         m_ubo.shadows = shadowsAvailable ? 1u : 0u;
         m_ubo.use_Disney_PBR = gSettings.use_Disney_PBR;
         m_ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
@@ -724,6 +731,7 @@ namespace pe
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
         ReadProbeLighting(builder);
+        ReadForwardPlusTiles(builder);
 
         if (shadowsEnabled)
         {

@@ -1,5 +1,6 @@
 #include "Navigation/NavCrowd.h"
 #include "Navigation/NavDetail.h"
+#include "Navigation/NavSwarm.h"
 
 #ifdef PE_NAV
 #include "DetourCrowd.h"
@@ -83,15 +84,22 @@ namespace pe
     {
         if (!m_impl->crowd || !std::isfinite(dt) || dt <= 0.0f)
             return;
-        // ponytail: drop time beyond a 250 ms hitch; use fixed substeps if low-frame-rate simulation is required.
-        m_impl->crowd->update(std::min(dt, 0.25f), nullptr);
-        m_impl->alpha = 1.0f; // drawn where it is; a swarm stepping it later starts from here
-        for (int i = 0; i < kMaxAgents; ++i)
+        // Fixed 60 Hz steps as a swarm takes them, drawn between the last two: the same paths at any frame rate (on
+        // the frame delta, the same crossing at 30 and 144 fps ended 1.4 cm apart).
+        constexpr float step = NavSwarm::kStep;
+        Impl &c = *m_impl;
+        c.carry += std::min(dt, step * kNavMaxStepsPerUpdate);
+        int steps = 0;
+        for (; c.carry >= step && steps < kNavMaxStepsPerUpdate; ++steps, c.carry -= step)
         {
-            const dtCrowdAgent *a = m_impl->crowd->getAgent(i);
-            if (a->active)
-                m_impl->previous[i] = vec3(a->npos[0], a->npos[1], a->npos[2]);
+            for (int i = 0; i < kMaxAgents; ++i)
+                if (const dtCrowdAgent *a = c.crowd->getAgent(i); a->active)
+                    c.previous[i] = vec3(a->npos[0], a->npos[1], a->npos[2]);
+            c.crowd->update(step, nullptr);
         }
+        if (steps == kNavMaxStepsPerUpdate)
+            c.carry = std::min(c.carry, step); // a hitch: drop the backlog instead of spiralling
+        c.alpha = c.carry / step;
     }
 
     bool NavCrowd::Get(int agent, vec3 &position, vec3 &velocity) const

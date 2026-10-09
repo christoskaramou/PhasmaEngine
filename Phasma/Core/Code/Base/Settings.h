@@ -184,7 +184,6 @@ namespace pe
         // rg16f/rgba16f/rgba32f.
         std::string normal_format{};
         std::string velocity_format{};
-        float lights_intensity = 1.0f;
         // Distance haze: blends far opaque/transparent pixels toward the blurred skybox in the view
         // direction (exponential past fog_start, world units). Softens the horizon and masks far
         // voxel-LOD band transitions; no color knob — the haze color IS the sky behind the pixel.
@@ -237,6 +236,14 @@ namespace pe
         bool use_Disney_PBR = true;
         PePresentMode preferred_present_mode = PE_PRESENT_MODE_FIFO;
         SceneViewAspectMode scene_view_aspect_mode = SceneViewAspectMode::Free;
+        // Pass sort-number overrides saved with the scene (see SceneRenderGraph.h); the revision bump makes the
+        // renderer hosts rebuild their graph.
+        std::unordered_map<std::string, uint32_t> render_pass_orders;
+        uint64_t render_pass_orders_revision = 0;
+        // The scene's pipeline script (Assets-relative .lua; empty = the engine's Scripts/Pipeline/default_pipeline.lua).
+        // Its exposed values named after a scene setting mirror that setting; the others are kept here.
+        std::string pipeline_script;
+        std::map<std::string, std::variant<bool, double, std::string>> pipeline_values;
     };
 
     // Suppress per-TU instantiation — PhasmaCore.dll provides the one canonical instance.

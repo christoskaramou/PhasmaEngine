@@ -11,6 +11,7 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#include "Render/ScriptRenderPasses.h"
 #ifdef PE_PHYSICS2D
 #include "Systems/Physics2DSystem.h"
 #endif
@@ -237,96 +238,92 @@ namespace pe
             F("IBL_intensity", p.IBL_intensity);
         }
 
+        // The scene's pipeline: render path, pass toggles and orders, the default post-process profile, and the
+        // pipeline script with its own values.
+        void AddPipelineMembers(rapidjson::Value &settings, rapidjson::Document::AllocatorType &allocator,
+                                const SceneSettings &s)
+        {
+            settings.AddMember("render_mode", static_cast<int>(s.render_mode), allocator);
+            settings.AddMember("hdr", s.hdr, allocator);
+            settings.AddMember("dynamic_rendering", s.dynamic_rendering, allocator);
+            settings.AddMember("use_Disney_PBR", s.use_Disney_PBR, allocator);
+            settings.AddMember("physical_point_falloff", s.physical_point_falloff, allocator);
+            settings.AddMember("forward_plus", s.forward_plus, allocator);
+            settings.AddMember("normal_format", rapidjson::Value(s.normal_format.c_str(), allocator), allocator);
+            settings.AddMember("velocity_format", rapidjson::Value(s.velocity_format.c_str(), allocator), allocator);
+            settings.AddMember("frustum_culling", s.frustum_culling, allocator);
+            settings.AddMember("occlusion_culling", s.occlusion_culling, allocator);
+            settings.AddMember("occlusion_culling_bias", s.occlusion_culling_bias, allocator);
+            settings.AddMember("skinned_instancing", s.skinned_instancing, allocator);
+            settings.AddMember("lod_enabled", s.lod_enabled, allocator);
+            settings.AddMember("lod_count", s.lod_count, allocator);
+            settings.AddMember("lod_bias", s.lod_bias, allocator);
+            {
+                rapidjson::Value lodDist(rapidjson::kArrayType);
+                lodDist.PushBack(s.lod_distances[0], allocator);
+                lodDist.PushBack(s.lod_distances[1], allocator);
+                lodDist.PushBack(s.lod_distances[2], allocator);
+                settings.AddMember("lod_distances", lodDist.Move(), allocator);
+            }
+            settings.AddMember("cluster_geometry", s.cluster_geometry, allocator);
+            settings.AddMember("cluster_error_pixels", s.cluster_error_pixels, allocator);
+            settings.AddMember("global_illumination", s.global_illumination, allocator);
+            settings.AddMember("gi_probe_spacing", s.gi_probe_spacing, allocator);
+            settings.AddMember("gi_intensity", s.gi_intensity, allocator);
+            settings.AddMember("gi_hysteresis", s.gi_hysteresis, allocator);
+            settings.AddMember("shadows", s.shadows, allocator);
+            settings.AddMember("shadow_map_size", s.shadow_map_size, allocator);
+            settings.AddMember("num_cascades", s.num_cascades, allocator);
+            settings.AddMember("shadow_distance", s.shadow_distance, allocator);
+            settings.AddMember("shadow_lod_bias", s.shadow_lod_bias, allocator);
+            settings.AddMember("shadow_cascade_lambda", s.shadow_cascade_lambda, allocator);
+            settings.AddMember("shadow_normal_bias", s.shadow_normal_bias, allocator);
+            settings.AddMember("shadow_fade_fraction", s.shadow_fade_fraction, allocator);
+            settings.AddMember("shadow_filter_radius", s.shadow_filter_radius, allocator);
+            settings.AddMember("shadow_debug_mode", s.shadow_debug_mode, allocator);
+            {
+                rapidjson::Value depthBias(rapidjson::kArrayType);
+                depthBias.PushBack(s.depth_bias[0], allocator);
+                depthBias.PushBack(s.depth_bias[1], allocator);
+                depthBias.PushBack(s.depth_bias[2], allocator);
+                settings.AddMember("depth_bias", depthBias.Move(), allocator);
+            }
+            AddPostProcessProfileMembers(settings, allocator, s);
+            rapidjson::Value passOrders(rapidjson::kObjectType);
+            for (const auto &[name, order] : s.render_pass_orders)
+                passOrders.AddMember(rapidjson::Value(name.c_str(), allocator).Move(), order, allocator);
+            settings.AddMember("render_pass_orders", passOrders, allocator);
+            if (!s.pipeline_script.empty())
+                settings.AddMember("pipeline_script", rapidjson::Value(s.pipeline_script.c_str(), allocator), allocator);
+            if (!s.pipeline_values.empty())
+            {
+                rapidjson::Value values(rapidjson::kObjectType);
+                for (const auto &[name, value] : s.pipeline_values)
+                {
+                    rapidjson::Value key(name.c_str(), allocator);
+                    if (const auto *text = std::get_if<std::string>(&value))
+                        values.AddMember(key, rapidjson::Value(text->c_str(), allocator), allocator);
+                    else if (const auto *flag = std::get_if<bool>(&value))
+                        values.AddMember(key, *flag, allocator);
+                    else
+                        values.AddMember(key, std::get<double>(value), allocator);
+                }
+                settings.AddMember("pipeline_values", values, allocator);
+            }
+        }
+
         void AddSceneSettingsMembers(rapidjson::Value &settings, rapidjson::Document::AllocatorType &allocator)
         {
             auto &gSettings = Settings::Get<SceneSettings>();
             settings.AddMember("right_handed", gSettings.right_handed, allocator);
             settings.AddMember("reverse_depth", gSettings.reverse_depth, allocator);
-            settings.AddMember("frustum_culling", gSettings.frustum_culling, allocator);
-            settings.AddMember("occlusion_culling", gSettings.occlusion_culling, allocator);
-            settings.AddMember("occlusion_culling_bias", gSettings.occlusion_culling_bias, allocator);
-            settings.AddMember("skinned_instancing", gSettings.skinned_instancing, allocator);
-            settings.AddMember("lod_enabled", gSettings.lod_enabled, allocator);
-            settings.AddMember("global_illumination", gSettings.global_illumination, allocator);
-            settings.AddMember("hdr", gSettings.hdr, allocator);
-            settings.AddMember("gi_probe_spacing", gSettings.gi_probe_spacing, allocator);
-            settings.AddMember("gi_intensity", gSettings.gi_intensity, allocator);
-            settings.AddMember("gi_hysteresis", gSettings.gi_hysteresis, allocator);
-            settings.AddMember("cluster_geometry", gSettings.cluster_geometry, allocator);
-            settings.AddMember("cluster_error_pixels", gSettings.cluster_error_pixels, allocator);
-            settings.AddMember("lod_count", gSettings.lod_count, allocator);
-            settings.AddMember("lod_bias", gSettings.lod_bias, allocator);
-            {
-                rapidjson::Value lodDist(rapidjson::kArrayType);
-                lodDist.PushBack(gSettings.lod_distances[0], allocator);
-                lodDist.PushBack(gSettings.lod_distances[1], allocator);
-                lodDist.PushBack(gSettings.lod_distances[2], allocator);
-                settings.AddMember("lod_distances", lodDist.Move(), allocator);
-            }
-            settings.AddMember("shadows", gSettings.shadows, allocator);
-            settings.AddMember("shadow_map_size", gSettings.shadow_map_size, allocator);
-            settings.AddMember("num_cascades", gSettings.num_cascades, allocator);
-            settings.AddMember("shadow_distance", gSettings.shadow_distance, allocator);
-            settings.AddMember("shadow_lod_bias", gSettings.shadow_lod_bias, allocator);
-            settings.AddMember("shadow_cascade_lambda", gSettings.shadow_cascade_lambda, allocator);
-            settings.AddMember("shadow_normal_bias", gSettings.shadow_normal_bias, allocator);
-            settings.AddMember("shadow_fade_fraction", gSettings.shadow_fade_fraction, allocator);
-            settings.AddMember("shadow_filter_radius", gSettings.shadow_filter_radius, allocator);
-            settings.AddMember("shadow_debug_mode", gSettings.shadow_debug_mode, allocator);
+            AddPipelineMembers(settings, allocator, gSettings);
             settings.AddMember("fog", gSettings.fog, allocator);
             settings.AddMember("fog_density", gSettings.fog_density, allocator);
             settings.AddMember("fog_start", gSettings.fog_start, allocator);
             settings.AddMember("render_scale", gSettings.render_scale, allocator);
-            settings.AddMember("ssao", gSettings.ssao, allocator);
-            settings.AddMember("ssao_radius", gSettings.ssao_radius, allocator);
-            settings.AddMember("ssao_bias", gSettings.ssao_bias, allocator);
-            settings.AddMember("ssao_intensity", gSettings.ssao_intensity, allocator);
-            settings.AddMember("ssao_power", gSettings.ssao_power, allocator);
-            settings.AddMember("ssao_samples", gSettings.ssao_samples, allocator);
-            settings.AddMember("forward_plus", gSettings.forward_plus, allocator);
-            settings.AddMember("normal_format", rapidjson::Value(gSettings.normal_format.c_str(), allocator), allocator);
-            settings.AddMember("velocity_format", rapidjson::Value(gSettings.velocity_format.c_str(), allocator), allocator);
-            settings.AddMember("fxaa", gSettings.fxaa, allocator);
-            settings.AddMember("taa", gSettings.taa, allocator);
-            settings.AddMember("cas_sharpening", gSettings.cas_sharpening, allocator);
-            settings.AddMember("cas_sharpness", gSettings.cas_sharpness, allocator);
-            settings.AddMember("ssr", gSettings.ssr, allocator);
-            settings.AddMember("tonemapping", gSettings.tonemapping, allocator);
-            settings.AddMember("color_grading", gSettings.color_grading, allocator);
-            settings.AddMember("color_grading_lift_r", gSettings.color_grading_lift_r, allocator);
-            settings.AddMember("color_grading_lift_g", gSettings.color_grading_lift_g, allocator);
-            settings.AddMember("color_grading_lift_b", gSettings.color_grading_lift_b, allocator);
-            settings.AddMember("color_grading_gamma_r", gSettings.color_grading_gamma_r, allocator);
-            settings.AddMember("color_grading_gamma_g", gSettings.color_grading_gamma_g, allocator);
-            settings.AddMember("color_grading_gamma_b", gSettings.color_grading_gamma_b, allocator);
-            settings.AddMember("color_grading_gain_r", gSettings.color_grading_gain_r, allocator);
-            settings.AddMember("color_grading_gain_g", gSettings.color_grading_gain_g, allocator);
-            settings.AddMember("color_grading_gain_b", gSettings.color_grading_gain_b, allocator);
-            settings.AddMember("color_grading_saturation", gSettings.color_grading_saturation, allocator);
-            settings.AddMember("color_grading_contrast", gSettings.color_grading_contrast, allocator);
-            settings.AddMember("color_grading_intensity", gSettings.color_grading_intensity, allocator);
-            settings.AddMember("color_grading_mask", rapidjson::Value(gSettings.color_grading_mask.c_str(), allocator), allocator);
-            settings.AddMember("dof", gSettings.dof, allocator);
-            settings.AddMember("dof_focus_scale", gSettings.dof_focus_scale, allocator);
-            settings.AddMember("dof_blur_range", gSettings.dof_blur_range, allocator);
-            settings.AddMember("bloom", gSettings.bloom, allocator);
-            settings.AddMember("bloom_strength", gSettings.bloom_strength, allocator);
-            settings.AddMember("bloom_range", gSettings.bloom_range, allocator);
-            settings.AddMember("motion_blur", gSettings.motion_blur, allocator);
-            settings.AddMember("motion_blur_strength", gSettings.motion_blur_strength, allocator);
-            settings.AddMember("motion_blur_samples", gSettings.motion_blur_samples, allocator);
-            settings.AddMember("IBL", gSettings.IBL, allocator);
-            settings.AddMember("IBL_intensity", gSettings.IBL_intensity, allocator);
-            settings.AddMember("lights_intensity", gSettings.lights_intensity, allocator);
             settings.AddMember("randomize_lights", gSettings.randomize_lights, allocator);
             settings.AddMember("skybox_path", rapidjson::Value(gSettings.skybox_path.c_str(), allocator), allocator);
-
-            rapidjson::Value depthBias(rapidjson::kArrayType);
-            depthBias.PushBack(gSettings.depth_bias[0], allocator);
-            depthBias.PushBack(gSettings.depth_bias[1], allocator);
-            depthBias.PushBack(gSettings.depth_bias[2], allocator);
-            settings.AddMember("depth_bias", depthBias.Move(), allocator);
-
             settings.AddMember("time_scale", gSettings.time_scale, allocator);
             settings.AddMember("physics_rate", gSettings.physics_rate, allocator);
             rapidjson::Value layerNames(rapidjson::kArrayType), layerIgnore(rapidjson::kArrayType);
@@ -356,11 +353,7 @@ namespace pe
             settings.AddMember("selection_outline_thickness", gSettings.selection_outline_thickness, allocator);
             settings.AddMember("selection_outline_inner_fade", gSettings.selection_outline_inner_fade, allocator);
             settings.AddMember("selection_outline_outer_fade", gSettings.selection_outline_outer_fade, allocator);
-            settings.AddMember("dynamic_rendering", gSettings.dynamic_rendering, allocator);
             settings.AddMember("ray_tracing_support", gSettings.ray_tracing_support, allocator);
-            settings.AddMember("render_mode", static_cast<int>(gSettings.render_mode), allocator);
-            settings.AddMember("use_Disney_PBR", gSettings.use_Disney_PBR, allocator);
-            settings.AddMember("physical_point_falloff", gSettings.physical_point_falloff, allocator);
             settings.AddMember("present_mode", static_cast<int>(gSettings.preferred_present_mode), allocator);
             settings.AddMember("scene_view_aspect_mode", static_cast<int>(gSettings.scene_view_aspect_mode), allocator);
         }
@@ -493,20 +486,9 @@ namespace pe
             }
         }
 
-        void ApplySceneSettingsMembers(const rapidjson::Value &settings)
+        void ApplyPipelineMembers(const rapidjson::Value &settings)
         {
             auto &gSettings = Settings::Get<SceneSettings>();
-            const std::string previousSkyboxPath = gSettings.skybox_path;
-            if (settings.HasMember("right_handed") && settings["right_handed"].GetBool() != gSettings.right_handed)
-            {
-                PE_WARN("[Scene] Ignoring saved right_handed=%s; this is fixed by the active runtime/backend setup",
-                        settings["right_handed"].GetBool() ? "true" : "false");
-            }
-            if (settings.HasMember("reverse_depth") && settings["reverse_depth"].GetBool() != gSettings.reverse_depth)
-            {
-                PE_WARN("[Scene] Ignoring saved reverse_depth=%s; this is fixed by the active runtime/backend setup",
-                        settings["reverse_depth"].GetBool() ? "true" : "false");
-            }
             if (settings.HasMember("frustum_culling"))
                 gSettings.frustum_culling = settings["frustum_culling"].GetBool();
             if (settings.HasMember("occlusion_culling"))
@@ -542,12 +524,6 @@ namespace pe
                 gSettings.lod_distances[1] = settings["lod_distances"][1].GetFloat();
                 gSettings.lod_distances[2] = settings["lod_distances"][2].GetFloat();
             }
-            if (settings.HasMember("fog"))
-                gSettings.fog = settings["fog"].GetBool();
-            if (settings.HasMember("fog_density"))
-                gSettings.fog_density = settings["fog_density"].GetFloat();
-            if (settings.HasMember("fog_start"))
-                gSettings.fog_start = settings["fog_start"].GetFloat();
             if (settings.HasMember("shadows"))
                 gSettings.shadows = settings["shadows"].GetBool();
             if (settings.HasMember("shadow_map_size"))
@@ -569,6 +545,78 @@ namespace pe
                 gSettings.shadow_filter_radius = settings["shadow_filter_radius"].GetFloat();
             if (settings.HasMember("shadow_debug_mode"))
                 gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
+            if (settings.HasMember("forward_plus"))
+                gSettings.forward_plus = settings["forward_plus"].GetBool();
+            if (settings.HasMember("normal_format") && settings["normal_format"].IsString())
+                gSettings.normal_format = settings["normal_format"].GetString();
+            if (settings.HasMember("velocity_format") && settings["velocity_format"].IsString())
+                gSettings.velocity_format = settings["velocity_format"].GetString();
+            if (settings.HasMember("depth_bias") && settings["depth_bias"].IsArray() && settings["depth_bias"].Size() == 3)
+            {
+                gSettings.depth_bias[0] = settings["depth_bias"][0].GetFloat();
+                gSettings.depth_bias[1] = settings["depth_bias"][1].GetFloat();
+                gSettings.depth_bias[2] = settings["depth_bias"][2].GetFloat();
+            }
+            if (settings.HasMember("dynamic_rendering"))
+                gSettings.dynamic_rendering = settings["dynamic_rendering"].GetBool() && RHII.GetCaps().dynamicRendering;
+            if (settings.HasMember("render_mode"))
+                gSettings.render_mode = ClampRenderModeToRayTracingSupport(
+                    static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
+            if (settings.HasMember("use_Disney_PBR"))
+                gSettings.use_Disney_PBR = settings["use_Disney_PBR"].GetBool();
+            if (settings.HasMember("physical_point_falloff"))
+                gSettings.physical_point_falloff = settings["physical_point_falloff"].GetBool();
+            ApplyPostProcessProfileMembers(settings, gSettings);
+            gSettings.render_pass_orders.clear();
+            ++gSettings.render_pass_orders_revision;
+            if (settings.HasMember("render_pass_orders") && settings["render_pass_orders"].IsObject())
+            {
+                const auto &orders = settings["render_pass_orders"];
+                for (auto member = orders.MemberBegin(); member != orders.MemberEnd(); ++member)
+                    if (member->value.IsUint())
+                        gSettings.render_pass_orders[member->name.GetString()] = member->value.GetUint();
+            }
+            gSettings.pipeline_script = settings.HasMember("pipeline_script") && settings["pipeline_script"].IsString()
+                                            ? settings["pipeline_script"].GetString()
+                                            : "";
+            gSettings.pipeline_values.clear();
+            if (settings.HasMember("pipeline_values") && settings["pipeline_values"].IsObject())
+            {
+                const auto &values = settings["pipeline_values"];
+                for (auto member = values.MemberBegin(); member != values.MemberEnd(); ++member)
+                {
+                    const auto &value = member->value;
+                    if (value.IsBool())
+                        gSettings.pipeline_values[member->name.GetString()] = value.GetBool();
+                    else if (value.IsNumber())
+                        gSettings.pipeline_values[member->name.GetString()] = value.GetDouble();
+                    else if (value.IsString())
+                        gSettings.pipeline_values[member->name.GetString()] = std::string(value.GetString());
+                }
+            }
+        }
+
+        void ApplySceneSettingsMembers(const rapidjson::Value &settings)
+        {
+            auto &gSettings = Settings::Get<SceneSettings>();
+            const std::string previousSkyboxPath = gSettings.skybox_path;
+            ApplyPipelineMembers(settings);
+            if (settings.HasMember("right_handed") && settings["right_handed"].GetBool() != gSettings.right_handed)
+            {
+                PE_WARN("[Scene] Ignoring saved right_handed=%s; this is fixed by the active runtime/backend setup",
+                        settings["right_handed"].GetBool() ? "true" : "false");
+            }
+            if (settings.HasMember("reverse_depth") && settings["reverse_depth"].GetBool() != gSettings.reverse_depth)
+            {
+                PE_WARN("[Scene] Ignoring saved reverse_depth=%s; this is fixed by the active runtime/backend setup",
+                        settings["reverse_depth"].GetBool() ? "true" : "false");
+            }
+            if (settings.HasMember("fog"))
+                gSettings.fog = settings["fog"].GetBool();
+            if (settings.HasMember("fog_density"))
+                gSettings.fog_density = settings["fog_density"].GetFloat();
+            if (settings.HasMember("fog_start"))
+                gSettings.fog_start = settings["fog_start"].GetFloat();
             if (settings.HasMember("render_scale"))
             {
                 const float renderScale = ClampRenderScale(settings["render_scale"].GetFloat());
@@ -578,88 +626,6 @@ namespace pe
                     EventSystem::PushEvent(EventType::Resize);
                 }
             }
-            if (settings.HasMember("ssao"))
-                gSettings.ssao = settings["ssao"].GetBool();
-            if (settings.HasMember("ssao_radius"))
-                gSettings.ssao_radius = settings["ssao_radius"].GetFloat();
-            if (settings.HasMember("ssao_bias"))
-                gSettings.ssao_bias = settings["ssao_bias"].GetFloat();
-            if (settings.HasMember("ssao_intensity"))
-                gSettings.ssao_intensity = settings["ssao_intensity"].GetFloat();
-            if (settings.HasMember("ssao_power"))
-                gSettings.ssao_power = settings["ssao_power"].GetFloat();
-            if (settings.HasMember("ssao_samples"))
-                gSettings.ssao_samples = settings["ssao_samples"].GetInt();
-            if (settings.HasMember("forward_plus"))
-                gSettings.forward_plus = settings["forward_plus"].GetBool();
-            if (settings.HasMember("normal_format") && settings["normal_format"].IsString())
-                gSettings.normal_format = settings["normal_format"].GetString();
-            if (settings.HasMember("velocity_format") && settings["velocity_format"].IsString())
-                gSettings.velocity_format = settings["velocity_format"].GetString();
-            if (settings.HasMember("fxaa"))
-                gSettings.fxaa = settings["fxaa"].GetBool();
-            if (settings.HasMember("taa"))
-                gSettings.taa = settings["taa"].GetBool();
-            if (settings.HasMember("cas_sharpening"))
-                gSettings.cas_sharpening = settings["cas_sharpening"].GetBool();
-            if (settings.HasMember("cas_sharpness"))
-                gSettings.cas_sharpness = settings["cas_sharpness"].GetFloat();
-            if (settings.HasMember("ssr"))
-                gSettings.ssr = settings["ssr"].GetBool();
-            if (settings.HasMember("tonemapping"))
-                gSettings.tonemapping = settings["tonemapping"].GetBool();
-            if (settings.HasMember("color_grading"))
-                gSettings.color_grading = settings["color_grading"].GetBool();
-            if (settings.HasMember("color_grading_lift_r"))
-                gSettings.color_grading_lift_r = settings["color_grading_lift_r"].GetFloat();
-            if (settings.HasMember("color_grading_lift_g"))
-                gSettings.color_grading_lift_g = settings["color_grading_lift_g"].GetFloat();
-            if (settings.HasMember("color_grading_lift_b"))
-                gSettings.color_grading_lift_b = settings["color_grading_lift_b"].GetFloat();
-            if (settings.HasMember("color_grading_gamma_r"))
-                gSettings.color_grading_gamma_r = settings["color_grading_gamma_r"].GetFloat();
-            if (settings.HasMember("color_grading_gamma_g"))
-                gSettings.color_grading_gamma_g = settings["color_grading_gamma_g"].GetFloat();
-            if (settings.HasMember("color_grading_gamma_b"))
-                gSettings.color_grading_gamma_b = settings["color_grading_gamma_b"].GetFloat();
-            if (settings.HasMember("color_grading_gain_r"))
-                gSettings.color_grading_gain_r = settings["color_grading_gain_r"].GetFloat();
-            if (settings.HasMember("color_grading_gain_g"))
-                gSettings.color_grading_gain_g = settings["color_grading_gain_g"].GetFloat();
-            if (settings.HasMember("color_grading_gain_b"))
-                gSettings.color_grading_gain_b = settings["color_grading_gain_b"].GetFloat();
-            if (settings.HasMember("color_grading_saturation"))
-                gSettings.color_grading_saturation = settings["color_grading_saturation"].GetFloat();
-            if (settings.HasMember("color_grading_contrast"))
-                gSettings.color_grading_contrast = settings["color_grading_contrast"].GetFloat();
-            if (settings.HasMember("color_grading_intensity"))
-                gSettings.color_grading_intensity = settings["color_grading_intensity"].GetFloat();
-            if (settings.HasMember("color_grading_mask") && settings["color_grading_mask"].IsString())
-                gSettings.color_grading_mask = settings["color_grading_mask"].GetString();
-            if (settings.HasMember("dof"))
-                gSettings.dof = settings["dof"].GetBool();
-            if (settings.HasMember("dof_focus_scale"))
-                gSettings.dof_focus_scale = settings["dof_focus_scale"].GetFloat();
-            if (settings.HasMember("dof_blur_range"))
-                gSettings.dof_blur_range = settings["dof_blur_range"].GetFloat();
-            if (settings.HasMember("bloom"))
-                gSettings.bloom = settings["bloom"].GetBool();
-            if (settings.HasMember("bloom_strength"))
-                gSettings.bloom_strength = settings["bloom_strength"].GetFloat();
-            if (settings.HasMember("bloom_range"))
-                gSettings.bloom_range = settings["bloom_range"].GetFloat();
-            if (settings.HasMember("motion_blur"))
-                gSettings.motion_blur = settings["motion_blur"].GetBool();
-            if (settings.HasMember("motion_blur_strength"))
-                gSettings.motion_blur_strength = settings["motion_blur_strength"].GetFloat();
-            if (settings.HasMember("motion_blur_samples"))
-                gSettings.motion_blur_samples = settings["motion_blur_samples"].GetInt();
-            if (settings.HasMember("IBL"))
-                gSettings.IBL = settings["IBL"].GetBool();
-            if (settings.HasMember("IBL_intensity"))
-                gSettings.IBL_intensity = settings["IBL_intensity"].GetFloat();
-            if (settings.HasMember("lights_intensity"))
-                gSettings.lights_intensity = settings["lights_intensity"].GetFloat();
             if (settings.HasMember("randomize_lights"))
                 gSettings.randomize_lights = settings["randomize_lights"].GetBool();
             gSettings.skybox_path = settings.HasMember("skybox_path") && settings["skybox_path"].IsString()
@@ -667,12 +633,6 @@ namespace pe
                                         : SceneSettings::DefaultSkyboxPath;
             if (gSettings.skybox_path != previousSkyboxPath)
                 RefreshSceneSky();
-            if (settings.HasMember("depth_bias") && settings["depth_bias"].IsArray() && settings["depth_bias"].Size() == 3)
-            {
-                gSettings.depth_bias[0] = settings["depth_bias"][0].GetFloat();
-                gSettings.depth_bias[1] = settings["depth_bias"][1].GetFloat();
-                gSettings.depth_bias[2] = settings["depth_bias"][2].GetFloat();
-            }
             if (settings.HasMember("time_scale"))
                 gSettings.time_scale = settings["time_scale"].GetFloat();
             // Absent (scenes saved before the setting) = the old fixed 30 Hz, not the previous scene's rate.
@@ -736,17 +696,8 @@ namespace pe
                 gSettings.selection_outline_inner_fade = settings["selection_outline_inner_fade"].GetFloat();
             if (settings.HasMember("selection_outline_outer_fade"))
                 gSettings.selection_outline_outer_fade = settings["selection_outline_outer_fade"].GetFloat();
-            if (settings.HasMember("dynamic_rendering"))
-                gSettings.dynamic_rendering = settings["dynamic_rendering"].GetBool() && RHII.GetCaps().dynamicRendering;
             if (settings.HasMember("ray_tracing_support"))
                 gSettings.ray_tracing_support = RHII.GetCaps().rayTracing;
-            if (settings.HasMember("render_mode"))
-                gSettings.render_mode = ClampRenderModeToRayTracingSupport(
-                    static_cast<RenderMode>(settings["render_mode"].GetInt()), RHII.GetCaps().rayTracing);
-            if (settings.HasMember("use_Disney_PBR"))
-                gSettings.use_Disney_PBR = settings["use_Disney_PBR"].GetBool();
-            if (settings.HasMember("physical_point_falloff"))
-                gSettings.physical_point_falloff = settings["physical_point_falloff"].GetBool();
             if (settings.HasMember("present_mode"))
             {
                 gSettings.preferred_present_mode = static_cast<PePresentMode>(settings["present_mode"].GetInt());

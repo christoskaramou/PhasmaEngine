@@ -478,7 +478,7 @@ namespace pe
                 }
                 if (!script.name || !*script.name || std::strlen(script.name) > 128 ||
                     !names.insert(script.name).second || !script.create || !script.destroy || !script.update ||
-                    script.kind > phasma::ScriptKind::Node || script.mode > phasma::ScriptMode::Play ||
+                    script.kind > phasma::ScriptKind::Pipeline || script.mode > phasma::ScriptMode::Play ||
                     std::string(script.name).rfind("cpp:", 0) == 0)
                 {
                     m_error = "Invalid or duplicate script descriptor";

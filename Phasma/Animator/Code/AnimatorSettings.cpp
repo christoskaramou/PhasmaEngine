@@ -1,6 +1,7 @@
 #include "AnimatorApp.h"
 #include "Camera/Camera.h"
 #include "GUI/Helpers.h"
+#include "GUI/Widgets/PipelineControls.h"
 #include "GUI/Widgets/PostProcessControls.h"
 #include "GUI/Widgets/SceneSettingsControls.h"
 
@@ -34,6 +35,8 @@ namespace pe
                 if (i == 0)
                 {
                     if (DrawSceneSettingsControls())
+                        m_renderer.ResetTAAHistory();
+                    if (ImGui::CollapsingHeader("Pipeline") && DrawPipelineControls())
                         m_renderer.ResetTAAHistory();
                     ImGui::SeparatorText("Shadow Quality");
                     static int resolution = static_cast<int>(gs.shadow_map_size);

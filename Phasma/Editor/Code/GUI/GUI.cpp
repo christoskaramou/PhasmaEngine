@@ -2796,11 +2796,32 @@ namespace pe
             const float w = ImGui::CalcTextSize(text.c_str()).x + pad + ImGui::CalcTextSize("MCP").x + pad + 8.f;
             ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - w);
             ImGui::PushStyleColor(ImGuiCol_Text, s_moduleBuild.stale ? ImVec4(1.f, 0.55f, 0.15f, 1.f) : ImVec4(0.45f, 0.45f, 0.45f, 1.f));
-            ImGui::SmallButton(text.c_str());
+            ImGui::BeginDisabled(!s_moduleBuild.stale);
+            if (ImGui::SmallButton(text.c_str()))
+                ImGui::OpenPopup("##reload_module_confirm");
+            ImGui::EndDisabled();
             ImGui::PopStyleColor();
             ui::ItemTooltip(s_moduleBuild.stale
-                                ? "A newer PhasmaEditorModule is on disk. File > Reload Module swaps it in (scene and layout are kept), or restart the editor."
-                                : "Build time of the editor module this process loaded. After a rebuild use File > Reload Module or restart.");
+                                ? "A newer PhasmaEditorModule is on disk. Click to swap it in (scene and layout are kept), or restart the editor."
+                                : "Build time of the editor module this process loaded. After a rebuild use File > Reload Module or restart.",
+                            ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+
+            // Confirmation opens just above the button, right-aligned with it.
+            ImGui::SetNextWindowPos({ImGui::GetItemRectMax().x, ImGui::GetItemRectMin().y}, ImGuiCond_Appearing, {1.f, 1.f});
+            if (ImGui::BeginPopup("##reload_module_confirm"))
+            {
+                ImGui::TextUnformatted("Reload the editor module now?");
+                ImGui::TextDisabled("Scene and layout are kept. If PhasmaCore was rebuilt too, restart instead.");
+                if (ImGui::Button("Reload"))
+                {
+                    EventSystem::PushEvent(EventType::ReloadModule);
+                    ImGui::CloseCurrentPopup();
+                }
+                ImGui::SameLine();
+                if (ImGui::Button("Cancel"))
+                    ImGui::CloseCurrentPopup();
+                ImGui::EndPopup();
+            }
         }
 
         // MCP status button — right-aligned

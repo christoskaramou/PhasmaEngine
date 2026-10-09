@@ -53,6 +53,26 @@ namespace pe
                 std::filesystem::path includePath = path;
                 includePath.remove_filename();
                 std::string includeFileFull = (includePath / includeFile).string();
+                // A project shader includes the engine's shared files by the path its engine counterpart would
+                // (../Common/Structures.hlsl); one the project does not have comes from RuntimeAssets, at the
+                // longest tail of its path that exists there. The tail, not the project root: PhasmaCore holds its
+                // own copy of Path, which the Runtime's project selection never sets.
+                if (!AssetFileExists(includeFileFull))
+                {
+                    const std::filesystem::path normal = std::filesystem::path(includeFileFull).lexically_normal().relative_path();
+                    for (auto first = normal.begin(); first != normal.end(); ++first)
+                    {
+                        std::filesystem::path tail;
+                        for (auto it = first; it != normal.end(); ++it)
+                            tail /= *it;
+                        const std::string engineFile = Path::RuntimeAssetsPath() + tail.generic_string();
+                        if (AssetFileExists(engineFile))
+                        {
+                            includeFileFull = engineFile;
+                            break;
+                        }
+                    }
+                }
                 size_t posStart = code.find(line);
                 if (posStart != std::string::npos)
                 {
