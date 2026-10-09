@@ -208,20 +208,6 @@ namespace pe
 
         StopPlayMode();
         ClearAllSources();
-
-        if (m_musicSound)
-        {
-            ma_sound_uninit(m_musicSound);
-            delete m_musicSound;
-            m_musicSound = nullptr;
-        }
-
-        for (auto *s : m_fireAndForget)
-        {
-            ma_sound_uninit(s);
-            delete s;
-        }
-        m_fireAndForget.clear();
         m_residentClips.clear(); // the resource manager's uninit below frees their data
 
         for (auto &[node, zs] : m_zoneSounds)
@@ -580,6 +566,15 @@ namespace pe
     void AudioSystem::StopPlayMode()
     {
         m_playMode = false;
+        // Music and one-shots that play's scripts started end with it (the editor's Stop and ESC left a game's
+        // track looping in edit mode).
+        StopMusic();
+        for (auto *s : m_fireAndForget)
+        {
+            ma_sound_uninit(s);
+            delete s;
+        }
+        m_fireAndForget.clear();
         for (auto &state : m_states)
         {
             if (state.sound)

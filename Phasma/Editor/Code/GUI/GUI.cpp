@@ -3975,8 +3975,10 @@ namespace pe
         RendererSystem *rs = GetGlobalSystem<RendererSystem>();
         if (rs)
         {
-            StopRuntimePlaySession();
+            // Scripts first, as a game's own exit (engine.set_play_mode(false)) does: whatever their teardown
+            // starts (a menu's music) is then stopped with the rest of play.
             SetScriptPlayMode(false);
+            StopRuntimePlaySession();
             InputState::SetRelativeMouse(false);
             if (m_restoreRenderAfterPlay)
             {
