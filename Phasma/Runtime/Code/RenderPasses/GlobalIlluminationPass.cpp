@@ -15,7 +15,9 @@
 namespace pe
 {
     GlobalIlluminationPass::GlobalIlluminationPass()
-        : m_updatePass(std::make_shared<PassInfo>())
+        : m_updatePass(std::make_shared<PassInfo>()),
+          m_samplePass(std::make_shared<PassInfo>()),
+          m_radiancePass(std::make_shared<PassInfo>())
     {
         m_probeTracing = true;
     }
@@ -37,7 +39,11 @@ namespace pe
             return image;
         };
         // ponytail: one resident local volume; add cascades when the scene needs distant GI.
-        m_display = create("GI_Rays", 64, 512, PE_FORMAT_R16G16B16A16_SFLOAT);
+        m_display = create("GI_Rays", 256, 512, PE_FORMAT_R16G16B16A16_SFLOAT);
+        m_rayDirections = create("GI_RayDirections", 256, 512, PE_FORMAT_R32G32B32A32_SFLOAT);
+        // 16x16 octahedral radiance per probe (rgb, a = samples): the cache the next frame's rays are drawn from.
+        m_radiance = create("GI_Radiance", 128, 1024, PE_FORMAT_R32G32B32A32_SFLOAT);
+        m_radianceHistory = create("GI_RadianceHistory", 128, 1024, PE_FORMAT_R32G32B32A32_SFLOAT);
         m_display->SetSampler(Sampler::Create(Sampler::CreateInfoInit(), "GI_MaterialSampler"));
         m_rtDepth = nullptr;
         // 32-bit: a 0.999 history moves each texel by 1/1000 of the difference, below half precision.
@@ -57,6 +63,12 @@ namespace pe
         m_updatePass->name = "GI_ProbeUpdate";
         m_updatePass->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/GlobalIllumination/ProbeUpdate.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE});
         m_updatePass->Update();
+        m_samplePass->name = "GI_ProbeSample";
+        m_samplePass->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/GlobalIllumination/ProbeSample.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE});
+        m_samplePass->Update();
+        m_radiancePass->name = "GI_ProbeRadiance";
+        m_radiancePass->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/GlobalIllumination/ProbeRadiance.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE});
+        m_radiancePass->Update();
     }
 
     void GlobalIlluminationPass::CreateUniforms(CommandBuffer *cmd)
@@ -79,6 +91,7 @@ namespace pe
                 set->SetImageView(1, m_irradianceHistory->GetSRV());
                 set->SetImageView(2, m_distanceHistory->GetSRV());
                 set->SetSampler(3, m_display->GetSampler());
+                set->SetImageView(4, m_rayDirections->GetSRV());
                 set->Update();
             }
             auto *update = m_updatePass->GetDescriptors(frame)[0];
@@ -88,7 +101,20 @@ namespace pe
             update->SetImageView(3, m_display->GetSRV());
             update->SetImageView(4, m_irradiance->GetUAV(0));
             update->SetImageView(5, m_distance->GetUAV(0));
+            update->SetImageView(6, m_rayDirections->GetSRV());
             update->Update();
+            auto *sample = m_samplePass->GetDescriptors(frame)[0];
+            sample->SetBuffer(8, m_probeUniforms[frame]);
+            sample->SetImageView(4, m_rayDirections->GetUAV(0));
+            sample->SetImageView(5, m_radianceHistory->GetSRV());
+            sample->Update();
+            auto *radiance = m_radiancePass->GetDescriptors(frame)[0];
+            radiance->SetBuffer(8, m_probeUniforms[frame]);
+            radiance->SetImageView(3, m_display->GetSRV());
+            radiance->SetImageView(6, m_rayDirections->GetSRV());
+            radiance->SetImageView(7, m_radianceHistory->GetSRV());
+            radiance->SetImageView(10, m_radiance->GetUAV(0));
+            radiance->Update();
         }
     }
 
@@ -137,24 +163,25 @@ namespace pe
         // A skipped frame (GI toggled off, no TLAS) leaves history that no longer matches the scene.
         bool reset = m_historyScene != scene || m_historyGeneration != scene->GetGeneration() || m_historySpacing != m_probeData.spacing ||
                      !m_lastUpdate || RHII.GetFrameCounter() > m_lastUpdate + 1;
-        // Probes average every frame since the lighting last changed (up to gi_hysteresis), so static lighting stops
-        // moving. Anything the probe rays see restarts that average: lights, ray-traced transforms, geometry and
-        // materials, and the settings that shade ray hits. Camera movement does not.
-        Hash inputs(static_cast<size_t>(scene->GetGiInputVersion()));
-        inputs.Combine(static_cast<size_t>(scene->GetGeometryVersion()));
-        const auto &pp = ActivePostProcessProfile();
-        for (float value : {pp.IBL ? 1.f : 0.f, pp.IBL_intensity * ActivePostProcessBlend().IBL,
-                            settings.shadows ? 1.f : 0.f, settings.use_Disney_PBR ? 1.f : 0.f})
-            inputs.Combine(value);
-        const bool restart = static_cast<size_t>(inputs) != m_historyInputs;
-        m_historyInputs = static_cast<size_t>(inputs);
         m_probeData.originSpacing = vec4(origin, minSpacing);
         m_probeData.historyOriginSpacing = m_historyOriginSpacing;
         m_probeData.maxDistance = std::max({spacing.x, spacing.y, spacing.z}) * 16.f;
         m_probeData.intensity = std::isfinite(settings.gi_intensity) ? std::clamp(settings.gi_intensity, 0.f, 16.f) : 1.f;
         m_probeData.normalBias = minSpacing * 0.1f;
         m_probeData.hysteresis = std::isfinite(settings.gi_hysteresis) ? std::clamp(settings.gi_hysteresis, 0.f, 0.999f) : 0.999f;
-        m_probeData.reset = (reset ? 1u : 0u) | (restart ? 2u : 0u); // bit 0: discard history, bit 1: restart the average
+        // Probe texels detect lighting changes on their own (ProbeUpdate.hlsl). A known change to anything the probe
+        // rays see (lights, ray-traced transforms, geometry and materials, the settings that shade ray hits) also caps
+        // every texel's average at 200 frames, so changes too small to stand out of the noise still settle in a few
+        // seconds without restarting every probe. Camera movement does not count.
+        Hash inputs(static_cast<size_t>(scene->GetGiInputVersion()));
+        inputs.Combine(static_cast<size_t>(scene->GetGeometryVersion()));
+        const auto &pp = ActivePostProcessProfile();
+        for (float value : {pp.IBL ? 1.f : 0.f, pp.IBL_intensity * ActivePostProcessBlend().IBL,
+                            settings.shadows ? 1.f : 0.f, settings.use_Disney_PBR ? 1.f : 0.f})
+            inputs.Combine(value);
+        const bool changed = static_cast<size_t>(inputs) != m_historyInputs;
+        m_historyInputs = static_cast<size_t>(inputs);
+        m_probeData.reset = (reset ? 1u : 0u) | (changed ? 2u : 0u); // bit 0: discard history, bit 1: known change
         m_probeData.frame = RHII.GetFrameCounter();
         BufferRange range{};
         range.data = &m_probeData;
@@ -164,6 +191,9 @@ namespace pe
 
     void GlobalIlluminationPass::DeclareInputs(RGBuilder &builder)
     {
+        builder.WriteCompute(m_rayDirections);
+        builder.ReadCompute(m_radianceHistory);
+        builder.WriteCompute(m_radiance);
         builder.WriteRayTracing(m_display);
         builder.ReadRayTracing(m_irradianceHistory);
         builder.ReadRayTracing(m_distanceHistory);
@@ -175,9 +205,12 @@ namespace pe
 
     void GlobalIlluminationPass::DeclareOutputs(RGBuilder &builder)
     {
+        builder.OutputCustom(m_rayDirections, PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, PE_STAGE_COMPUTE_SHADER, PE_ACCESS_SHADER_READ);
         builder.OutputCustom(m_display, PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, PE_STAGE_COMPUTE_SHADER, PE_ACCESS_SHADER_READ);
         builder.OutputCustom(m_irradiance, PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_READ);
         builder.OutputCustom(m_distance, PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_READ);
+        builder.OutputCustom(m_radiance, PE_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_READ);
+        builder.OutputCustom(m_radianceHistory, PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_WRITE);
         builder.OutputCustom(m_irradianceHistory, PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_WRITE);
         builder.OutputCustom(m_distanceHistory, PE_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, PE_STAGE_TRANSFER, PE_ACCESS_TRANSFER_WRITE);
     }
@@ -187,13 +220,22 @@ namespace pe
         if (!m_scene || !m_scene->GetTLAS())
             return;
         Scene *scene = m_scene;
+        cmd->BeginDebugRegion("GI_ProbeSample");
+        cmd->BindPipeline(*m_samplePass);
+        cmd->Dispatch(m_probeData.gridSize * m_probeData.gridSize * m_probeData.gridSize, 1, 1);
+        cmd->EndDebugRegion();
+        cmd->ImageBarrier({.image = m_rayDirections, .layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .stageFlags = PE_STAGE_RAY_TRACING_SHADER_KHR, .accessMask = PE_ACCESS_SHADER_READ});
         RayTracingPass::ExecutePass(cmd);
         cmd->BeginDebugRegion("GlobalIllumination");
         cmd->ImageBarrier({.image = m_display, .layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .stageFlags = PE_STAGE_COMPUTE_SHADER, .accessMask = PE_ACCESS_SHADER_READ});
+        cmd->ImageBarrier({.image = m_rayDirections, .layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .stageFlags = PE_STAGE_COMPUTE_SHADER, .accessMask = PE_ACCESS_SHADER_READ});
         cmd->BindPipeline(*m_updatePass);
         cmd->Dispatch(8, 64, 1);
+        cmd->BindPipeline(*m_radiancePass);
+        cmd->Dispatch(8, 64, 1); // a 16x16 group per probe
         cmd->CopyImage(m_irradiance, m_irradianceHistory);
         cmd->CopyImage(m_distance, m_distanceHistory);
+        cmd->CopyImage(m_radiance, m_radianceHistory);
         cmd->EndDebugRegion();
         m_historyScene = scene;
         m_historyGeneration = scene->GetGeneration();
@@ -213,7 +255,7 @@ namespace pe
         for (auto *uniform : m_probeUniforms)
             Buffer::Destroy(uniform);
         m_probeUniforms.clear();
-        for (Image **image : {&m_display, &m_irradiance, &m_distance, &m_irradianceHistory, &m_distanceHistory})
+        for (Image **image : {&m_display, &m_rayDirections, &m_radiance, &m_radianceHistory, &m_irradiance, &m_distance, &m_irradianceHistory, &m_distanceHistory})
         {
             Image::Destroy(*image);
             *image = nullptr;
@@ -225,6 +267,6 @@ namespace pe
 
     std::vector<PassInfo *> GlobalIlluminationPass::GetPassInfos() noexcept
     {
-        return {m_passInfo.get(), m_updatePass.get()};
+        return {m_passInfo.get(), m_updatePass.get(), m_samplePass.get(), m_radiancePass.get()};
     }
 } // namespace pe

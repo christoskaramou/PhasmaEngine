@@ -607,7 +607,7 @@ void raygeneration()
     uint2 launch = DispatchRaysIndex().xy;
     RayDesc ray;
     ray.Origin = ProbePosition(launch.y);
-    ray.Direction = ProbeRayDirection(launch.x);
+    ray.Direction = gi_rayDirections.Load(int3(launch.xy, 0)).xyz;
     ray.TMin = 0.001;
     ray.TMax = gi_maxDistance;
     HitPayload payload = (HitPayload)0;

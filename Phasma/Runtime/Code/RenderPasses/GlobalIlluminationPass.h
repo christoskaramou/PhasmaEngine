@@ -27,7 +27,7 @@ namespace pe
         {
             vec4 originSpacing;
             uint32_t gridSize = 8;
-            uint32_t rayCount = 64;
+            uint32_t rayCount = 256;
             uint32_t frame = 0;
             uint32_t reset = 1;
             float maxDistance = 32.f;
@@ -45,6 +45,11 @@ namespace pe
         Image *m_irradianceHistory = nullptr;
         Image *m_distanceHistory = nullptr;
         std::shared_ptr<PassInfo> m_updatePass;
+        std::shared_ptr<PassInfo> m_samplePass;
+        std::shared_ptr<PassInfo> m_radiancePass;
+        Image *m_rayDirections = nullptr;
+        Image *m_radiance = nullptr;
+        Image *m_radianceHistory = nullptr;
         Scene *m_historyScene = nullptr;
         uint32_t m_historyGeneration = 0;
         vec4 m_historyOriginSpacing{};

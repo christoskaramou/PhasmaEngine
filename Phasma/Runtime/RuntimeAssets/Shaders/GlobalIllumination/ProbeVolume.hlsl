@@ -40,6 +40,9 @@
 [[vk::binding(1, 2)]] Texture2D<float4> gi_traceIrradiance;
 [[vk::binding(2, 2)]] Texture2D<float4> gi_traceDistance;
 [[vk::binding(3, 2)]] SamplerState gi_traceSampler;
+#ifdef GI_PROBES
+[[vk::binding(4, 2)]] Texture2D<float4> gi_rayDirections; // xyz direction, w pdf (ProbeSample.hlsl)
+#endif
 #define gi_sampler gi_traceSampler
 #define gi_irradiance gi_traceIrradiance
 #define gi_distance gi_traceDistance
@@ -79,6 +82,34 @@ float3 ProbeRayDirection(uint ray)
     float rotation = float(gi_frame % 1024) * 1.32471795724;
     return float3(direction.x, direction.y * cos(rotation) - direction.z * sin(rotation),
                   direction.y * sin(rotation) + direction.z * cos(rotation));
+}
+
+#define PROBE_RADIANCE_SIZE 16
+
+// Hit radiance as the probe averages use it: a 16-bit ray target can hold Inf (or NaN) from very bright hits.
+float3 ProbeFiniteRadiance(float3 radiance)
+{
+    return all(isfinite(radiance)) ? clamp(radiance, 0.0, 10000.0) : 0.0.xxx;
+}
+
+// A probe's 16x16 tile in the radiance atlas (8 probes per row, like the 8x8 irradiance tiles).
+uint2 ProbeRadianceTile(uint probe)
+{
+    return uint2(probe % gi_gridSize, probe / gi_gridSize) * PROBE_RADIANCE_SIZE;
+}
+
+// Where a probe's history lives after a camera-following volume scrolled; false when there is none to use.
+bool ProbeHistoryIndex(uint probe, out uint oldProbe)
+{
+    oldProbe = 0;
+    if ((gi_reset & 1u) != 0)
+        return false;
+    int3 cell = int3(probe % gi_gridSize, (probe / gi_gridSize) % gi_gridSize, probe / (gi_gridSize * gi_gridSize));
+    int3 oldCell = cell + int3(round((gi_originSpacing.xyz - gi_historyOriginSpacing.xyz) / gi_spacing.xyz));
+    if (any(oldCell < 0) || any(oldCell >= int(gi_gridSize)))
+        return false;
+    oldProbe = oldCell.x + gi_gridSize * (oldCell.y + gi_gridSize * oldCell.z);
+    return true;
 }
 
 float2 ProbeOctEncode(float3 direction)
