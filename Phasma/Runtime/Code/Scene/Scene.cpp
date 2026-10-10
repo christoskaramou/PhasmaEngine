@@ -2034,8 +2034,11 @@ namespace pe
             const PeBarrierAccess rw = PE_ACCESS_SHADER_READ | PE_ACCESS_SHADER_WRITE;
             barriers.push_back(makeBufferBarrier(m_drawInstanceIds[frame], PE_STAGE_COMPUTE_SHADER, rw, m_drawInstanceIds[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowCullCounters[frame], PE_STAGE_COMPUTE_SHADER, rw, countersSize));
-            barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame], PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
-            barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame], PE_STAGE_COMPUTE_SHADER, rw, indirectSize));
+            // Whole buffers: the cull shader binds them whole, and they are larger than the capacity (storage sizes are
+            // aligned up; ring buffers are kept when they still fit), so a capacity-sized range leaves the tail
+            // unsynchronised between the per-cascade dispatches.
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectRegular[frame]->Size()));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectVoxels[frame]->Size()));
             cmd->BufferBarriers(barriers);
         }
 
@@ -2114,11 +2117,11 @@ namespace pe
             barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame],
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,
-                                                 indirectSize));
+                                                 m_shadowIndirectRegular[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame],
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,
-                                                 indirectSize));
+                                                 m_shadowIndirectVoxels[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowCullCounters[frame],
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,

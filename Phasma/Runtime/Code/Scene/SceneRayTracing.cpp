@@ -700,6 +700,10 @@ namespace pe
         if (m_nodesMoved.empty())
             return;
 
+        // The GI probe pass and the hybrid ray-tracing pass both call this each frame: refit once.
+        if (m_tlasRefitFrame == RHII.GetFrameCounter())
+            return;
+
         // A camera or light move (no ray-traced geometry) lands in m_nodesMoved too, but must NOT trigger a
         // full instance-buffer rewrite + TLAS refit every frame. Only refit when a node that actually owns
         // RT instances moved — otherwise camera navigation pays an O(instances) CPU cost per frame for nothing.
@@ -721,6 +725,7 @@ namespace pe
         }
         if (!anyRtNodeMoved)
             return;
+        m_tlasRefitFrame = RHII.GetFrameCounter();
         m_giInputVersion++;
 
         const uint32_t frameCount = RHII.GetSwapchainImageCount();

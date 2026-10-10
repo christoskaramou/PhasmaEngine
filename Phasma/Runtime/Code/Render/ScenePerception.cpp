@@ -389,7 +389,7 @@ namespace pe
         idReadBarrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
         cmd->ImageBarrier(idReadBarrier);
 
-        const size_t nodeVisSize = static_cast<size_t>(cache.nodeVisCapacity) * sizeof(ObjectIdNodeVis);
+        const size_t nodeVisSize = cache.nodeVis->Size(); // the whole bound buffer: storage sizes are aligned up
         cmd->BufferBarrier(MakeBufferBarrier(cache.nodeVis, PE_STAGE_COMPUTE_SHADER,
                                              PE_ACCESS_SHADER_WRITE | PE_ACCESS_SHADER_STORAGE_WRITE, nodeVisSize));
 

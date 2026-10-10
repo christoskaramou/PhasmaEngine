@@ -283,6 +283,14 @@ namespace pe
         buildRange.transformOffset = 0;
 
         const vk::AccelerationStructureBuildRangeInfoKHR *pBuildRanges = &buildRange;
+        // In-place refit: ray tracing recorded earlier (trace rays and ray queries) may still read this TLAS.
+        MemoryBarrierInfo beforeRefit{};
+        beforeRefit.srcStageMask = PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_COMPUTE_SHADER | PE_STAGE_FRAGMENT_SHADER;
+        beforeRefit.srcAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_READ_KHR;
+        beforeRefit.dstStageMask = PE_STAGE_ACCELERATION_STRUCTURE_BUILD_KHR;
+        beforeRefit.dstAccessMask = PE_ACCESS_ACCELERATION_STRUCTURE_WRITE_KHR;
+        cmd->MemoryBarrier(beforeRefit);
+
         BuildAccelerationStructures(cmd, 1, &buildInfo, &pBuildRanges);
 
         // Add barrier for subsequent use

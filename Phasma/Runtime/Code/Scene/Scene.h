@@ -1008,13 +1008,14 @@ namespace pe
         // profile so the renderer's active-profile pointer can target it for the frame.
         PostProcessProfile m_resolvedPostProcessProfile{};
 
-        uint32_t m_generation = 0;             // Incremented on full scene identity changes
-        uint32_t m_scriptAttachGeneration = 0; // Node script path attach/clear membership
-        bool m_geometryDirty = false;          // Pending full geometry GPU upload (new mesh data)
-        bool m_instancesDirty = false;         // Pending raster instance data rebuild (mesh refs changed, no new geometry)
-        bool m_materialDirty = false;          // Pending material table update
-        bool m_texturesDirty = false;          // Pending image view update
-        bool m_linearColorViews = false;       // linear_color the image views were built for
+        uint32_t m_generation = 0;              // Incremented on full scene identity changes
+        uint32_t m_scriptAttachGeneration = 0;  // Node script path attach/clear membership
+        bool m_geometryDirty = false;           // Pending full geometry GPU upload (new mesh data)
+        bool m_instancesDirty = false;          // Pending raster instance data rebuild (mesh refs changed, no new geometry)
+        bool m_materialDirty = false;           // Pending material table update
+        bool m_texturesDirty = false;           // Pending image view update
+        bool m_linearColorViews = false;        // linear_color the image views were built for
+        uint32_t m_tlasRefitFrame = UINT32_MAX; // frame counter of the last in-place TLAS refit
 
         // Mesh indices whose sprite vertices changed on the CPU stores and await a batched
         // copy at the front of the next render command. This covers quad UVs and optional
