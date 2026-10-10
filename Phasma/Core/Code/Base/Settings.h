@@ -157,6 +157,7 @@ namespace pe
         bool lod_enabled = true;
         bool global_illumination = false;
         bool hdr = false;
+        bool linear_color = false; // decode sRGB colour inputs, light in linear, encode once in Tonemap; forces HDR
         float gi_probe_spacing = 2.f;
         float gi_intensity = 1.f;
         float gi_hysteresis = 0.999f; // ceiling of the per-probe average; restarts on lighting changes

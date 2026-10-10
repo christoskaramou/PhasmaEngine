@@ -1,5 +1,6 @@
 #include "SSRPass.h"
 #include "API/Buffer.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
@@ -125,9 +126,11 @@ namespace pe
         struct SSRBlendPC
         {
             float blend;
+            uint32_t linearColor;
         };
         SSRBlendPC pc{};
         pc.blend = ActivePostProcessBlend().ssr;
+        pc.linearColor = SceneUsesLinearColor() ? 1u : 0u;
 
         cmd->BeginPass(1, m_attachments.data(), "SSR");
         cmd->BindPipeline(*m_passInfo);

@@ -602,8 +602,8 @@ namespace pe
             info.flags |= vk::ImageCreateFlagBits::eCubeCompatible;
         if (desc.array2DCompatible)
             info.flags |= vk::ImageCreateFlagBits::e2DArrayCompatible;
-        if (desc.mutableFormat)
-            info.flags |= vk::ImageCreateFlagBits::eMutableFormat;
+        if (desc.mutableFormat) // extended usage: an sRGB view of a storage image needs no storage support
+            info.flags |= vk::ImageCreateFlagBits::eMutableFormat | vk::ImageCreateFlagBits::eExtendedUsage;
 
         VkImageCreateInfo ci = static_cast<VkImageCreateInfo>(info);
         VmaAllocationCreateInfo aci{};

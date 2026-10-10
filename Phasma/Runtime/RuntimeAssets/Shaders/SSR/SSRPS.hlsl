@@ -11,6 +11,7 @@ TexSamplerDecl(4, 0, Albedo)
 struct PushConstants_SSRBlend
 {
     float blend;
+    uint linearColor; // albedo target holds sRGB-encoded albedo
 };
 [[vk::push_constant]] ConstantBuffer<PushConstants_SSRBlend> pc;
 
@@ -109,6 +110,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     PS_OUTPUT_Color output;
 
     float3 albedo            = Albedo.Sample(sampler_Albedo, input.uv).xyz;
+    if (pc.linearColor != 0)
+        albedo = SrgbToLinear(albedo);
     float4 color             = Color.Sample(sampler_Color, input.uv);
     float depth              = Depth.Sample(sampler_Depth, input.uv).x;
 

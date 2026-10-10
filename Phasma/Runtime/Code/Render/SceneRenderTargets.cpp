@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "API/Sampler.h"
 #include "API/Swapchain.h"
+#include "gtc/color_space.hpp"
 
 namespace pe
 {
@@ -44,7 +45,31 @@ namespace pe
     bool SceneUsesHDR()
     {
         const auto &settings = Settings::Get<SceneSettings>();
-        return settings.hdr || (settings.global_illumination && RHII.GetCaps().rayTracing);
+        return settings.hdr || settings.linear_color || (settings.global_illumination && RHII.GetCaps().rayTracing);
+    }
+
+    bool SceneUsesLinearColor()
+    {
+        return Settings::Get<SceneSettings>().linear_color;
+    }
+
+    vec3 SceneColor(const vec3 &srgb)
+    {
+        if (!SceneUsesLinearColor())
+            return srgb;
+        const float peak = std::max({srgb.r, srgb.g, srgb.b, 1.0f});
+        return glm::convertSRGBToLinear(srgb / peak) * peak;
+    }
+
+    uint32_t SceneColorPacked(uint32_t rgba8)
+    {
+        if (!SceneUsesLinearColor())
+            return rgba8;
+        // Packed as UnpackColorRGBA reads it: red in the high byte, alpha in the low byte.
+        const vec3 c = SceneColor(vec3((rgba8 >> 24) & 0xFF, (rgba8 >> 16) & 0xFF, (rgba8 >> 8) & 0xFF) / 255.0f);
+        const auto byte = [](float v)
+        { return static_cast<uint32_t>(std::lround(std::clamp(v, 0.0f, 1.0f) * 255.0f)); };
+        return (byte(c.r) << 24) | (byte(c.g) << 16) | (byte(c.b) << 8) | (rgba8 & 0xFFu);
     }
 
     bool SceneNeedsVelocityRT(bool hasRayTracingGeometry)

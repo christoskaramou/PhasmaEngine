@@ -360,7 +360,7 @@ namespace pe
                         "Dx12BlitImage: destination image '%s' was not created with COLOR_ATTACHMENT usage",
                         dst->GetName().c_str());
 
-            ValidateShaderBlitFormat(rhi->GetDevice(), dstImpl->GetResourceFormat());
+            ValidateShaderBlitFormat(rhi->GetDevice(), dstImpl->GetViewFormat());
 
             ImageViewDesc srcViewDesc{};
             srcViewDesc.viewType = PE_IMAGE_VIEW_TYPE_2D;
@@ -421,7 +421,7 @@ namespace pe
             attachment.storeOp = PE_STORE_OP_STORE;
 
             dxCmd->BeginPass(1, &attachment, "Dx12BlitImageScale", false);
-            dxCmd->BindExternalRenderPipeline(GetShaderBlitPso(dstImpl->GetResourceFormat()),
+            dxCmd->BindExternalRenderPipeline(GetShaderBlitPso(dstImpl->GetViewFormat()),
                                               D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST,
                                               {});
             dxCmd->BindExternalRenderDescriptors(1, &descriptor);
@@ -459,7 +459,7 @@ namespace pe
 
         const Dx12ImageImpl *srcImpl = Dx12ImageImpl::From(src);
         const Dx12ImageImpl *dstImpl = Dx12ImageImpl::From(dst);
-        PE_ERROR_IF(srcImpl->GetResourceFormat() != dstImpl->GetResourceFormat(),
+        PE_ERROR_IF(srcImpl->GetViewFormat() != dstImpl->GetViewFormat(),
                     "Dx12BlitImage: format-converting blit is not supported yet");
 
         const BlitGeometry geometry = CalculateBlitGeometry(region);

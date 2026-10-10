@@ -103,7 +103,7 @@ namespace pe
         void SetPassOrders(const std::unordered_map<PassID, uint32_t> &orders);
         const std::vector<Problem> &GetProblems() const { return m_problems; }
         // The problems giving passes these orders would add; empty when the move is fine. Problems already
-        // present at the current orders (last frame's history, pyramids) are not counted.
+        // present at the current orders are not counted.
         std::vector<Problem> NewProblems(const std::unordered_map<PassID, uint32_t> &orders) const;
         void Clear();
 

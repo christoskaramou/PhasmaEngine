@@ -15,6 +15,7 @@ namespace pe
     struct TonemapBlendPC
     {
         float blend;
+        uint32_t linearColor;
     };
     void TonemapPass::Init()
     {
@@ -104,6 +105,7 @@ namespace pe
 
         TonemapBlendPC pc{};
         pc.blend = ActivePostProcessProfile().tonemapping ? ActivePostProcessBlend().tonemapping : 0.f;
+        pc.linearColor = SceneUsesLinearColor() ? 1u : 0u;
 
         cmd->BeginPass(1, m_attachments.data(), "Tonemap");
         cmd->BindPipeline(*m_passInfo);

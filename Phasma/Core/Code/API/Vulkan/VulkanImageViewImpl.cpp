@@ -97,6 +97,15 @@ namespace pe
         info.subresourceRange.baseArrayLayer = desc.baseArrayLayer;
         info.subresourceRange.layerCount = desc.layerCount;
 
+        // A view reinterpreting a mutable image (the sRGB view of a colour texture) is only sampled; sRGB formats
+        // lack the storage support the image's own usage asks for.
+        vk::ImageViewUsageCreateInfo usageInfo{};
+        if (format != owner->m_parent->GetFormat())
+        {
+            usageInfo.usage = vk::ImageUsageFlagBits::eSampled;
+            info.pNext = &usageInfo;
+        }
+
         m_imageView = VulkanRhi::Device().createImageView(info);
         Debug::SetObjectName(m_imageView, owner->m_name);
     }

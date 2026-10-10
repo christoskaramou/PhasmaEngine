@@ -1014,6 +1014,7 @@ namespace pe
         bool m_instancesDirty = false;         // Pending raster instance data rebuild (mesh refs changed, no new geometry)
         bool m_materialDirty = false;          // Pending material table update
         bool m_texturesDirty = false;          // Pending image view update
+        bool m_linearColorViews = false;       // linear_color the image views were built for
 
         // Mesh indices whose sprite vertices changed on the CPU stores and await a batched
         // copy at the front of the next render command. This covers quad UVs and optional

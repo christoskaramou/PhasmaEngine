@@ -1,4 +1,5 @@
 #include "SelectionOutlinePass.h"
+#include "Render/SceneRenderTargets.h"
 #include "DepthPass.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -181,7 +182,8 @@ namespace pe
 
         // 3) Composite outline over the display image.
         PushConstants_SelectionOutline pc{};
-        pc.color = vec4(gs.selection_outline_color_r, gs.selection_outline_color_g, gs.selection_outline_color_b, gs.selection_outline_color_a);
+        pc.color = vec4(SceneColor(vec3(gs.selection_outline_color_r, gs.selection_outline_color_g, gs.selection_outline_color_b)),
+                        gs.selection_outline_color_a);
         pc.params0 = vec4(1.f / m_maskRT->GetWidth_f(), 1.f / m_maskRT->GetHeight_f(), gs.selection_outline_thickness,
                           gs.selection_outline_inner_fade);
         pc.params1 = vec4(gs.selection_outline_outer_fade, 0.f, 0.f, 0.f);

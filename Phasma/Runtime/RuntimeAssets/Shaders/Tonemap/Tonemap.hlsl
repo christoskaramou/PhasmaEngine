@@ -1,13 +1,6 @@
 #ifndef TONEMAPPING_H_
 #define TONEMAPPING_H_
 
-float3 SRGBtoLINEAR(float3 srgbIn)
-{
-    float3 bLess = step(0.04045, srgbIn);
-    float3 linOut = lerp(srgbIn / 12.92, pow((srgbIn + 0.055) / 1.055, 2.4), bLess);
-    return linOut;
-}
-
 float3 Reinhard(float3 hdr)
 {
     float k = 1.0;

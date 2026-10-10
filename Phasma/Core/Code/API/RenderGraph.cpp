@@ -140,7 +140,7 @@ namespace pe
         m_problems.clear();
 
         std::unordered_map<const void *, size_t> lastWriter;
-        std::vector<std::pair<size_t, Image *>> loadsBeforeWriter; // attachment loads with no earlier writer
+        std::vector<std::tuple<size_t, Image *, const char *>> beforeWriter; // last-frame loads and reads, with their verb
         std::unordered_set<Image *> seen;
         auto problem = [&](const Pass &pass, const void *resource, std::string text)
         {
@@ -212,7 +212,12 @@ namespace pe
                 auto it = lastWriter.find(img);
                 if (it == lastWriter.end())
                 {
-                    problem(pass, img, pass.name + " reads image '" + img->GetName() + "' before any pass writes it");
+                    // An image the pass also writes holds its own last-frame output (TAA, GI history), which is
+                    // wrong only if a later pass writes it too.
+                    if (std::find(io.outputs.begin(), io.outputs.end(), img) != io.outputs.end())
+                        beforeWriter.emplace_back(i, img, "reads");
+                    else
+                        problem(pass, img, pass.name + " reads image '" + img->GetName() + "' before any pass writes it");
                     continue;
                 }
 
@@ -228,7 +233,7 @@ namespace pe
                 if (const auto it = lastWriter.find(output.image); it != lastWriter.end())
                     deps.push_back(it->second);
                 else
-                    loadsBeforeWriter.emplace_back(i, output.image);
+                    beforeWriter.emplace_back(i, output.image, "loads");
                 if (std::find(io.inputs.begin(), io.inputs.end(), output.image) == io.inputs.end())
                     io.inputs.push_back(output.image);
             }
@@ -280,13 +285,13 @@ namespace pe
             for (Buffer *buffer : m_builderScratch.m_bufferWrites)
                 lastWriter[buffer] = i;
         }
-        for (const auto &[index, image] : loadsBeforeWriter)
+        for (const auto &[index, image, verb] : beforeWriter)
             for (size_t later = index + 1; later < m_passes.size(); ++later)
             {
                 const std::vector<Image *> &outputs = m_passIO[later].outputs;
                 if (std::find(outputs.begin(), outputs.end(), image) == outputs.end())
                     continue;
-                problem(m_passes[index], image, m_passes[index].name + " loads image '" + image->GetName() + "' before " + m_passes[later].name + " writes it");
+                problem(m_passes[index], image, m_passes[index].name + " " + verb + " image '" + image->GetName() + "' before " + m_passes[later].name + " writes it");
                 break;
             }
 

@@ -1,6 +1,7 @@
 #include "LightPass.h"
 #include "GlobalIlluminationPass.h"
 #include "API/Buffer.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
@@ -182,9 +183,10 @@ namespace pe
             }
         }
 
-        bool HasLiveShadowResources(const ShadowPass &shadows)
+        // The Shadow pass's own condition: with the scene settings inactive it renders no shadow maps.
+        bool ShadowsActive(const ShadowPass &shadows)
         {
-            return shadows.HasLiveResources();
+            return Settings::Get<SceneSettings>().shadows && SceneSettingsActive() && shadows.HasLiveResources();
         }
 
         std::vector<ImageView *> GetLiveShadowViews(const ShadowPass &shadows)
@@ -344,7 +346,7 @@ namespace pe
     void LightOpaquePass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool useShadowResources = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool useShadowResources = ShadowsActive(shadows);
         EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
                                            m_shadowFallbackTexture,
                                            m_shadowFallbackSampler,
@@ -410,7 +412,7 @@ namespace pe
         const auto &pp = ActivePostProcessProfile();
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        const bool shadowsAvailable = ShadowsActive(shadows);
         const bool forwardPlusEnabled = gSettings.forward_plus;
         const uint32_t frame = RHII.GetFrameIndex();
         const bool lightStorageMoved =
@@ -445,6 +447,7 @@ namespace pe
         m_ubo.forward_plus = forwardPlusEnabled ? 1u : 0u;
         m_ubo.fog_density = gSettings.fog ? gSettings.fog_density : 0.0f;
         m_ubo.fog_start = gSettings.fog_start;
+        m_ubo.linear_color = SceneUsesLinearColor() ? 1u : 0u;
 
         BufferRange range{};
         range.data = &m_ubo;
@@ -457,7 +460,7 @@ namespace pe
     void LightOpaquePass::DeclareInputs(RGBuilder &builder)
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsEnabled = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool shadowsEnabled = ShadowsActive(shadows);
 
         builder.Read(m_depthStencilRT);
         builder.Read(m_normalRT);
@@ -482,7 +485,7 @@ namespace pe
         uint32_t shadowmapCascades = Settings::Get<SceneSettings>().num_cascades;
         const auto &gSettings = Settings::Get<SceneSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        const bool shadowsAvailable = ShadowsActive(shadows);
 
         Scene &scene = *GetActiveScene();
         const uint32_t frame = RHII.GetFrameIndex();
@@ -608,7 +611,7 @@ namespace pe
     void LightTransparentPass::UpdateDescriptorSets()
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool useShadowResources = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool useShadowResources = ShadowsActive(shadows);
         EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
                                            m_shadowFallbackTexture,
                                            m_shadowFallbackSampler,
@@ -673,7 +676,7 @@ namespace pe
         const auto &pp = ActivePostProcessProfile();
         SceneRendererHost &renderer = RequireActiveSceneRendererHost();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        const bool shadowsAvailable = ShadowsActive(shadows);
         const bool forwardPlusEnabled = gSettings.forward_plus;
         const uint32_t frame = RHII.GetFrameIndex();
         const bool lightStorageMoved =
@@ -708,6 +711,7 @@ namespace pe
         m_ubo.forward_plus = forwardPlusEnabled ? 1u : 0u;
         m_ubo.fog_density = gSettings.fog ? gSettings.fog_density : 0.0f;
         m_ubo.fog_start = gSettings.fog_start;
+        m_ubo.linear_color = SceneUsesLinearColor() ? 1u : 0u;
 
         BufferRange range{};
         range.data = &m_ubo;
@@ -720,7 +724,7 @@ namespace pe
     void LightTransparentPass::DeclareInputs(RGBuilder &builder)
     {
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsEnabled = Settings::Get<SceneSettings>().shadows && HasLiveShadowResources(shadows);
+        const bool shadowsEnabled = ShadowsActive(shadows);
 
         builder.Read(m_depthStencilRT);
         builder.Read(m_normalRT);
@@ -745,7 +749,7 @@ namespace pe
         uint32_t shadowmapCascades = Settings::Get<SceneSettings>().num_cascades;
         const auto &gSettings = Settings::Get<SceneSettings>();
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsAvailable = gSettings.shadows && HasLiveShadowResources(shadows);
+        const bool shadowsAvailable = ShadowsActive(shadows);
 
         Scene &scene = *GetActiveScene();
         const uint32_t frame = RHII.GetFrameIndex();

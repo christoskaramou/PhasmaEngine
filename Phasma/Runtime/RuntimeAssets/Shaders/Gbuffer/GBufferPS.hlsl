@@ -52,7 +52,10 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float4 sampledBaseColor = HasTexture(textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
     if (spriteBlend > 0.0f && HasTexture(textureMask, TEX_BASE_COLOR_BIT))
         sampledBaseColor = lerp(sampledBaseColor, GetBaseColor(id, input.nextUv), spriteBlend);
-    float4 combinedColor    = sampledBaseColor * input.color * mat.baseColorFactor;
+    float4 authored = input.color * mat.baseColorFactor;
+    if (pc.linearColor != 0) // vertex colour and factor are each sRGB-authored
+        authored.rgb = SrgbToLinear(input.color.rgb) * SrgbToLinear(mat.baseColorFactor.rgb);
+    float4 combinedColor    = sampledBaseColor * authored;
 
     if (combinedColor.a <= 0.0f || combinedColor.a < mat.pbrParams.z)
         discard;
@@ -87,7 +90,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
         occlusion = lerp(1.0f, occlusionSample, mat.pbrParams.w);
     }
 
-    float3 emissive = mat.emissiveTransmission.xyz;
+    float3 emissive = pc.linearColor != 0 ? SrgbToLinearHdr(mat.emissiveTransmission.xyz) : mat.emissiveTransmission.xyz;
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
         float3 sampledEmissive = GetEmissive(id, uv).xyz;
@@ -97,7 +100,8 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     }
 
     output.normal = float4(normalWS * 0.5f + 0.5f, 1.0f);
-    output.albedo = float4(combinedColor.xyz, combinedColor.a);
+    // 8-bit albedo keeps sRGB precision (Unreal's GBuffer base colour is an sRGB target); its readers decode it.
+    output.albedo = float4(pc.linearColor != 0 ? LinearToSrgb(combinedColor.xyz) : combinedColor.xyz, combinedColor.a);
     float transmission = (pc.passType == 2) ? 1.0f : 0.0f;
     output.metRough = float4(occlusion, roughness, metallic, transmission);
     // attenuationColor.w = nightEmissive flag; alpha 0 marks the pixel for the

@@ -225,7 +225,9 @@ namespace pe
         m_viewFormat = pe_dx12::Format(desc.format);
         PE_ERROR_IF(m_viewFormat == DXGI_FORMAT_UNKNOWN, "Dx12ImageImpl: unsupported image format");
 
-        m_resourceFormat = IsDepthStencilFormat(m_viewFormat) ? pe_dx12::DepthToTypeless(m_viewFormat) : m_viewFormat;
+        m_resourceFormat = IsDepthStencilFormat(m_viewFormat) ? pe_dx12::DepthToTypeless(m_viewFormat)
+                           : desc.mutableFormat               ? pe_dx12::ColorToTypeless(m_viewFormat)
+                                                              : m_viewFormat;
         m_state = ToInitialResourceState(desc.initialLayout, desc.usage);
 
         D3D12_RESOURCE_DESC resourceDesc = TextureResourceDesc(desc, m_resourceFormat);
@@ -412,11 +414,11 @@ namespace pe
                         static_cast<uint32_t>(dstMax.y) > MipExtent(dst->GetHeight(), dstMip) ||
                         static_cast<uint32_t>(dstBack) > MipExtent(dst->m_depth, dstMip),
                     "Dx12ImageImpl::Blit: region exceeds source or destination mip extent");
-        PE_ERROR_IF(srcImpl->m_resourceFormat != m_resourceFormat,
+        PE_ERROR_IF(srcImpl->m_viewFormat != m_viewFormat,
                     "Dx12ImageImpl::Blit: format-converting blit not supported on DX12 yet "
                     "(src '%s' fmt=%u, dst '%s' fmt=%u) - needs a format-conversion shader slice",
-                    src->GetName().c_str(), static_cast<uint32_t>(srcImpl->m_resourceFormat),
-                    dst->GetName().c_str(), static_cast<uint32_t>(m_resourceFormat));
+                    src->GetName().c_str(), static_cast<uint32_t>(srcImpl->m_viewFormat),
+                    dst->GetName().c_str(), static_cast<uint32_t>(m_viewFormat));
 
         cmd->BeginDebugRegion("BlitImage");
 

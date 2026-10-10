@@ -55,6 +55,7 @@ TexSamplerDecl(6, 0, Emission)
     uint        cb_forwardPlus;
     float       cb_fogDensity; // 0 = fog off
     float       cb_fogStart;
+    uint        cb_linearColor; // albedo target holds sRGB-encoded albedo
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)

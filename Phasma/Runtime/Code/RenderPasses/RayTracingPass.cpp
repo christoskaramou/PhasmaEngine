@@ -1,6 +1,7 @@
 #include "RayTracingPass.h"
 #include "GlobalIlluminationPass.h"
 #include "API/AccelerationStructure.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -105,7 +106,8 @@ namespace pe
                 desc->SetImageView(8, skybox->GetSRV());
                 auto *ibl_brdf_lut = rs->GetIBL_LUT();
                 desc->SetImageView(9, ibl_brdf_lut->GetSRV());
-                desc->SetImageView(10, rs->GetDepthStencilRT()->GetSRV());
+                if (!m_probeTracing) // the probe raygen never reads depth, so its layout has no binding 10
+                    desc->SetImageView(10, rs->GetDepthStencilRT()->GetSRV());
                 desc->SetBuffer(11, scene.GetMaterialTable());
                 desc->SetImageViews(12, scene.GetImageViews());
                 desc->Update();
@@ -158,6 +160,7 @@ namespace pe
         if (m_probeTracing && !pp.IBL)
             ubo.ibl_intensity = 0.f;
         ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
+        ubo.linear_color = SceneUsesLinearColor() ? 1u : 0u;
 
         BufferRange range{};
         range.data = &ubo;

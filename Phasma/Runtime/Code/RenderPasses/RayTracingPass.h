@@ -19,7 +19,8 @@ namespace pe
         uint32_t IBL;
         uint32_t renderMode; // 0=Raster, 1=Hybrid, 2=RayTracing
         uint32_t orthographicCamera;
-        uint32_t padding[2]; // Alignment padding
+        uint32_t linear_color; // decode authored colours at hits
+        uint32_t padding;      // Alignment padding
     };
 
     class RayTracingPass : public IRenderPassComponent

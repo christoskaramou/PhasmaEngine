@@ -385,6 +385,7 @@ namespace pe
             pushConstants.projJitter = camera->GetProjJitter();
             pushConstants.prevProjJitter = camera->GetPrevProjJitter();
             pushConstants.passType = 0u;
+            pushConstants.linearColor = SceneUsesLinearColor() ? 1u : 0u;
 
             uint32_t frame = RHII.GetFrameIndex();
             const uint32_t mesh = m_scene->GetIndirectCapacity();
@@ -747,6 +748,7 @@ namespace pe
         pushConstants.projJitter = camera->GetProjJitter();
         pushConstants.prevProjJitter = camera->GetPrevProjJitter();
         pushConstants.passType = 1u;
+        pushConstants.linearColor = SceneUsesLinearColor() ? 1u : 0u;
         uint32_t frame = RHII.GetFrameIndex();
 
         if (hasAlphaBlendMeshes)

@@ -79,7 +79,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     // baked colour, they are not ground.
     if (input.color.a < 0.5f)
     {
-        albedo = input.color.rgb;
+        albedo = pc.linearColor != 0 ? SrgbToLinear(input.color.rgb) : input.color.rgb;
     }
     else
     {
@@ -126,11 +126,11 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
         roughness = mat.w;
 
         // Per-vertex tint carries the cave-interior rock darkening and the underwater blue mix.
-        albedo *= input.color.rgb;
+        albedo *= pc.linearColor != 0 ? SrgbToLinear(input.color.rgb) : input.color.rgb;
     }
 
     output.normal = float4(outN * 0.5f + 0.5f, 1.0f);
-    output.albedo = float4(albedo, 1.0f);
+    output.albedo = float4(pc.linearColor != 0 ? LinearToSrgb(albedo) : albedo, 1.0f);
     output.metRough = float4(1.0f, roughness, 0.0f, 0.0f); // full occlusion, per-layer roughness, no metal
     output.emissive = float4(0.0f, 0.0f, 0.0f, 1.0f);
     output.transparency = pc.passType ? 1.0f : 0.0f;

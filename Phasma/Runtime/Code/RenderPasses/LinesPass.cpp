@@ -1,4 +1,5 @@
 #include "LinesPass.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
@@ -135,7 +136,8 @@ namespace pe
                                                        : (mesh.material ? mesh.material->baseColorFactor : vec4(1.f));
                 // Emissive is the line color when set (lit shading is meaningless for
                 // guide lines); base_color is the fallback.
-                constants.color = dot(emissive, emissive) > 0.f ? vec4(emissive, baseColor.a) : baseColor;
+                constants.color = dot(emissive, emissive) > 0.f ? vec4(SceneColor(emissive), baseColor.a)
+                                                                : vec4(SceneColor(vec3(baseColor)), baseColor.a);
                 constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
 
                 cmd->SetConstants(constants);
@@ -167,7 +169,7 @@ namespace pe
                                                             : mesh.material->emissiveFactor;
                 const vec4 baseColor = mesh.materialInstance ? mesh.materialInstance->GetBaseColorFactor()
                                                              : mesh.material->baseColorFactor;
-                constants.color = vec4(emissive, baseColor.a);
+                constants.color = vec4(SceneColor(emissive), baseColor.a);
                 constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
 
                 cmd->SetConstants(constants);

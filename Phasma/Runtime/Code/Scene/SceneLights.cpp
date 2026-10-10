@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Buffer.h"
 #include "API/RHI.h"
 
@@ -136,26 +137,33 @@ namespace pe
         auto nodeEnabled = [this](const NodeId *node)
         { return !node || IsNodeHierarchyEnabled(node); };
 
+        // Light colours are sRGB-authored: a linear-colour scene decodes them (w stays the intensity).
+        auto Packed = [](auto light)
+        {
+            light.color = vec4(SceneColor(vec3(light.color)), light.color.w);
+            return light;
+        };
+
         // Pack only enabled lights into the GPU-visible POD vectors.
         m_directionalLightsPOD.clear();
         for (const auto &l : m_directionalLights)
             if (nodeEnabled(l.nodeId))
-                m_directionalLightsPOD.push_back(l);
+                m_directionalLightsPOD.push_back(Packed(l));
 
         m_pointLightsPOD.clear();
         for (const auto &l : m_pointLights)
             if (nodeEnabled(l.nodeId))
-                m_pointLightsPOD.push_back(l);
+                m_pointLightsPOD.push_back(Packed(l));
 
         m_spotLightsPOD.clear();
         for (const auto &l : m_spotLights)
             if (nodeEnabled(l.nodeId))
-                m_spotLightsPOD.push_back(l);
+                m_spotLightsPOD.push_back(Packed(l));
 
         m_areaLightsPOD.clear();
         for (const auto &l : m_areaLights)
             if (nodeEnabled(l.nodeId))
-                m_areaLightsPOD.push_back(l);
+                m_areaLightsPOD.push_back(Packed(l));
 
         // Probe GI restarts its averaging when any light changes (Scene::GetGiInputVersion).
         uint64_t lightsHash = 0;

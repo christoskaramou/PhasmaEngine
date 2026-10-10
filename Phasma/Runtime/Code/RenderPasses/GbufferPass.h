@@ -19,7 +19,7 @@ namespace pe
         vec2 projJitter;
         vec2 prevProjJitter;
         uint32_t passType;
-        float pad1;
+        uint32_t linearColor;
     };
 
     class GbufferOpaquePass : public IRenderPassComponent

@@ -11,5 +11,7 @@ namespace pe
     bool LoadSceneSkyPath(CommandBuffer *cmd, SkyBox &skybox, const std::string &path);
     void LoadDefaultSceneSky(CommandBuffer *cmd, SkyBox &skybox, Image *&iblBrdfLut);
     void LoadFallbackSceneSky(CommandBuffer *cmd, SkyBox &skybox);
+    // The solid-colour fallback is showing (no configured skybox, or it failed to load).
+    bool SceneSkyIsFallback();
     void DestroyDefaultSceneSky(SkyBox &skybox, Image *&iblBrdfLut);
 } // namespace pe

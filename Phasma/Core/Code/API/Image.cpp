@@ -294,6 +294,7 @@ namespace pe
             desc.height = dds.height;
             desc.mipLevels = dds.mipLevels;
             desc.usage = PE_IMAGE_USAGE_TRANSFER_DST | PE_IMAGE_USAGE_SAMPLED;
+            desc.mutableFormat = Image::SrgbFormatOf(desc.format) != PE_FORMAT_UNDEFINED; // colour formats also get an sRGB view
             desc.initialLayout = PE_IMAGE_LAYOUT_UNDEFINED;
             desc.name = path;
 
@@ -357,6 +358,7 @@ namespace pe
             desc.height = height;
             desc.mipLevels = mipLevels;
             desc.usage = usage;
+            desc.mutableFormat = Image::SrgbFormatOf(format) != PE_FORMAT_UNDEFINED; // colour formats also get an sRGB view
             desc.initialLayout = PE_IMAGE_LAYOUT_UNDEFINED;
             desc.name = name;
 
@@ -439,6 +441,7 @@ namespace pe
     {
         PE_ERROR_IF(!m_mipLevels, "Image: Mip levels cannot be zero.");
         PE_ERROR_IF(!m_arrayLayers, "Image: Array layers cannot be zero.");
+        m_mutableFormat = desc.mutableFormat;
 
         m_trackInfos.resize(m_arrayLayers);
         for (uint32_t i = 0; i < m_arrayLayers; i++)
@@ -472,6 +475,7 @@ namespace pe
     {
         ImageView::Destroy(m_rtv);
         ImageView::Destroy(m_srv);
+        ImageView::Destroy(m_srgbSrv);
 
         for (auto &view : m_srvs)
             ImageView::Destroy(view);
@@ -502,6 +506,56 @@ namespace pe
     void Image::CreateSRV(PeImageViewType type, int mip)
     {
         m_impl->CreateSRV(type, mip);
+    }
+
+    ::PeFormat Image::SrgbFormatOf(::PeFormat format)
+    {
+        switch (format)
+        {
+        case PE_FORMAT_R8G8B8A8_UNORM:
+            return PE_FORMAT_R8G8B8A8_SRGB;
+        case PE_FORMAT_B8G8R8A8_UNORM:
+            return PE_FORMAT_B8G8R8A8_SRGB;
+        case PE_FORMAT_BC1_RGBA_UNORM:
+            return PE_FORMAT_BC1_RGBA_SRGB;
+        case PE_FORMAT_BC2_UNORM:
+            return PE_FORMAT_BC2_SRGB;
+        case PE_FORMAT_BC3_UNORM:
+            return PE_FORMAT_BC3_SRGB;
+        case PE_FORMAT_BC7_UNORM:
+            return PE_FORMAT_BC7_SRGB;
+        default:
+            return PE_FORMAT_UNDEFINED;
+        }
+    }
+
+    bool Image::CanSampleAsSrgb() const
+    {
+        return m_mutableFormat && SrgbFormatOf(m_format) != PE_FORMAT_UNDEFINED;
+    }
+
+    ImageView *Image::GetSrgbSRV()
+    {
+        const ::PeFormat srgb = SrgbFormatOf(m_format);
+        if (srgb == PE_FORMAT_UNDEFINED)
+            return m_srv;
+        if (!m_mutableFormat)
+        {
+            if (!m_srgbViewWarned)
+                PE_WARN("[Image] '%s' cannot be sampled as sRGB (created without mutableFormat)", m_name.c_str());
+            m_srgbViewWarned = true;
+            return m_srv;
+        }
+        if (!m_srgbSrv)
+        {
+            ImageViewDesc desc{};
+            desc.viewType = PE_IMAGE_VIEW_TYPE_2D;
+            desc.format = srgb;
+            desc.levelCount = m_mipLevels;
+            desc.layerCount = m_arrayLayers;
+            m_srgbSrv = ImageView::Create(this, desc, m_name + "_sRGB");
+        }
+        return m_srgbSrv;
     }
 
     void Image::CreateUAV(PeImageViewType type, uint32_t mip)

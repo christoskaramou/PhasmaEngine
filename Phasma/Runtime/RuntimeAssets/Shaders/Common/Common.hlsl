@@ -279,4 +279,22 @@ float4 UnpackColorRGBA(uint color)
     return float4(r, g, b, a);
 }
 
+float3 SrgbToLinear(float3 c)
+{
+    return lerp(c / 12.92, pow((max(c, 0.0) + 0.055) / 1.055, 2.4), step(0.04045, c));
+}
+
+float3 LinearToSrgb(float3 c)
+{
+    c = max(c, 0.0);
+    return lerp(c * 12.92, 1.055 * pow(c, 1.0 / 2.4) - 0.055, step(0.0031308, c));
+}
+
+// Picker colours above 1 carry brightness: decode the colour, keep the brightness.
+float3 SrgbToLinearHdr(float3 c)
+{
+    float peak = max(max(c.r, c.g), max(c.b, 1.0));
+    return SrgbToLinear(c / peak) * peak;
+}
+
 #endif

@@ -31,6 +31,7 @@ namespace pe
         {"lod_enabled", &SceneSettings::lod_enabled},
         {"global_illumination", &SceneSettings::global_illumination},
         {"hdr", &SceneSettings::hdr},
+        {"linear_color", &SceneSettings::linear_color},
         {"cluster_geometry", &SceneSettings::cluster_geometry},
         {"randomize_lights", &SceneSettings::randomize_lights},
         {"physical_point_falloff", &SceneSettings::physical_point_falloff},

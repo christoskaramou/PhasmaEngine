@@ -90,7 +90,7 @@ struct Vertex
     uint cb_IBL;
     uint cb_renderMode;  // 0=Raster, 1=Hybrid, 2=RayTracing
     uint cb_orthographicCamera;
-    uint cb_rtPassPad0;
+    uint cb_linearColor; // decode authored colours at hits
     uint cb_rtPassPad1;
 };
 
@@ -808,6 +808,8 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     // 1. Base Color
     float4 combinedColor = color * mat.baseColorFactor;
+    if (cb_linearColor != 0) // vertex colour and factor are each sRGB-authored
+        combinedColor.rgb = SrgbToLinear(color.rgb) * SrgbToLinear(mat.baseColorFactor.rgb);
     if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
     {
         combinedColor *= GetBaseColor(constantsId, uv);
@@ -834,7 +836,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         occlusion = lerp(1.0f, occlusionSample, metRoughAlphacutOcl.w);
     }
 
-    float3 emissive = mat.emissiveTransmission.xyz;
+    float3 emissive = cb_linearColor != 0 ? SrgbToLinearHdr(mat.emissiveTransmission.xyz) : mat.emissiveTransmission.xyz;
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
         emissive *= GetEmissive(constantsId, uv).xyz;

@@ -43,6 +43,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     }
 
     float4 albedo    = Albedo.Sample(sampler_Albedo, input.uv);
+    if (cb_linearColor != 0)
+        albedo.rgb = SrgbToLinear(albedo.rgb);
     float3 normal    = normalize(Normal.Sample(sampler_Normal, input.uv).xyz * 2.0 - 1.0);
     float4 metRough  = MetRough.Sample(sampler_MetRough, input.uv);
     float4 emissionSample = Emission.Sample(sampler_Emission, input.uv);

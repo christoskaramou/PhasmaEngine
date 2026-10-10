@@ -42,14 +42,17 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Voxel input)
     float3 sampleCoord = float3(frac(input.uv), (float)input.tileLayer);
     float4 albedo = gVoxelAtlas.Sample(voxel_sampler, sampleCoord);
 
-    float4 combinedColor = albedo * input.color; // vertex color reserved for Phase 3 light/AO
+    float4 vertexColor = input.color; // reserved for Phase 3 light/AO
+    if (pc.linearColor != 0)
+        vertexColor.rgb = SrgbToLinear(vertexColor.rgb);
+    float4 combinedColor = albedo * vertexColor;
     if (combinedColor.a <= 0.0f)
         discard;
 
     float3 N = normalize(input.normal);
 
     output.normal = float4(N * 0.5f + 0.5f, 1.0f);
-    output.albedo = float4(combinedColor.xyz, combinedColor.a);
+    output.albedo = float4(pc.linearColor != 0 ? LinearToSrgb(combinedColor.xyz) : combinedColor.xyz, combinedColor.a);
     // Opaque voxels: full occlusion, max roughness, no metal, no transmission.
     output.metRough = float4(1.0f, 1.0f, 0.0f, 0.0f);
     output.emissive = float4(0.0f, 0.0f, 0.0f, combinedColor.a);

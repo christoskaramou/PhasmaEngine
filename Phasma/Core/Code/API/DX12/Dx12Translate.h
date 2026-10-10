@@ -114,6 +114,28 @@ namespace pe_dx12
         return PE_FORMAT_UNDEFINED;
     }
 
+    // A colour format whose resource must also be viewed as its sRGB twin.
+    inline DXGI_FORMAT ColorToTypeless(DXGI_FORMAT f)
+    {
+        switch (f)
+        {
+        case DXGI_FORMAT_R8G8B8A8_UNORM:
+            return DXGI_FORMAT_R8G8B8A8_TYPELESS;
+        case DXGI_FORMAT_B8G8R8A8_UNORM:
+            return DXGI_FORMAT_B8G8R8A8_TYPELESS;
+        case DXGI_FORMAT_BC1_UNORM:
+            return DXGI_FORMAT_BC1_TYPELESS;
+        case DXGI_FORMAT_BC2_UNORM:
+            return DXGI_FORMAT_BC2_TYPELESS;
+        case DXGI_FORMAT_BC3_UNORM:
+            return DXGI_FORMAT_BC3_TYPELESS;
+        case DXGI_FORMAT_BC7_UNORM:
+            return DXGI_FORMAT_BC7_TYPELESS;
+        default:
+            return f;
+        }
+    }
+
     inline DXGI_FORMAT DepthToTypeless(DXGI_FORMAT f)
     {
         switch (f)

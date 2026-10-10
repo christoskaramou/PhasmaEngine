@@ -245,6 +245,7 @@ namespace pe
         {
             settings.AddMember("render_mode", static_cast<int>(s.render_mode), allocator);
             settings.AddMember("hdr", s.hdr, allocator);
+            settings.AddMember("linear_color", s.linear_color, allocator);
             settings.AddMember("dynamic_rendering", s.dynamic_rendering, allocator);
             settings.AddMember("use_Disney_PBR", s.use_Disney_PBR, allocator);
             settings.AddMember("physical_point_falloff", s.physical_point_falloff, allocator);
@@ -502,6 +503,7 @@ namespace pe
                 gSettings.lod_enabled = settings["lod_enabled"].GetBool();
             gSettings.global_illumination = settings.HasMember("global_illumination") && settings["global_illumination"].IsBool() && settings["global_illumination"].GetBool();
             gSettings.hdr = settings.HasMember("hdr") && settings["hdr"].IsBool() && settings["hdr"].GetBool();
+            gSettings.linear_color = settings.HasMember("linear_color") && settings["linear_color"].IsBool() && settings["linear_color"].GetBool();
             auto readFiniteFloat = [&](const char *key, float fallback, float minimum, float maximum)
             {
                 float value = settings.HasMember(key) && settings[key].IsNumber() ? settings[key].GetFloat() : fallback;

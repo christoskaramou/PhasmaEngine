@@ -1,4 +1,5 @@
 #include "AabbsPass.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
 #include "API/Image.h"
@@ -111,7 +112,7 @@ namespace pe
                 const Mesh &mesh = m_scene->GetMesh(meshIdx);
 
                 constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
-                constants.color = mesh.aabbColor;
+                constants.color = SceneColorPacked(mesh.aabbColor);
 
                 cmd->SetConstants(constants);
                 cmd->PushConstants();

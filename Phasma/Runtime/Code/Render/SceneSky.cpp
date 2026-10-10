@@ -1,4 +1,5 @@
 #include "Render/SceneSky.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Image.h"
 #include "Skybox/Skybox.h"
 
@@ -43,9 +44,11 @@ namespace pe
             return true;
         }
 
+        bool g_fallbackSky = false;
+
         vec4 FallbackSceneSkyColor()
         {
-            return vec4(0.48f, 0.58f, 0.68f, 1.0f);
+            return vec4(SceneColor(vec3(0.48f, 0.58f, 0.68f)), 1.0f);
         }
 
         const std::string &ConfiguredSceneSkyPath()
@@ -89,7 +92,10 @@ namespace pe
 
         const std::string skyboxPath = NormalizeSeparators(PathToUtf8String(resolvedPath));
         if (skybox.LoadSkyBox(cmd, skyboxPath))
+        {
+            g_fallbackSky = false;
             return true;
+        }
 
         PE_WARN("[SceneSky] Using solid-color sky fallback for missing skybox: %s", skyboxPath.c_str());
         LoadFallbackSceneSky(cmd, skybox);
@@ -112,6 +118,12 @@ namespace pe
     void LoadFallbackSceneSky(CommandBuffer *cmd, SkyBox &skybox)
     {
         skybox.LoadSolidColor(cmd, FallbackSceneSkyColor(), "Skybox_SolidColor");
+        g_fallbackSky = true;
+    }
+
+    bool SceneSkyIsFallback()
+    {
+        return g_fallbackSky;
     }
 
     void DestroyDefaultSceneSky(SkyBox &skybox, Image *&iblBrdfLut)

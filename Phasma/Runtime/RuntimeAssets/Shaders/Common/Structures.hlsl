@@ -102,7 +102,7 @@ struct PushConstants_GBuffer
     float2 projJitter;
     float2 prevProjJitter;
     uint passType;
-    float pad1;
+    uint linearColor; // linear_color: decode authored colours, store albedo sRGB-encoded
 };
 
 struct PushConstants_RayTracing

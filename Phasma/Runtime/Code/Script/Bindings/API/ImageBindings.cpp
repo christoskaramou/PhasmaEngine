@@ -413,6 +413,7 @@ namespace pe
                         desc.width = width;
                         desc.height = height;
                         desc.usage = ToImageUsage(usage);
+                        desc.mutableFormat = Image::SrgbFormatOf(desc.format) != PE_FORMAT_UNDEFINED; // sRGB view in linear scenes
                         desc.name = name;
                         Image *img = Image::Create(desc);
                         if (!img) return nullptr;
@@ -428,6 +429,7 @@ namespace pe
                         desc.height = height;
                         desc.usage = ToImageUsage(usage);
                         desc.mipLevels = mipLevels;
+                        desc.mutableFormat = Image::SrgbFormatOf(desc.format) != PE_FORMAT_UNDEFINED; // sRGB view in linear scenes
                         desc.name = name;
                         Image *img = Image::Create(desc);
                         if (!img) return nullptr;

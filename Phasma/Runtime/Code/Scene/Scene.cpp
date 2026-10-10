@@ -4,6 +4,7 @@
 #include "Scene/ModelAsset.h"
 #include "Scene/MeshLod.h"
 #include "Scene/SceneRuntimeHooks.h"
+#include "Render/SceneSky.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Camera/Camera.h"
 #include "API/AccelerationStructure.h"
@@ -632,6 +633,14 @@ namespace pe
 
         UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()) *
                                                   Settings::Get<SceneSettings>().time_scale));
+
+        if (const bool linear = Settings::Get<SceneSettings>().linear_color; linear != m_linearColorViews)
+        {
+            m_linearColorViews = linear;
+            m_texturesDirty = true; // colour slots switch between the UNORM and sRGB views
+            if (SceneSkyIsFallback())
+                RefreshSceneSky(); // the solid fallback sky colour is authored in sRGB
+        }
 
         UpdateGeometry();
         if (Settings::Get<SceneSettings>().selection_outline)

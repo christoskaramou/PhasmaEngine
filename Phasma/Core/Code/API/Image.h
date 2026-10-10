@@ -98,6 +98,13 @@ namespace pe
         bool HasUAV(uint32_t mip) { return !!m_uavs[mip]; }
         ImageView *GetRTV() { return m_rtv; }
         ImageView *GetSRV(int mip = -1) { return mip == -1 ? m_srv : m_srvs[mip]; }
+        // The view that decodes sRGB on sampling (colour textures in a linear-colour scene); the same as GetSRV for
+        // formats with no sRGB twin.
+        ImageView *GetSrgbSRV();
+        // Whether GetSrgbSRV returns a decoding view (a colour format created with mutableFormat).
+        bool CanSampleAsSrgb() const;
+        // The sRGB twin of a colour format, or UNDEFINED when sampling needs no decode (float, data, already sRGB).
+        static ::PeFormat SrgbFormatOf(::PeFormat format);
         ImageView *GetUAV(uint32_t mip) { return m_uavs[mip]; }
         void SetRTV(ImageView *view) { m_rtv = view; }
         bool HasGeneratedMips() { return m_mipmapsGenerated; }
@@ -173,6 +180,9 @@ namespace pe
         Sampler *m_sampler{};
         ImageView *m_rtv{};
         ImageView *m_srv{};
+        ImageView *m_srgbSrv{};
+        bool m_mutableFormat = false;
+        bool m_srgbViewWarned = false;
         std::vector<ImageView *> m_srvs{};
         std::vector<ImageView *> m_uavs{};
         std::vector<std::vector<ImageTrackInfo>> m_trackInfos{};

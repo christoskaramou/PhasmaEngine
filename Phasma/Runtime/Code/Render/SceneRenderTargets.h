@@ -22,6 +22,11 @@ namespace pe
     // Velocity follows active TAA/motion blur and backend raster requirements.
     bool SceneNeedsVelocityRT(bool hasRayTracingGeometry);
     bool SceneUsesHDR();
+    bool SceneUsesLinearColor();
+    // An sRGB-authored colour as the frame uses it: decoded in a linear-colour scene (values above 1 keep their
+    // brightness), unchanged otherwise.
+    vec3 SceneColor(const vec3 &srgb);
+    uint32_t SceneColorPacked(uint32_t rgba8);
 
     Image *CreateSceneRenderTarget(SceneRenderTargetMap &renderTargets,
                                    const std::string &name,

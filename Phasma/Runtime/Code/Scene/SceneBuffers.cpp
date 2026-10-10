@@ -11,9 +11,16 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/Vertex.h"
+#include "Render/SceneRenderTargets.h"
 
 namespace pe
 {
+    // Base colour (0) and emissive (4) hold colour: a linear-colour scene samples them through the sRGB view.
+    static ImageView *MaterialSlotView(Image *image, int slot)
+    {
+        return (slot == 0 || slot == 4) && SceneUsesLinearColor() ? image->GetSrgbSRV() : image->GetSRV();
+    }
+
     static bool IsRasterIndirectMesh(const Mesh &mesh)
     {
         return mesh.renderType != RenderType::Lines && mesh.renderType != RenderType::SpriteOutline;
@@ -698,17 +705,24 @@ namespace pe
         m_imageViews.reserve(m_imageStore.size());
 
         const auto &defaults = ModelAsset::GetDefaultResources();
-        OrderedMap<Image *, uint32_t> imagesMap{};
+        // Keyed by view: an image sampled both as colour and as data gets one table entry per view.
+        OrderedMap<ImageView *, uint32_t> viewsMap{};
+        auto indexOf = [&](ImageView *view)
+        {
+            if (!view)
+                view = defaults.white->GetSRV();
+            if (viewsMap.insert(view, static_cast<uint32_t>(m_imageViews.size())).first)
+                m_imageViews.push_back(view);
+            return viewsMap[view];
+        };
 
         for (const ResourceHandle<Image> &image : m_imageStore)
         {
-            auto insertResult = imagesMap.insert(image.get(), static_cast<uint32_t>(m_imageViews.size()));
-            if (insertResult.first)
-            {
-                ImageView *srv = image->GetSRV();
-                PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
-                m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
-            }
+            PE_ERROR_IF(!image->GetSRV(), "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
+            indexOf(image->GetSRV());
+            // TryBindCachedTexture looks colour slots up by their sRGB view in a linear scene.
+            if (SceneUsesLinearColor() && image->CanSampleAsSrgb())
+                indexOf(image->GetSrgbSRV());
         }
 
         // Disabled pooled rigs can re-enable without a texture rebuild, so keep their cached
@@ -734,14 +748,9 @@ namespace pe
 
                     if (image && !isDefault)
                     {
-                        auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
-                        if (insertResult.first)
-                        {
-                            ImageView *srv = image->GetSRV();
-                            PE_ERROR_IF(!srv, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
-                            m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
-                        }
-                        rt.imageViewIndices[k] = imagesMap[image];
+                        ImageView *view = MaterialSlotView(image, k);
+                        PE_ERROR_IF(!view, "UpdateImageViews: image '%s' has no SRV", image->GetName().c_str());
+                        rt.imageViewIndices[k] = indexOf(view);
                     }
                     else
                     {
@@ -762,14 +771,8 @@ namespace pe
                             continue;
                         }
 
-                        auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
-                        if (insertResult.first)
-                        {
-                            ImageView *srv = image->GetSRV();
-                            PE_ERROR_IF(!srv, "UpdateImageViews: named texture '%s' has no SRV", name.c_str());
-                            m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
-                        }
-                        mat->namedTextureIndices[name] = imagesMap[image];
+                        PE_ERROR_IF(!image->GetSRV(), "UpdateImageViews: named texture '%s' has no SRV", name.c_str());
+                        mat->namedTextureIndices[name] = indexOf(image->GetSRV());
                     }
                     MaterialInstance *inst = mesh.materialInstance;
                     if (inst)
@@ -784,14 +787,8 @@ namespace pe
                                 continue;
                             }
 
-                            auto insertResult = imagesMap.insert(image, static_cast<uint32_t>(m_imageViews.size()));
-                            if (insertResult.first)
-                            {
-                                ImageView *srv = image->GetSRV();
-                                PE_ERROR_IF(!srv, "UpdateImageViews: instance named texture '%s' has no SRV", name.c_str());
-                                m_imageViews.push_back(srv ? srv : defaults.white->GetSRV());
-                            }
-                            inst->namedTextureIndices[name] = imagesMap[image];
+                            PE_ERROR_IF(!image->GetSRV(), "UpdateImageViews: instance named texture '%s' has no SRV", name.c_str());
+                            inst->namedTextureIndices[name] = indexOf(image->GetSRV());
                         }
                     }
                 }
@@ -2370,7 +2367,7 @@ namespace pe
                              { return resident.get() == image; }) == m_imageStore.end())
                 m_imageStore.push_back(imageHandle);
 
-            const auto it = std::find(m_imageViews.begin(), m_imageViews.end(), image->GetSRV());
+            const auto it = std::find(m_imageViews.begin(), m_imageViews.end(), MaterialSlotView(image, textureSlot));
             if (it == m_imageViews.end())
                 return false;
             imageViewIndex = static_cast<uint32_t>(std::distance(m_imageViews.begin(), it));
