@@ -77,7 +77,9 @@ namespace pe
         const auto &pp = ActivePostProcessProfile();
         const auto &gs = Settings::Get<SceneSettings>();
         const bool renderRaster = gs.render_mode != RenderMode::RayTracing || !hasRayTracingGeometry;
-        return pp.taa || (pp.motion_blur && (RHII.GetApi() != PE_GRAPHICS_API_DX12 || renderRaster));
+        // GI's screen probes and reflections reproject their histories with it, as Lumen does.
+        const bool giHistories = gs.global_illumination && hasRayTracingGeometry && renderRaster;
+        return pp.taa || giHistories || (pp.motion_blur && (RHII.GetApi() != PE_GRAPHICS_API_DX12 || renderRaster));
     }
 
     static ::PeFormat SceneNormalRTFormat()

@@ -56,6 +56,8 @@ TexSamplerDecl(6, 0, Emission)
     float       cb_fogDensity; // 0 = fog off
     float       cb_fogStart;
     uint        cb_linearColor; // albedo target holds sRGB-encoded albedo
+    uint        cb_screenProbes; // opaque pass reads ScreenProbePass irradiance (gi_screenIrradiance)
+    uint        cb_reflections; // opaque pass reads ReflectionPass radiance (gi_reflections)
 };
 TexSamplerDecl(8, 0, Transparency)
 TexSamplerDecl(9, 0, LutIBL)
@@ -653,11 +655,11 @@ float3 ImageBasedLighting(Material material,
                         float3 V,
                         TextureCube cube, SamplerState sampler_cube,
                         float2 envBRDF,
-                        float occlusion, float diffuseWeight = 1.0)
+                        float occlusion, float diffuseWeight = 1.0, float specularWeight = 1.0)
 {
     return ComputeIBL_Common(
         normal, V, material.albedo, material.metallic, material.roughness, material.F0, occlusion,
-        cube, sampler_cube, envBRDF, diffuseWeight
+        cube, sampler_cube, envBRDF, diffuseWeight, specularWeight
     );
 }
 

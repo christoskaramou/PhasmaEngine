@@ -26,6 +26,8 @@
 #include "RenderPasses/ParticlePass.h"
 #include "RenderPasses/RTDepthResolvePass.h"
 #include "RenderPasses/RayTracingPass.h"
+#include "RenderPasses/ReflectionPass.h"
+#include "RenderPasses/ScreenProbePass.h"
 #include "RenderPasses/SelectionOutlinePass.h"
 #include "RenderPasses/SSAOPass.h"
 #include "RenderPasses/SSRPass.h"
@@ -63,6 +65,8 @@ namespace pe
              &SceneRenderGraphPassComponents::forwardPlusLightCulling},
             {SceneRenderGraphPassId::LightOpaque, 500, "LightOpaque", &SceneRenderGraphPassComponents::lightOpaque},
             {SceneRenderGraphPassId::GlobalIllumination, 460, "GlobalIllumination", &SceneRenderGraphPassComponents::globalIllumination},
+            {SceneRenderGraphPassId::ScreenProbes, 470, "ScreenProbes", &SceneRenderGraphPassComponents::screenProbes},
+            {SceneRenderGraphPassId::Reflections, 480, "Reflections", &SceneRenderGraphPassComponents::reflections},
             {SceneRenderGraphPassId::GBufferTransparent, 600, "GBufferTransparent",
              &SceneRenderGraphPassComponents::gbufferTransparent},
             {SceneRenderGraphPassId::LightTransparent, 700, "LightTransparent",
@@ -168,6 +172,10 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::Lines);
             if (component == components.globalIllumination)
                 return isPassEnabled(SceneRenderGraphPassId::GlobalIllumination);
+            if (component == components.screenProbes)
+                return isPassEnabled(SceneRenderGraphPassId::ScreenProbes);
+            if (component == components.reflections)
+                return isPassEnabled(SceneRenderGraphPassId::Reflections);
             if (component == components.rayTracing)
                 return isPassEnabled(SceneRenderGraphPassId::RayTracing);
             if (component == components.rtDepthResolve)
@@ -299,6 +307,8 @@ namespace pe
         if (includeRayTracingPass)
         {
             CreateSceneRenderGraphPassComponent<GlobalIlluminationPass>(renderPassComponents);
+            CreateSceneRenderGraphPassComponent<ScreenProbePass>(renderPassComponents);
+            CreateSceneRenderGraphPassComponent<ReflectionPass>(renderPassComponents);
             CreateSceneRenderGraphPassComponent<RayTracingPass>(renderPassComponents);
             CreateSceneRenderGraphPassComponent<RTDepthResolvePass>(renderPassComponents);
         }
@@ -402,6 +412,8 @@ namespace pe
         scenePasses.lightTransparent = GetGlobalComponent<LightTransparentPass>();
         scenePasses.lines = GetGlobalComponent<LinesPass>();
         scenePasses.globalIllumination = GetGlobalComponent<GlobalIlluminationPass>();
+        scenePasses.screenProbes = GetGlobalComponent<ScreenProbePass>();
+        scenePasses.reflections = GetGlobalComponent<ReflectionPass>();
         scenePasses.rayTracing = GetGlobalComponent<RayTracingPass>();
         scenePasses.rtDepthResolve = GetGlobalComponent<RTDepthResolvePass>();
         scenePasses.particleCompute = GetGlobalComponent<ParticleComputePass>();
@@ -446,6 +458,8 @@ namespace pe
         const bool renderRayTracing = (gs.render_mode != RenderMode::Raster) && hasRayTracingGeometry;
         const bool needVelocity = SceneNeedsVelocityRT(hasRayTracingGeometry);
         const bool renderSSR = pp.ssr && renderRaster;
+        // As in Unreal, Lumen reflections (ReflectionPass, on with GI) replace screen-space reflections.
+        const bool lumenReflections = gs.global_illumination && hasRayTracingGeometry;
         const bool renderSSAO = pp.ssao && renderRaster;
         const bool needDepth = renderRaster || needVelocity || pp.dof || pp.motion_blur || gs.draw_aabbs || gs.draw_grid;
         const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
@@ -477,6 +491,8 @@ namespace pe
                            gs.forward_plus && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GlobalIllumination, gs.global_illumination && hasRayTracingGeometry);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::ScreenProbes, gs.global_illumination && hasRayTracingGeometry && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::Reflections, gs.global_illumination && hasRayTracingGeometry && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, dx12RenderRaster);
@@ -484,7 +500,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::RTDepthResolve, dx12RtOnly);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, dx12RenderRaster);
-            SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, pp.ssr && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, pp.ssr && dx12RenderRaster && !lumenReflections);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::FXAA, pp.fxaa && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Aabbs, gs.draw_aabbs);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::TAA, dx12RenderTAA);
@@ -522,6 +538,8 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ForwardPlusLightCulling, gs.forward_plus && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightOpaque, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GlobalIllumination, gs.global_illumination && hasRayTracingGeometry);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ScreenProbes, gs.global_illumination && hasRayTracingGeometry && renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::Reflections, gs.global_illumination && hasRayTracingGeometry && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::GBufferTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::LightTransparent, renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Lines, renderRaster);
@@ -531,7 +549,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::RTDepthResolve, renderRayTracing && !renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::ParticleCompute, true);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Particle, true);
-        SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, renderSSR);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::SSR, renderSSR && !lumenReflections);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::FXAA, pp.fxaa);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Aabbs, gs.draw_aabbs);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::TAA, pp.taa);
@@ -583,6 +601,8 @@ namespace pe
         SetPassScene<VoxelHiZPyramidPass>(components.voxelHiZPyramid, scene);
         SetPassScene<GbufferTransparentPass>(components.gbufferTransparent, scene);
         SetPassScene<GlobalIlluminationPass>(components.globalIllumination, scene);
+        SetPassScene<ScreenProbePass>(components.screenProbes, scene);
+        SetPassScene<ReflectionPass>(components.reflections, scene);
         SetPassScene<RayTracingPass>(components.rayTracing, scene);
         SetPassScene<RTDepthResolvePass>(components.rtDepthResolve, scene);
         SetPassScene<ParticleComputePass>(components.particleCompute, scene);

@@ -48,6 +48,8 @@ namespace pe
         MotionBlur,
         Grid,
         SelectionOutline,
+        ScreenProbes, // Lumen-style screen probe gather for the opaque lighting pass
+        Reflections,  // Lumen-style ray-traced reflections for the opaque lighting pass
         Count
     };
 
@@ -68,6 +70,8 @@ namespace pe
         IRenderPassComponent *forwardPlusLightCulling = nullptr;
         IRenderPassComponent *lightOpaque = nullptr;
         IRenderPassComponent *globalIllumination = nullptr;
+        IRenderPassComponent *screenProbes = nullptr;
+        IRenderPassComponent *reflections = nullptr;
         IRenderPassComponent *gbufferTransparent = nullptr;
         IRenderPassComponent *lightTransparent = nullptr;
         IRenderPassComponent *lines = nullptr;

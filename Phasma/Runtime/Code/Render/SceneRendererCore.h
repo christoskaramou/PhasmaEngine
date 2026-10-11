@@ -75,6 +75,7 @@ namespace pe
         void UpdateRenderPassComponents();
         void SetRenderPassScene(Scene &scene);
         void ExecuteRenderGraph(CommandBuffer *cmd);
+        uint64_t GetRenderedFrames() const { return m_renderedFrames; }
         void ExecuteDeferredRenderGraph(CommandBuffer *cmd);
         void PollShaders(std::optional<size_t> hash = std::nullopt);
 
@@ -99,6 +100,7 @@ namespace pe
         void InitEnabledRenderPassComponents(CommandBuffer *cmd);
 
         RenderGraph m_renderGraph;
+        uint64_t m_renderedFrames = 0;
         uint64_t m_renderPassOrdersRevision = 0;
         RenderGraph m_deferredRenderGraph;
         Image *m_displayRT = nullptr;

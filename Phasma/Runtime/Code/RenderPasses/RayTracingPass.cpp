@@ -38,6 +38,10 @@ namespace pe
             defines.push_back({"GI_PROBES", "1"});
         else
             defines.push_back({"GI_SHADING", "1"});
+        if (m_screenProbes)
+            defines.push_back({"SCREEN_PROBES", "1"});
+        if (m_reflections)
+            defines.push_back({"REFLECTIONS", "1"});
 
         // Shaders
         Shader *rayGen = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "raygeneration", .stage = PE_SHADER_STAGE_RAYGEN_KHR, .defines = defines});
@@ -45,7 +49,8 @@ namespace pe
         Shader *anyHit = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "anyhit", .stage = PE_SHADER_STAGE_ANY_HIT_KHR, .defines = defines});
         Shader *miss = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "miss", .stage = PE_SHADER_STAGE_MISS_KHR, .defines = defines});
 
-        m_passInfo->name = m_probeTracing ? "GI_ProbeTracing" : "RayTracingPipeline";
+        m_passInfo->name = m_screenProbes ? "SP_ProbeTracing" : m_reflections ? "LR_Tracing"
+                                                                              : (m_probeTracing ? "GI_ProbeTracing" : "RayTracingPipeline");
         m_passInfo->acceleration.rayGen = rayGen;
         m_passInfo->acceleration.miss = {miss};
         m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
@@ -71,7 +76,7 @@ namespace pe
 
         if (!m_probeTracing)
         {
-            m_giFallbackUniform = Buffer::Create({.size = RHII.AlignUniform(128), .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER, .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU, .name = "GI_DisabledUniform"});
+            m_giFallbackUniform = Buffer::Create({.size = RHII.AlignUniform(GlobalIlluminationPass::kUniformBytes), .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER, .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU, .name = "GI_DisabledUniform"});
             m_giFallbackUniform->Map();
             m_giFallbackUniform->Zero();
             m_giFallbackUniform->Flush();
@@ -309,7 +314,7 @@ namespace pe
         cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());
         cmd->SetConstantAt(3, (uint32_t)scene.GetMaxJointCount());
         cmd->PushConstants();
-        cmd->TraceRays(m_display->GetWidth(), m_display->GetHeight(), 1);
+        cmd->TraceRays(m_display->GetWidth(), m_traceHeight ? m_traceHeight : m_display->GetHeight(), 1);
         cmd->EndDebugRegion();
 
         m_scene = nullptr;

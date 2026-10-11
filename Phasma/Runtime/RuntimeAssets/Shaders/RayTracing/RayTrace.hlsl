@@ -104,6 +104,12 @@ struct Vertex
 #if defined(GI_PROBES) || defined(GI_SHADING)
 #include "../GlobalIllumination/ProbeVolume.hlsl"
 #endif
+#ifdef SCREEN_PROBES
+#include "../GlobalIllumination/ScreenProbeCommon.hlsl"
+#endif
+#ifdef REFLECTIONS
+#include "../GlobalIllumination/ReflectionCommon.hlsl"
+#endif
 
 // Helper functions for loading lights
 DirectionalLight LoadDirectionalLight(uint index)
@@ -603,13 +609,83 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
 [shader("raygeneration")]
 void raygeneration()
 {
-#ifdef GI_PROBES
+#ifdef SCREEN_PROBES
+    // Screen probes (ScreenProbePlace.hlsl): 8x8 rays per tile probe. A ray that runs out of length takes the world
+    // probes' far-field radiance; it runs to the far-field start plus the distance to the farthest world probe it
+    // interpolates (about the same again), so no surface falls between where it ends and where a world probe's
+    // far-field ray begins. A back-face hit means the ray slipped into a closed interior and carries no light.
     uint2 launch = DispatchRaysIndex().xy;
+    uint2 tile = launch / 8;
+    float4 probe = sp_probePositions.Load(int3(tile, 0));
+    float3 probeNormal = sp_probeNormals.Load(int3(tile, 0)).xyz;
+    float4 directionPdf = gi_rayDirections.Load(int3(launch, 0));
+    if (probe.w <= 0.0 || directionPdf.w <= 0.0 || dot(probeNormal, directionPdf.xyz) <= 0.0)
+    {
+        output[launch] = 0.0.xxxx; // no probe, or a direction under the surface (dark lower hemisphere)
+        return;
+    }
+    RayDesc ray;
+    ray.Origin = probe.xyz + probeNormal * max(0.01, 0.002 * probe.w);
+    ray.Direction = directionPdf.xyz;
+    ray.TMin = 0.001;
+    float handOffEdge;
+    uint handOff = min(ProbeCascadeAt(probe.xyz, false, handOffEdge), max(gi_cascadeCount, 1u) - 1);
+    ray.TMax = 2.0 * ProbeFarFieldStart(handOff);
+    HitPayload payload = (HitPayload)0;
+    payload.t = -1.0;
+    payload.alpha = 1.0;
+    payload.opaqueTMax = ray.TMax;
+    TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+    float3 radiance;
+    if (payload.t >= 0.0)
+        radiance = payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE ? 0.0.xxx : payload.radiance;
+    else
+        radiance = WorldRadianceCache(probe.xyz, probeNormal, ray.Direction, payload.radiance);
+    output[launch] = float4(max(radiance, 0.0), payload.t >= 0.0 ? payload.t : ray.TMax);
+#elif defined(REFLECTIONS)
+    // Reflections (ReflectionCommon.hlsl): one GGX ray per pixel up to REFLECTION_MAX_ROUGHNESS, long
+    // enough to reach anything in the scene. Hits are shaded like probe hits (direct light, world probe irradiance,
+    // emission); misses take the sky. rgb radiance, a hit distance (< 0: nothing traced).
+    uint2 launch = DispatchRaysIndex().xy;
+    uint2 pixel = launch;
+    uint width, height;
+    lr_traceDepth.GetDimensions(width, height);
+    float depth = all(pixel < uint2(width, height)) ? lr_traceDepth.Load(int3(pixel, 0)) : 0.0;
+    float roughness = lr_traceMaterial.Load(int3(pixel, 0)).y;
+    if (depth == 0.0 || roughness >= REFLECTION_MAX_ROUGHNESS)
+    {
+        output[launch] = float4(0.0, 0.0, 0.0, -1.0);
+        return;
+    }
+    float3 position = GetPosFromUV((float2(pixel) + 0.5) / float2(width, height), depth, cb_invViewProj);
+    float3 N = normalize(lr_traceNormal.Load(int3(pixel, 0)).xyz * 2.0 - 1.0);
+    float3 V = normalize(cb_camPos.xyz - position);
+    float4 sample = ReflectionSample(N, V, roughness, ReflectionRandom(pixel, gi_frame));
+    if (dot(sample.xyz, N) <= 0.0)
+    {
+        output[launch] = 0.0.xxxx; // under the surface: a sample without light
+        return;
+    }
+    RayDesc ray;
+    ray.Origin = position + N * max(0.01, 0.002 * length(cb_camPos.xyz - position));
+    ray.Direction = sample.xyz;
+    ray.TMin = 0.001;
+    ray.TMax = 10000.0;
+    HitPayload payload = (HitPayload)0;
+    payload.t = -1.0;
+    payload.alpha = 1.0;
+    payload.opaqueTMax = ray.TMax;
+    TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
+    float3 radiance = payload.t >= 0.0 && payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE ? 0.0.xxx : payload.radiance;
+    output[launch] = float4(max(radiance, 0.0), payload.t >= 0.0 ? payload.t : ray.TMax);
+#elif defined(GI_PROBES)
+    uint2 launch = DispatchRaysIndex().xy;
+    uint cascade = ProbeCascade(launch.y);
     RayDesc ray;
     ray.Origin = ProbePosition(launch.y);
     ray.Direction = gi_rayDirections.Load(int3(launch.xy, 0)).xyz;
     ray.TMin = 0.001;
-    ray.TMax = gi_maxDistance;
+    ray.TMax = ProbeMaxDistance(cascade);
     HitPayload payload = (HitPayload)0;
     payload.t = -1.0;
     payload.alpha = 1.0;
@@ -619,6 +695,26 @@ void raygeneration()
     if (payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE && payload.t >= 0.0)
         distance = -distance;
     output[launch] = float4(max(payload.radiance, 0.0), distance);
+    // Far-field radiance for the screen probes' hand-off (Lumen's radiance cache): what the ray sees beyond the probe's
+    // interpolation footprint, so a screen probe interpolating this probe never takes light from the far side of a
+    // thin wall next to it. A ray that already reaches past the footprint keeps its own hit; one continued from inside
+    // geometry (a back face first) has none.
+    float footprint = ProbeFarFieldStart(cascade);
+    float4 far = float4(max(payload.radiance, 0.0), distance < 0.0 ? -1.0 : 1.0);
+    if (payload.t >= 0.0 && payload.t < footprint && footprint < ray.TMax)
+    {
+        RayDesc farRay = ray;
+        farRay.Origin = ray.Origin + ray.Direction * footprint;
+        farRay.TMax = ray.TMax - footprint;
+        HitPayload farPayload = (HitPayload)0;
+        farPayload.t = -1.0;
+        farPayload.alpha = 1.0;
+        farPayload.opaqueTMax = farRay.TMax;
+        TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, farRay, farPayload);
+        bool inside = farPayload.t >= 0.0 && farPayload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE;
+        far = float4(max(farPayload.radiance, 0.0), inside ? -1.0 : 1.0);
+    }
+    gi_farRays[launch] = far;
 #else
     uint3 launchIndex = DispatchRaysIndex();
     uint3 launchDim   = DispatchRaysDimensions();
@@ -863,6 +959,18 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 V = normalize(-WorldRayDirection());
     float3 F0 = float3(0.04, 0.04, 0.04);
     F0 = lerp(F0, combinedColor.rgb, metallic);
+#ifdef GI_PROBES
+    // GI and reflection rays light their hits as Lumen's surface cache does: diffuse only, the specular colour folded
+    // into the albedo as Unreal's EnvBRDFApproxFullyRough (diffuse + 0.45 x specular colour). A sharp highlight on a
+    // mirror would otherwise reach the probes as fireflies.
+    if (!selfLitMaterial)
+    {
+        combinedColor.rgb = combinedColor.rgb * (1.0 - metallic) + F0 * 0.45;
+        metallic = 0.0;
+        roughness = 1.0;
+        F0 = 0.0.xxx;
+    }
+#endif
 
     // Energy Compensation
     float NdV = clamp(dot(N, V), 0.001, 1.0);

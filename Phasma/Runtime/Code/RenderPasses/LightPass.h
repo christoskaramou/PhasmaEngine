@@ -19,7 +19,9 @@ namespace pe
         uint32_t forward_plus = 1;
         float fog_density = 0.0f; // 0 = fog off (enable bool resolved CPU-side)
         float fog_start = 0.0f;
-        uint32_t linear_color = 0; // albedo target holds sRGB-encoded albedo
+        uint32_t linear_color = 0;  // albedo target holds sRGB-encoded albedo
+        uint32_t screen_probes = 0; // opaque pass reads ScreenProbePass irradiance
+        uint32_t reflections = 0;   // opaque pass reads ReflectionPass radiance
     };
 
     class Image;

@@ -7,32 +7,6 @@ groupshared float s_flux[256];
 groupshared float s_area[256];
 groupshared float s_cdf[256];
 
-// Unnormalised octahedron point of a [0,1]^2 map position: |p|^3 converts area in [-1,1]^2 to solid angle
-// (d omega = dA / |p|^3), so the 16x16 map's texels are not equal-area.
-float3 ProbeOctPoint(float2 uv)
-{
-    float2 xy = uv * 2.0 - 1.0;
-    float3 p = float3(xy, 1.0 - abs(xy.x) - abs(xy.y));
-    if (p.z < 0.0)
-        p.xy = (1.0 - abs(p.yx)) * float2(p.x >= 0.0 ? 1.0 : -1.0, p.y >= 0.0 ? 1.0 : -1.0);
-    return p;
-}
-
-uint ProbeHash(uint x)
-{
-    x ^= x >> 16;
-    x *= 0x7feb352du;
-    x ^= x >> 15;
-    x *= 0x846ca68bu;
-    x ^= x >> 16;
-    return x;
-}
-
-float ProbeRandom(uint seed)
-{
-    return float(ProbeHash(seed) >> 8) / 16777216.0;
-}
-
 void InclusiveScan(uint t, inout float value, uint which)
 {
     for (uint offset = 1; offset < 256; offset <<= 1)
@@ -62,7 +36,7 @@ void main(uint3 group : SV_GroupID, uint3 thread : SV_GroupThreadID)
 {
     const uint probe = group.x;
     const uint t = thread.x;
-    if (probe >= gi_gridSize * gi_gridSize * gi_gridSize)
+    if (probe >= ProbeCount())
         return;
 
     const uint2 texel = uint2(t % PROBE_RADIANCE_SIZE, t / PROBE_RADIANCE_SIZE);

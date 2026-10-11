@@ -1,5 +1,7 @@
 #include "LightPass.h"
 #include "GlobalIlluminationPass.h"
+#include "ReflectionPass.h"
+#include "ScreenProbePass.h"
 #include "API/Buffer.h"
 #include "Render/SceneRenderTargets.h"
 #include "API/Command.h"
@@ -23,26 +25,61 @@ namespace pe
 {
     namespace
     {
-        void BindProbeLighting(PassInfo &pass, Buffer *fallbackUniform, uint32_t frame, bool force = false)
+        bool ProbeLightingActive(uint32_t frame)
+        {
+            auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+            auto *scene = GetActiveScene();
+            return Settings::Get<SceneSettings>().global_illumination && gi && scene && scene->GetTLAS() && gi->GetProbeUniform(frame);
+        }
+
+        // The screen probe irradiance the opaque lighting pass reads this frame (ScreenProbePass runs whenever GI
+        // does in raster), or null.
+        Image *ActiveScreenIrradiance(uint32_t frame)
+        {
+            auto *screenProbes = GetGlobalComponent<ScreenProbePass>();
+            return ProbeLightingActive(frame) && screenProbes ? screenProbes->GetIrradiance() : nullptr;
+        }
+
+        // The reflections the opaque lighting pass reads this frame (ReflectionPass runs with the screen probes), or null.
+        Image *ActiveReflections(uint32_t frame)
+        {
+            auto *reflections = GetGlobalComponent<ReflectionPass>();
+            return ActiveScreenIrradiance(frame) && reflections ? reflections->GetSpecular() : nullptr;
+        }
+
+        void BindProbeLighting(PassInfo &pass, Buffer *fallbackUniform, uint32_t frame, bool force = false, Image *screen = nullptr,
+                               Image *reflections = nullptr)
         {
             const auto &sets = pass.GetDescriptors(frame);
             if (sets.size() < 4)
                 return;
             auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
-            auto *scene = GetActiveScene();
-            const bool active = Settings::Get<SceneSettings>().global_illumination && gi && scene && scene->GetTLAS() && gi->GetProbeUniform(frame);
+            const bool active = ProbeLightingActive(frame);
             auto *fallback = RequireActiveSceneRendererHost().GetIBL_LUT();
             auto *set = sets[3];
             auto *uniform = active ? gi->GetProbeUniform(frame) : fallbackUniform;
+            ImageView *screenView = screen ? screen->GetSRV() : fallback->GetSRV();
+            ImageView *reflectionView = reflections ? reflections->GetSRV() : fallback->GetSRV();
             const auto &bound = set->GetBoundResources();
-            if (!force && std::any_of(bound.begin(), bound.end(), [uniform](const auto &info)
-                                      { return info.binding == 0 && !info.buffers.empty() && info.buffers[0] == uniform; }))
+            auto isBound = [&bound](uint32_t binding, auto matches)
+            { return std::any_of(bound.begin(), bound.end(), [&](const auto &info)
+                                 { return info.binding == binding && matches(info); }); };
+            if (!force && isBound(0, [uniform](const auto &info)
+                                  { return !info.buffers.empty() && info.buffers[0] == uniform; }) &&
+                (!set->HasBinding(4) || isBound(4, [screenView](const auto &info)
+                                                { return !info.views.empty() && info.views[0] == screenView; })) &&
+                (!set->HasBinding(5) || isBound(5, [reflectionView](const auto &info)
+                                                { return !info.views.empty() && info.views[0] == reflectionView; })))
                 return;
             set->SetBuffer(0, uniform,
-                           active ? 0 : RHII.AlignUniform(sizeof(LightPassUBO)), active ? 0 : 128);
+                           active ? 0 : RHII.AlignUniform(sizeof(LightPassUBO)), active ? 0 : GlobalIlluminationPass::kUniformBytes);
             set->SetImageView(1, active ? gi->GetIrradianceHistory()->GetSRV() : fallback->GetSRV());
             set->SetImageView(2, active ? gi->GetDistanceHistory()->GetSRV() : fallback->GetSRV());
             set->SetSampler(3, fallback->GetSampler());
+            if (set->HasBinding(4))
+                set->SetImageView(4, screenView);
+            if (set->HasBinding(5))
+                set->SetImageView(5, reflectionView);
             set->Update();
         }
 
@@ -329,7 +366,7 @@ namespace pe
         for (auto &uniform : m_uniforms)
         {
             uniform = Buffer::Create({
-                .size = RHII.AlignUniform(sizeof(LightPassUBO)) + RHII.AlignUniform(128),
+                .size = RHII.AlignUniform(sizeof(LightPassUBO)) + RHII.AlignUniform(GlobalIlluminationPass::kUniformBytes),
                 .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
                 .name = "Gbuffer_uniform_buffer",
@@ -399,7 +436,7 @@ namespace pe
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
-            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true);
+            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true, ActiveScreenIrradiance(i), ActiveReflections(i));
         }
 
         m_boundShadowsAvailable = useShadowResources;
@@ -448,13 +485,17 @@ namespace pe
         m_ubo.fog_density = gSettings.fog ? gSettings.fog_density : 0.0f;
         m_ubo.fog_start = gSettings.fog_start;
         m_ubo.linear_color = SceneUsesLinearColor() ? 1u : 0u;
+        Image *screenIrradiance = ActiveScreenIrradiance(RHII.GetFrameIndex());
+        m_ubo.screen_probes = screenIrradiance ? 1u : 0u;
+        Image *reflections = ActiveReflections(RHII.GetFrameIndex());
+        m_ubo.reflections = reflections ? 1u : 0u;
 
         BufferRange range{};
         range.data = &m_ubo;
         range.size = sizeof(m_ubo);
         range.offset = 0;
         m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
-        BindProbeLighting(*m_passInfo, m_uniforms[RHII.GetFrameIndex()], RHII.GetFrameIndex());
+        BindProbeLighting(*m_passInfo, m_uniforms[RHII.GetFrameIndex()], RHII.GetFrameIndex(), false, screenIrradiance, reflections);
     }
 
     void LightOpaquePass::DeclareInputs(RGBuilder &builder)
@@ -471,6 +512,10 @@ namespace pe
             builder.Read(m_ssaoRT);
         builder.Read(m_transparencyRT);
         ReadProbeLighting(builder);
+        if (Image *screenIrradiance = ActiveScreenIrradiance(RHII.GetFrameIndex()))
+            builder.Read(screenIrradiance);
+        if (Image *reflections = ActiveReflections(RHII.GetFrameIndex()))
+            builder.Read(reflections);
         ReadForwardPlusTiles(builder);
 
         if (shadowsEnabled)
@@ -594,7 +639,7 @@ namespace pe
         for (auto &uniform : m_uniforms)
         {
             uniform = Buffer::Create({
-                .size = RHII.AlignUniform(sizeof(LightPassUBO)) + RHII.AlignUniform(128),
+                .size = RHII.AlignUniform(sizeof(LightPassUBO)) + RHII.AlignUniform(GlobalIlluminationPass::kUniformBytes),
                 .usage = PE_BUFFER_USAGE_UNIFORM_BUFFER,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
                 .name = "Gbuffer_uniform_buffer",

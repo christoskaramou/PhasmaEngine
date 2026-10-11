@@ -41,6 +41,9 @@ namespace pe
 
     protected:
         bool m_probeTracing = false;
+        bool m_screenProbes = false; // probe tracing for ScreenProbePass
+        bool m_reflections = false;  // probe tracing for ReflectionPass
+        uint32_t m_traceHeight = 0;  // rays traced per column; 0: the display image's height
         Buffer *m_giFallbackUniform = nullptr;
         Scene *m_scene = nullptr;
         Image *m_display = nullptr;

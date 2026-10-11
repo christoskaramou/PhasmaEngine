@@ -302,6 +302,7 @@ namespace pe
             m_scene->UploadDynamicUniforms(cmd);
 
         m_renderGraph.Execute(cmd);
+        ++m_renderedFrames;
     }
 
     void SceneRendererCore::ExecuteDeferredRenderGraph(CommandBuffer *cmd)

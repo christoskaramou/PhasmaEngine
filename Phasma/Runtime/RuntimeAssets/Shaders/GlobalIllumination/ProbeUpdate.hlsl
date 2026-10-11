@@ -9,7 +9,7 @@ void main(uint3 dispatch : SV_DispatchThreadID)
 {
     uint2 tile = dispatch.xy / 8;
     uint probe = tile.x + tile.y * gi_gridSize;
-    if (probe >= gi_gridSize * gi_gridSize * gi_gridSize)
+    if (probe >= ProbeCount())
         return;
     int2 texel = int2(dispatch.xy % 8);
     // Mirror octahedral seams into the border; each thread writes its own texel.

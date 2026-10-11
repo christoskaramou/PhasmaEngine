@@ -40,6 +40,9 @@ namespace pe
         virtual Image *GetViewportRT() = 0;
         virtual Image *GetDepthStencilRT() = 0;
         virtual Image *CreateFSSampledImage(Image *source) = 0;
+        // Scene render graph executions so far. Unlike RHI frames it skips frames that never rendered (the swapchain
+        // was not ready), so passes can tell a gap in their own history from a busy GPU.
+        virtual uint64_t GetRenderedFrames() const = 0;
     };
 
     void SetActiveSceneRendererHost(SceneRendererHost *renderer);

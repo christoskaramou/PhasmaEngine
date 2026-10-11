@@ -157,16 +157,42 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         fragColor += ComputeAreaLight(k, material, wolrdPos, cb_camPos.xyz, normal, occlusion, energyCompensation);
 
     float4 indirect = ProbeLighting(wolrdPos, normal);
+    if (cb_screenProbes != 0 && pc.passType == 0)
+    {
+        // Screen probes replace world probes where they cover the pixel.
+        uint width, height;
+        gi_screenIrradiance.GetDimensions(width, height);
+        float4 screen = gi_screenIrradiance.Load(int3(input.uv * float2(width, height), 0));
+        float weight = lerp(indirect.a, 1.0, screen.a);
+        indirect.rgb = weight > 0.0 ? lerp(indirect.rgb * indirect.a, screen.rgb, screen.a) / weight : 0.0.xxx;
+        indirect.a = weight;
+    }
     float indirectWeight = gi_intensity > 0.0 ? indirect.a : 0.0;
     if (indirectWeight > 0.0)
     {
         float3 diffuseWeight = max(0.0, 1.0 - (material.F0 * envBRDF.x + envBRDF.y) * energyCompensation) * (1.0 - material.metallic);
-        fragColor += indirect.rgb * material.albedo * diffuseWeight * occlusion * (gi_intensity * indirectWeight / PI);
+        // Screen probe irradiance carries its own short-range AO (ScreenProbeResolve.hlsl), as Lumen's replaces SSAO.
+        const float indirectOcclusion = cb_screenProbes != 0 && pc.passType == 0 ? materialAO : occlusion;
+        fragColor += indirect.rgb * material.albedo * diffuseWeight * indirectOcclusion * (gi_intensity * indirectWeight / PI);
+    }
+    // Reflections (ReflectionPass) replace the cubemap specular where they have data: ray-traced and GI-lit, with
+    // the sky (and the IBL intensity) only where rays miss.
+    float cubeSpecular = 1.0;
+    if (cb_reflections != 0 && pc.passType == 0)
+    {
+        uint width, height;
+        gi_reflections.GetDimensions(width, height);
+        float4 reflection = gi_reflections.Load(int3(input.uv * float2(width, height), 0));
+        if (reflection.a > 0.0)
+        {
+            fragColor += reflection.rgb * (material.F0 * envBRDF.x + envBRDF.y) * energyCompensation * occlusion;
+            cubeSpecular = 0.0;
+        }
     }
     // Image Based Lighting
     if (cb_IBL)
     {
-        float3 ibl = ImageBasedLighting(material, normal, V, Cube, sampler_Cube, envBRDF, occlusion, 1.0 - indirectWeight);
+        float3 ibl = ImageBasedLighting(material, normal, V, Cube, sampler_Cube, envBRDF, occlusion, 1.0 - indirectWeight, cubeSpecular);
         fragColor += ibl * cb_IBL_intensity;
     }
 
