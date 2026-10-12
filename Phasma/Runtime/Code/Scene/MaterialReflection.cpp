@@ -191,9 +191,16 @@ namespace pe
         hash.CombineString(surface->materialAnnotation);
         if (!passInfo.m_materialLayoutHash || *passInfo.m_materialLayoutHash != static_cast<size_t>(hash))
         {
-            passInfo.m_materialLayout = BuildMaterialLayout(passInfo);
-            passInfo.m_materialLayout.sourceHash = hash;
-            passInfo.m_materialLayoutHash = hash;
+            try
+            {
+                passInfo.m_materialLayout = BuildMaterialLayout(passInfo);
+                passInfo.m_materialLayout.sourceHash = hash;
+                passInfo.m_materialLayoutHash = hash;
+            }
+            catch (const std::exception &)
+            {
+                // A shader that fails to compile (already logged) keeps the last layout until the next save.
+            }
         }
         passInfo.m_materialLayoutKey = key;
         passInfo.m_materialLayoutGeneration = generation;

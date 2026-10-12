@@ -1,4 +1,5 @@
 #include "API/GraphicsApiSelection.h"
+#include "API/Shader.h"
 #include "API/RHI.h"
 #include "API/Surface.h"
 #include "AnimatorApp.h"
@@ -17,6 +18,7 @@ int main(int argc, char *argv[])
             PE_ERROR("%s", apiSelection.error.c_str());
             return 1;
         }
+        pe::Shader::SetCompiler(pe::ResolveShaderCompiler(argc, argv));
         int displayIndex = 0;
         std::string displayError;
         if (!pe::TryParseRuntimeDisplayIndexArg(argc, argv, displayIndex, &displayError))

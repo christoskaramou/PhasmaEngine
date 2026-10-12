@@ -1,5 +1,5 @@
 #include "API/DX12/Dx12ShaderImpl.h"
-#include "API/SlangShaderValidation.h"
+#include "API/SlangCompiler.h"
 
 #if defined(PE_WIN32)
 
@@ -588,6 +588,26 @@ namespace pe
             Microsoft::WRL::ComPtr<IDxcBlobEncoding> source;
             const std::string shaderCode =
                 "#define PE_DX12 1\n" + prepareDx12ShaderCode(owner->GetCache().GetShaderCode());
+
+            if (Shader::GetCompiler() == ShaderCompiler::Slang)
+            {
+                std::vector<uint8_t> bytes;
+                std::string log;
+                if (CompileWithSlang(owner, stage, shaderCode, globalDefines, localDefines, "sm_6_6", bytes, log) !=
+                    SlangCompileStatus::Ok)
+                {
+                    PE_INFO("[Shader] slangc (--shader-compiler slang; --shader-compiler dxc uses DXC): %s", log.c_str());
+                    return false;
+                }
+                Microsoft::WRL::ComPtr<IDxcBlobEncoding> slangObject;
+                hr = utils->CreateBlob(bytes.data(), static_cast<uint32_t>(bytes.size()), 0, &slangObject);
+                if (FAILED(hr))
+                {
+                    PE_INFO("Failed to create a blob for slangc's DXIL");
+                    return false;
+                }
+                return AddSourcePrivateDataToDxil(utils.Get(), slangObject.Get(), shaderCode, outDxil);
+            }
             hr = utils->CreateBlob(shaderCode.data(), static_cast<uint32_t>(shaderCode.size()), CP_UTF8, &source);
             if (FAILED(hr))
             {
@@ -678,8 +698,8 @@ namespace pe
                 return false;
             }
 
-#if defined(PE_SHADER_COMPILER_SLANG)
-            ValidateShaderWithSlang(owner, stage, shaderCode, globalDefines, localDefines, true,
+#if defined(PE_SLANG_VALIDATION)
+            ValidateShaderWithSlang(owner, stage, shaderCode, globalDefines, localDefines, "sm_6_6",
                                     object->GetBufferPointer(), object->GetBufferSize());
 #endif
             return AddSourcePrivateDataToDxil(utils.Get(), object.Get(), shaderCode, outDxil);

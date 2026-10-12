@@ -1,9 +1,8 @@
 #include "API/GraphicsApiSelection.h"
-
+#include "API/Shader.h"
 
 #include "rapidjson/document.h"
 #include "rapidjson/error/en.h"
-
 
 namespace pe
 {
@@ -322,5 +321,64 @@ namespace pe
         selection.source = GraphicsApiSelectionSource::BuiltInDefault;
         selection.value = GraphicsApiConfigName(selection.api);
         return selection;
+    }
+
+    ShaderCompiler ResolveShaderCompiler(int argc, char *const *argv)
+    {
+        constexpr std::string_view option = "--shader-compiler";
+        std::string value;
+        std::string source = "built-in default";
+        for (int i = 1; i < argc; ++i)
+        {
+            if (!argv || !argv[i])
+                continue;
+            const std::string_view argument(argv[i]);
+            if (argument == option)
+            {
+                if (i + 1 < argc && argv[i + 1])
+                {
+                    value = argv[++i];
+                    source = "command line";
+                }
+                else
+                {
+                    PE_WARN("Missing --shader-compiler value (expected: dxc, slang)");
+                }
+            }
+            else if (StartsWith(argument, "--shader-compiler="))
+            {
+                value = std::string(argument.substr(option.size() + 1));
+                source = "command line";
+            }
+        }
+
+        if (value.empty())
+        {
+            std::ifstream file(DefaultRuntimeConfigPath(), std::ios::binary);
+            const std::string text((std::istreambuf_iterator<char>(file)), std::istreambuf_iterator<char>());
+            rapidjson::Document document;
+            document.Parse(text.c_str(), text.size());
+            if (!document.HasParseError() && document.IsObject() && document.HasMember("shader_compiler") &&
+                document["shader_compiler"].IsString())
+            {
+                value = document["shader_compiler"].GetString();
+                source = std::string(kRuntimeConfigFileName) + " field 'shader_compiler'";
+            }
+        }
+
+        ShaderCompiler compiler = ShaderCompiler::Dxc;
+        if (value == "slang")
+            compiler = ShaderCompiler::Slang;
+        else if (!value.empty() && value != "dxc")
+            PE_WARN("Invalid %s value '%s' (expected: dxc, slang); using dxc", source.c_str(), value.c_str());
+#if !defined(PE_RUNTIME_SHADER_COMPILER)
+        if (compiler == ShaderCompiler::Slang)
+        {
+            PE_WARN("--shader-compiler slang needs the runtime shader compiler; using the shipped DXC bytecode");
+            compiler = ShaderCompiler::Dxc;
+        }
+#endif
+        PE_INFO("Selected shader compiler: %s (%s)", compiler == ShaderCompiler::Slang ? "slang" : "dxc", source.c_str());
+        return compiler;
     }
 } // namespace pe

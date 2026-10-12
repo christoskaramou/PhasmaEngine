@@ -20,7 +20,6 @@ MemPalace and Graphify are retired from the active workflow. Do not query, updat
 - **Work on `master` uncommitted by default** — no worktrees, all changes left as unstaged diffs for the user to review. Exception: long-running carve work on the `DX12` branch may commit; check the active branch.
 - **Run `clang-format -i`** on every modified `.cpp` / `.h` after editing.
 - **Before writing a commit message, run `git diff --staged`** (or `git diff`). Never write commit text from memory.
-- **`gh` CLI is unreliable.** Push the branch and tell the user the PR needs manual creation.
 
 ## Rules — session end
 

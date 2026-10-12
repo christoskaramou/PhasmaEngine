@@ -3,7 +3,6 @@
 #include "API/RHITypes.h"
 #include "Base/PhasmaExport.h"
 
-
 namespace pe
 {
     enum class GraphicsApiSelectionSource : uint8_t
@@ -32,4 +31,10 @@ namespace pe
                                                    char *const *argv,
                                                    const char *runtimeConfigPath = nullptr,
                                                    bool readRuntimeConfig = true);
+
+    enum class ShaderCompiler : uint8_t; // API/Shader.h
+
+    // --shader-compiler <dxc|slang> (or --shader-compiler=...), else "shader_compiler" in phasma_settings.json, else
+    // dxc. Logs the choice; Slang falls back to dxc in builds without the runtime shader compiler.
+    PE_API ShaderCompiler ResolveShaderCompiler(int argc, char *const *argv);
 } // namespace pe

@@ -16,7 +16,7 @@
 - `architecture/code-quality-performance.md` — ponytail hard rule: smallest correct diff, perf gates
 - `architecture/mini-game-authoring.md` — plan for faster MiniGameKit-driven small-game creation
 - `architecture/profiler-advisor.md` — Phasma AI v0.2 telemetry context, every-frame stats, spike attribution, explainable suggestions, Ask Jev, JSONL capture and advisor CLI
-- `architecture/rendering.md` — shared renderer/RHI notes and cached pipeline pitfalls
+- `architecture/rendering.md` — shared renderer/RHI notes and cached pipeline pitfalls; shader compilers (DXC or Slang via `--shader-compiler`, and the SPIR-V patches Slang needs)
 - `architecture/runtime.md` — PhasmaRuntime and MyProject boundary
 - `architecture/terrain-system.md` — streamed isosurface terrain: in-place tile updates, overhangs, CSG sculpt, per-tile colliders
 - `architecture/voxel-core-engine.md` — voxel subsystem: shared-arena render integration, Lua API

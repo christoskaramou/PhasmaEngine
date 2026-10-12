@@ -24,11 +24,11 @@
 [[vk::binding(0, 0)]] Texture2D<float> Src;
 float LoadSrc(uint2 p) { return Src.Load(int3(int(p.x), int(p.y), 0)); }
 #else
-[[vk::binding(0, 0)]] RWTexture2D<float> Src;
+[[vk::image_format("r32f")]][[vk::binding(0, 0)]] RWTexture2D<float> Src;
 float LoadSrc(uint2 p) { return Src[p]; }
 #endif
 
-[[vk::binding(1, 0)]] RWTexture2D<float> Dst;
+[[vk::image_format("r32f")]][[vk::binding(1, 0)]] RWTexture2D<float> Dst;
 
 struct PushConstants
 {

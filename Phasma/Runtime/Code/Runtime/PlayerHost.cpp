@@ -1,5 +1,6 @@
 #include "Runtime/PlayerHost.h"
 #include "API/GraphicsApiSelection.h"
+#include "API/Shader.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
@@ -848,6 +849,7 @@ namespace pe
                 PE_ERROR("%s", apiSelection.error.c_str());
                 return 1;
             }
+            Shader::SetCompiler(ResolveShaderCompiler(argc, argv));
 
             const ProjectSelection projectSelection = ResolveProjectSelection();
             ApplyProjectSelectionAssetsRoot(projectSelection);

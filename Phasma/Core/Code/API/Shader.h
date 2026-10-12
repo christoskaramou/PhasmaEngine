@@ -34,6 +34,14 @@ namespace pe
         std::string reflectionSource;
     };
 
+    // Compiles runtime HLSL: DXC (default) or slangc (PE_SLANGC_PATH). Chosen once at startup by ResolveShaderCompiler
+    // (--shader-compiler, or "shader_compiler" in phasma_settings.json) and part of the shader-cache key.
+    enum class ShaderCompiler : uint8_t
+    {
+        Dxc,
+        Slang
+    };
+
     class PassInfo;
     class Descriptor;
 
@@ -46,6 +54,9 @@ namespace pe
         static Shader *CreateFromBytecode(const ShaderBytecodeDesc &desc);
         static void Destroy(Shader *&shader);
         static std::vector<Shader *> GetHandles();
+
+        static void SetCompiler(ShaderCompiler compiler);
+        static ShaderCompiler GetCompiler();
 
         static void AddGlobalDefine(const std::string &name, const std::string &value);
         static size_t GetGlobalDefinesHash();

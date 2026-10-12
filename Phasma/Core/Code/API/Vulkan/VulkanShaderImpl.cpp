@@ -1,7 +1,7 @@
 #include "API/Vulkan/VulkanShaderImpl.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
-#include "API/SlangShaderValidation.h"
+#include "API/SlangCompiler.h"
 #if defined(PE_RUNTIME_SHADER_COMPILER)
 #include "shaderc/shaderc.hpp"
 #endif
@@ -215,12 +215,40 @@ namespace pe
 #endif
 
 #if defined(PE_RUNTIME_SHADER_COMPILER) && defined(PE_HAS_DXC)
+        // The SPIR-V version DXC targets below (-fspv-target-env), for slangc.
+        const char *SlangSpirvProfile()
+        {
+            return RHII.GetCaps().spirvTargetVulkanVersion >= VK_API_VERSION_1_3 ? "spirv_1_6" : "spirv_1_5";
+        }
+
+        bool CompileHlslWithSlang(Shader *owner,
+                                  PeShaderStageFlags stage,
+                                  const std::vector<Define> &globalDefines,
+                                  const std::vector<Define> &localDefines,
+                                  std::vector<uint32_t> &outSpirv)
+        {
+            std::vector<uint8_t> bytes;
+            std::string log;
+            if (CompileWithSlang(owner, stage, owner->GetCache().GetShaderCode(), globalDefines, localDefines,
+                                 SlangSpirvProfile(), bytes, log) != SlangCompileStatus::Ok)
+            {
+                PE_INFO("[Shader] slangc (--shader-compiler slang; --shader-compiler dxc uses DXC): %s", log.c_str());
+                return false;
+            }
+            outSpirv.resize(bytes.size() / sizeof(uint32_t));
+            memcpy(outSpirv.data(), bytes.data(), outSpirv.size() * sizeof(uint32_t));
+            return true;
+        }
+
         bool CompileHlsl(Shader *owner,
                          PeShaderStageFlags stage,
                          const std::vector<Define> &globalDefines,
                          const std::vector<Define> &localDefines,
                          std::vector<uint32_t> &outSpirv)
         {
+            if (Shader::GetCompiler() == ShaderCompiler::Slang)
+                return CompileHlslWithSlang(owner, stage, globalDefines, localDefines, outSpirv);
+
             std::vector<LPCWSTR> args{};
             args.push_back(L"-spirv");
             args.push_back(RHII.GetCaps().spirvTargetVulkanVersion >= VK_API_VERSION_1_3
@@ -352,9 +380,9 @@ namespace pe
 
             outSpirv.resize(pObject->GetBufferSize() / sizeof(uint32_t));
             memcpy(outSpirv.data(), pObject->GetBufferPointer(), pObject->GetBufferSize());
-#if defined(PE_SHADER_COMPILER_SLANG)
-            ValidateShaderWithSlang(owner, stage, owner->GetCache().GetShaderCode(), globalDefines, localDefines, false,
-                                    outSpirv.data(), outSpirv.size() * sizeof(uint32_t));
+#if defined(PE_SLANG_VALIDATION)
+            ValidateShaderWithSlang(owner, stage, owner->GetCache().GetShaderCode(), globalDefines, localDefines,
+                                    SlangSpirvProfile(), outSpirv.data(), outSpirv.size() * sizeof(uint32_t));
 #endif
 
             dxc_utils->Release();

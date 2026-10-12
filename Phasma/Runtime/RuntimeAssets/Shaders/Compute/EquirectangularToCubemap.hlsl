@@ -1,7 +1,7 @@
 
 #include "../Common/Common.hlsl"
 
-[[vk::binding(0)]] RWTexture2DArray<float4> outCubeMap : register(u0);
+[[vk::image_format("rgba32f")]][[vk::binding(0)]] RWTexture2DArray<float4> outCubeMap : register(u0);
 [[vk::binding(1)]] Texture2D<float4> inEquirectangular : register(t1);
 [[vk::binding(2)]] SamplerState samplerLinear : register(s2);
 

@@ -75,7 +75,7 @@ option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ${PE_DESKTOP_TARG
 option(PE_ENABLE_ASSIMP "Enable Assimp-backed runtime model file loading" ${PE_ASSIMP_DEFAULT})
 option(PE_ENABLE_RUNTIME_SHADER_COMPILER "Enable runtime shader compilation from source files" ${PE_RUNTIME_SHADER_COMPILER_DEFAULT})
 option(PE_ENABLE_RENDERDOC_CAPTURE "Enable RenderDoc capture API integration" OFF)
-option(PE_SHADER_COMPILER_SLANG "Also compile runtime HLSL shaders with slangc and log reflection mismatches vs DXC (DXC output is still used)" OFF)
+option(PE_SLANG_VALIDATION "Also compile each runtime HLSL shader DXC compiles with slangc and log binding or layout mismatches (DXC output is still used)" OFF)
 include("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/ProjectNative/ProjectNative.cmake")
 
 set(PE_SDL2_INCLUDE_DIR "${PE_THIRD_PARTY_DIR}/SDL2")
@@ -186,6 +186,12 @@ if(PE_PHYSICS)
         if(NOT MSVC)
             target_compile_options(Jolt PRIVATE $<$<CONFIG:Debug>:-O2>)
         endif()
+        # Jolt exports _HAS_EXCEPTIONS=0 PUBLIC. Under MSVC that turns std::exception into stdext::exception in
+        # every target linking it, so their catch (const std::exception &) never matches PhasmaCore's PE_ERROR
+        # throws (shader hot reload died this way). Jolt keeps the define for itself.
+        get_target_property(PE_JOLT_INTERFACE_DEFINES Jolt INTERFACE_COMPILE_DEFINITIONS)
+        list(FILTER PE_JOLT_INTERFACE_DEFINES EXCLUDE REGEX "_HAS_EXCEPTIONS")
+        set_target_properties(Jolt PROPERTIES INTERFACE_COMPILE_DEFINITIONS "${PE_JOLT_INTERFACE_DEFINES}")
     endif()
 endif()
 

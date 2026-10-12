@@ -2,6 +2,12 @@
 
 3D bodies run on Jolt behind `PE_PHYSICS` ([PhysicsSystem.h](../../../../Phasma/Runtime/Code/Systems/PhysicsSystem.h)). 2D physics is a separate Box2D system, see [Runtime 2D Physics And Shapes](runtime-2d-physics-and-shapes.md). Verified 2026-10-05.
 
+## Build: Jolt's exception define
+
+Jolt builds without C++ exceptions and exports `_HAS_EXCEPTIONS=0` as a PUBLIC define (`Jolt/Jolt.cmake`). On MSVC that define makes `std::exception` an alias of `stdext::exception`. Any target linking Jolt (PhasmaRuntime, and through it the editor module, editor, Player, Animator, Launcher, Cook, Export) then never matches PhasmaCore's `PE_ERROR` throws (`std::runtime_error`) in a `catch (const std::exception &)`; only `catch (...)` sees them. A shader compile error during hot reload killed the editor this way. The cdb trace showed one throw and the host's `catch (...)` firing although `catch (const std::exception &)` comes first in [Editor/main.cpp](../../../../Phasma/Editor/main.cpp). That catch order is the tell.
+
+The root [CMakeLists.txt](../../../../CMakeLists.txt) Jolt block removes `_HAS_EXCEPTIONS` from Jolt's `INTERFACE_COMPILE_DEFINITIONS`. Jolt keeps the define, so its code and speed don't change. After a configure, `build-ninja-physics/CMakeFiles/impl-Release.ninja` should show `_HAS_EXCEPTIONS=0` on Jolt objects only. Verified 2026-10-12; pool tests `shader-reload-broken-vulkan` / `-dx12`.
+
 ## Fixed step
 
 - The step rate is the scene setting `physics_rate` (Hz). Range 10–240, default 30. It is saved in the `.pescene` global settings. A scene without the key loads as 30 Hz, so it doesn't inherit the previously loaded scene's rate.

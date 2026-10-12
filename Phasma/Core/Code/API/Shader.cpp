@@ -12,6 +12,8 @@ namespace pe
 {
     namespace
     {
+        ShaderCompiler s_compiler = ShaderCompiler::Dxc;
+
         std::vector<Shader *> &TrackedShaders()
         {
             static std::vector<Shader *> s_tracked;
@@ -168,10 +170,11 @@ namespace pe
         const bool needsCompile = shader->m_cache.ShaderNeedsCompile();
         if (needsCompile)
         {
-            PE_INFO("[Shader] Compile(hlsl) -> source='%s' | path='%s' | path_hash=%llu | cache_hash=%llu",
+            PE_INFO("[Shader] Compile(hlsl) -> source='%s' | path='%s' | path_hash=%llu | cache_hash=%llu | compiler=%s",
                     desc.sourcePath.c_str(), path.c_str(),
                     static_cast<unsigned long long>(shader->m_pathID),
-                    static_cast<unsigned long long>(shader->m_cache.GetHash()));
+                    static_cast<unsigned long long>(shader->m_cache.GetHash()),
+                    s_compiler == ShaderCompiler::Slang ? "slang" : "dxc");
         }
 
         shader->m_impl = CreateShaderImpl(shader, desc, needsCompile);
@@ -248,6 +251,16 @@ namespace pe
     {
         std::lock_guard<std::mutex> lock(TrackedShadersMutex());
         return TrackedShaders();
+    }
+
+    void Shader::SetCompiler(ShaderCompiler compiler)
+    {
+        s_compiler = compiler;
+    }
+
+    ShaderCompiler Shader::GetCompiler()
+    {
+        return s_compiler;
     }
 
     void Shader::AddGlobalDefine(const std::string &name, const std::string &value)

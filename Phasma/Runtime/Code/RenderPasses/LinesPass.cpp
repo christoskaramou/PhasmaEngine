@@ -109,6 +109,7 @@ namespace pe
         cmd->BindPipeline(*m_passInfo);
         cmd->BindIndexBuffer(scene->GetBuffer(), 0);
         cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
+        scene->BindDrawIdBuffer(cmd);
 
         for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
         {
@@ -148,6 +149,7 @@ namespace pe
 
         cmd->BindPipeline(*m_spriteOutlinePassInfo);
         cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
+        scene->BindDrawIdBuffer(cmd);
 
         for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
         {

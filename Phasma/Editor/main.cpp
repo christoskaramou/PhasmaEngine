@@ -1,4 +1,5 @@
 #include "API/GraphicsApiSelection.h"
+#include "API/Shader.h"
 #include "API/RHI.h"
 #include "Runtime/RuntimeHost.h"
 
@@ -219,6 +220,7 @@ int main(int argc, char *argv[])
             PE_ERROR("%s", apiSelection.error.c_str());
             return 1;
         }
+        pe::Shader::SetCompiler(pe::ResolveShaderCompiler(argc, argv));
 
         PeGraphicsApi api = apiSelection.api;
         int displayIndex = 0;

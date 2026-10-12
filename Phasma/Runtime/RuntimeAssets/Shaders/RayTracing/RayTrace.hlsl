@@ -99,7 +99,7 @@ struct Vertex
 
 // Primary-hit device depth for RTDepthResolvePass (full RT). Set 1 because set 0 ends with the
 // unbounded texture array (binding 12), which must stay the last binding of its set.
-[[vk::binding(3, 1)]] RWTexture2D<float> rtDepth;
+[[vk::image_format("r32f")]][[vk::binding(3, 1)]] RWTexture2D<float> rtDepth;
 
 #if defined(GI_PROBES) || defined(GI_SHADING)
 #include "../GlobalIllumination/ProbeVolume.hlsl"
