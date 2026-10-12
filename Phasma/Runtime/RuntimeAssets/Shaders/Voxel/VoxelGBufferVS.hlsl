@@ -11,7 +11,6 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 
-[[vk::push_constant]] PushConstants_GBuffer pc;
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
 

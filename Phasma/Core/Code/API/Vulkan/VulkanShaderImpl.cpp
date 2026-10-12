@@ -1,6 +1,7 @@
 #include "API/Vulkan/VulkanShaderImpl.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
+#include "API/SlangShaderValidation.h"
 #if defined(PE_RUNTIME_SHADER_COMPILER)
 #include "shaderc/shaderc.hpp"
 #endif
@@ -226,9 +227,7 @@ namespace pe
                                ? L"-fspv-target-env=vulkan1.3"
                                : L"-fspv-target-env=vulkan1.2");
 
-            const bool isLibraryTarget =
-                (stage & (PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR | PE_SHADER_STAGE_CLOSEST_HIT_KHR |
-                          PE_SHADER_STAGE_MISS_KHR | PE_SHADER_STAGE_INTERSECTION_KHR | PE_SHADER_STAGE_CALLABLE_KHR)) != 0;
+            const bool isLibraryTarget = (stage & PE_SHADER_STAGE_RAY_TRACING) != 0;
 
             args.push_back(L"-T");
             if (stage == PE_SHADER_STAGE_VERTEX)
@@ -353,6 +352,10 @@ namespace pe
 
             outSpirv.resize(pObject->GetBufferSize() / sizeof(uint32_t));
             memcpy(outSpirv.data(), pObject->GetBufferPointer(), pObject->GetBufferSize());
+#if defined(PE_SHADER_COMPILER_SLANG)
+            ValidateShaderWithSlang(owner, stage, owner->GetCache().GetShaderCode(), globalDefines, localDefines, false,
+                                    outSpirv.data(), outSpirv.size() * sizeof(uint32_t));
+#endif
 
             dxc_utils->Release();
             include_handler->Release();

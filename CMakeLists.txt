@@ -75,6 +75,7 @@ option(PE_WEBGPU "Build PhasmaWebGPU WebGPU abstraction layer" ${PE_DESKTOP_TARG
 option(PE_ENABLE_ASSIMP "Enable Assimp-backed runtime model file loading" ${PE_ASSIMP_DEFAULT})
 option(PE_ENABLE_RUNTIME_SHADER_COMPILER "Enable runtime shader compilation from source files" ${PE_RUNTIME_SHADER_COMPILER_DEFAULT})
 option(PE_ENABLE_RENDERDOC_CAPTURE "Enable RenderDoc capture API integration" OFF)
+option(PE_SHADER_COMPILER_SLANG "Also compile runtime HLSL shaders with slangc and log reflection mismatches vs DXC (DXC output is still used)" OFF)
 include("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/ProjectNative/ProjectNative.cmake")
 
 set(PE_SDL2_INCLUDE_DIR "${PE_THIRD_PARTY_DIR}/SDL2")

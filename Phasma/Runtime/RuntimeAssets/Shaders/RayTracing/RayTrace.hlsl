@@ -1023,13 +1023,13 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         }
 
         // Point Lights
-        for (uint i = 0; i < cb_numPointLights; i++)
+        for (uint p = 0; p < cb_numPointLights; p++)
         {
-            if (LoadPointLight(i).color.w > 0.0) // intensity is .w
+            if (LoadPointLight(p).color.w > 0.0) // intensity is .w
             {
-                float dist = distance(positionWorld, LoadPointLight(i).position.xyz); // position is .xyz
-                if (dist < LoadPointLight(i).position.w) // radius is .w
-                    lighting += RT_ComputePointLight(i, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+                float dist = distance(positionWorld, LoadPointLight(p).position.xyz); // position is .xyz
+                if (dist < LoadPointLight(p).position.w) // radius is .w
+                    lighting += RT_ComputePointLight(p, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
             }
         }
 

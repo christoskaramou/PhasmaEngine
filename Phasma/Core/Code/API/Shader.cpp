@@ -30,6 +30,14 @@ namespace pe
             return (index < descriptors.size()) ? descriptors[index] : nullptr;
         }
 
+        // A texture + sampler pair reflects COMBINED in a stage that uses both halves and SAMPLED_IMAGE or SAMPLER in a
+        // stage that uses one (DXIL drops the unused register): one combined descriptor serves every stage.
+        bool AbsorbsPairHalf(PeBindingType combined, PeBindingType half)
+        {
+            return combined == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER &&
+                   (half == PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE || half == PE_DESCRIPTOR_TYPE_SAMPLER);
+        }
+
         Descriptor *MergeDescriptors(Descriptor *a, Descriptor *b)
         {
             if (!a)
@@ -49,7 +57,13 @@ namespace pe
                     if (aInfo.binding == bInfo.binding)
                     {
                         found = true;
-                        PE_ERROR_IF(aInfo.type != bInfo.type, "Descriptor binding type mismatch during merge");
+                        if (AbsorbsPairHalf(bInfo.type, aInfo.type))
+                        {
+                            aInfo.type = bInfo.type;
+                            aInfo.imageLayout = bInfo.imageLayout;
+                        }
+                        PE_ERROR_IF(aInfo.type != bInfo.type && !AbsorbsPairHalf(aInfo.type, bInfo.type),
+                                    "Descriptor binding type mismatch during merge");
                         PE_ERROR_IF(aInfo.dxRegister != bInfo.dxRegister || aInfo.dxSpace != bInfo.dxSpace,
                                     "Descriptor binding DX12 register mismatch during merge");
                         PE_ERROR_IF(aInfo.structuredStride != bInfo.structuredStride,

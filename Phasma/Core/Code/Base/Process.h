@@ -10,6 +10,13 @@ namespace pe
         return std::string(reinterpret_cast<const char *>(u8.c_str()), u8.size());
     }
 
+    // The reverse: a path from UTF-8 bytes (std::filesystem::path(std::string) would use the active code page on
+    // Windows). Throws std::system_error on invalid UTF-8.
+    inline std::filesystem::path PathFromUtf8(const std::string &utf8)
+    {
+        return std::filesystem::path(reinterpret_cast<const char8_t *>(utf8.c_str()));
+    }
+
     // Quote one argv element by the MSVC CRT rules, so the child's argv reproduces it exactly.
     std::wstring QuoteWindowsArg(const std::wstring &arg);
 

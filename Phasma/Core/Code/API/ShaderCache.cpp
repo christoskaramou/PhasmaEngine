@@ -101,6 +101,10 @@ namespace pe
             m_hash.CombineValue(RHII.GetCaps().spirvTargetVulkanVersion);
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             m_hash.CombineValue(12u); // DX12 cache embeds readable source in a private DXIL container part.
+#if defined(PE_SHADER_COMPILER_SLANG)
+        // Slang validation runs on cache misses only; its own cache entries make turning it on check every shader.
+        m_hash.CombineString("slang");
+#endif
 
         m_tempFilePath = Path::Root;
         m_tempFilePath += "ShaderCache/";

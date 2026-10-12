@@ -683,6 +683,9 @@ constexpr PeShaderStageFlags PE_SHADER_STAGE_CLOSEST_HIT_KHR = 1u << 10;
 constexpr PeShaderStageFlags PE_SHADER_STAGE_MISS_KHR = 1u << 11;
 constexpr PeShaderStageFlags PE_SHADER_STAGE_INTERSECTION_KHR = 1u << 12;
 constexpr PeShaderStageFlags PE_SHADER_STAGE_CALLABLE_KHR = 1u << 13;
+constexpr PeShaderStageFlags PE_SHADER_STAGE_RAY_TRACING = PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR |
+                                                           PE_SHADER_STAGE_CLOSEST_HIT_KHR | PE_SHADER_STAGE_MISS_KHR |
+                                                           PE_SHADER_STAGE_INTERSECTION_KHR | PE_SHADER_STAGE_CALLABLE_KHR;
 constexpr PeShaderStageFlags PE_SHADER_STAGE_ALL = ~0u;
 constexpr uint32_t PE_SHADER_STAGE_BIT_COUNT = 14;
 

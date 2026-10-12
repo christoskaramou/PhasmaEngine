@@ -1,4 +1,5 @@
 #include "API/DX12/Dx12ShaderImpl.h"
+#include "API/SlangShaderValidation.h"
 
 #if defined(PE_WIN32)
 
@@ -462,8 +463,7 @@ namespace pe
                 return L"ps_6_6";
             if (stage == PE_SHADER_STAGE_COMPUTE)
                 return L"cs_6_6";
-            if (stage & (PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR | PE_SHADER_STAGE_CLOSEST_HIT_KHR |
-                         PE_SHADER_STAGE_MISS_KHR | PE_SHADER_STAGE_INTERSECTION_KHR | PE_SHADER_STAGE_CALLABLE_KHR))
+            if (stage & PE_SHADER_STAGE_RAY_TRACING)
                 return L"lib_6_6";
 
             PE_ERROR("[Shader] Invalid DX12 shader stage");
@@ -472,8 +472,7 @@ namespace pe
 
         bool IsRayTracingStage(PeShaderStageFlags stage)
         {
-            return (stage & (PE_SHADER_STAGE_RAYGEN_KHR | PE_SHADER_STAGE_ANY_HIT_KHR | PE_SHADER_STAGE_CLOSEST_HIT_KHR |
-                             PE_SHADER_STAGE_MISS_KHR | PE_SHADER_STAGE_INTERSECTION_KHR | PE_SHADER_STAGE_CALLABLE_KHR)) != 0;
+            return (stage & PE_SHADER_STAGE_RAY_TRACING) != 0;
         }
 
         bool CompileHlslToDxil(Shader *owner,
@@ -679,6 +678,10 @@ namespace pe
                 return false;
             }
 
+#if defined(PE_SHADER_COMPILER_SLANG)
+            ValidateShaderWithSlang(owner, stage, shaderCode, globalDefines, localDefines, true,
+                                    object->GetBufferPointer(), object->GetBufferSize());
+#endif
             return AddSourcePrivateDataToDxil(utils.Get(), object.Get(), shaderCode, outDxil);
         }
 

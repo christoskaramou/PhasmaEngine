@@ -2,7 +2,6 @@
 #include "../Common/Common.hlsl"
 #include "../Common/MaterialFlags.hlsl"
 
-[[vk::push_constant]] PushConstants_DepthPass pc;
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
 [[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
 [[vk::binding(2, 1)]] Texture2D textures[] : register(t2, space1);

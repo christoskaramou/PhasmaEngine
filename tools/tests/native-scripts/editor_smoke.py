@@ -132,7 +132,7 @@ with tempfile.TemporaryDirectory(prefix="native-script-smoke-") as temporary:
         # Regression: a pass whose shader fails to load threw out of the render graph and killed the editor
         # (fixed 2026-09-27: logged once, the pass disabled, like Lua's protected render_graph calls).
         log = binary / "PhasmaEngine.log"
-        bad = "[CppScript] fullscreen pass 'NativeProbeBadShader' failed; pass disabled"
+        bad = "[Render] fullscreen pass 'NativeProbeBadShader' failed; pass disabled"
         wait_for(lambda: bad in log.read_text(errors="replace"), 10)
         time.sleep(1)
         assert log.read_text(errors="replace").count(bad) == 1
