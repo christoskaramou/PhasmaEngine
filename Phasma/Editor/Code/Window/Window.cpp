@@ -196,6 +196,12 @@ namespace pe
             }
         }
 
+        if (m_resizeDeferred && IsRenderable())
+        {
+            m_resizeDeferred = false;
+            EventSystem::PushEvent(EventType::Resize);
+        }
+
         if (runtimeUi)
         {
             InputState::SetMouseCapturedByUi(runtimeUi->WantsMouseCapture());
@@ -283,7 +289,7 @@ namespace pe
                 }
                 case EventType::Resize:
                 {
-                    if (!isMinimized())
+                    if (IsRenderable())
                     {
                         const WindowDrawableExtent extent = GetWindowDrawableExtent(m_apiHandle);
                         if (extent.IsValid())
@@ -291,6 +297,11 @@ namespace pe
                             rendererSystem->Resize(static_cast<uint32_t>(extent.width),
                                                    static_cast<uint32_t>(extent.height));
                         }
+                    }
+                    else
+                    {
+                        // No swapchain size is legal while the window has no drawable area: resize once it has.
+                        m_resizeDeferred = true;
                     }
                     break;
                 }
@@ -426,9 +437,11 @@ namespace pe
                y < rect.y + rect.height;
     }
 
-    bool Window::isMinimized()
+    bool Window::IsRenderable() const
     {
-        return IsWindowMinimized(m_apiHandle);
+        const Surface *surface = RHII.GetSurface();
+
+        return !IsWindowMinimized(m_apiHandle) && surface && surface->IsPresentable();
     }
 
     void Window::GetDrawableSize(int &width, int &height)

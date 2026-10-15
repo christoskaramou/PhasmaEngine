@@ -38,5 +38,6 @@ namespace pe
         uint32_t m_currentBackbuffer{0};
         bool m_allowTearing{false};
         bool m_initialWaitPending{false};
+        bool m_frameWaited{false};
     };
 } // namespace pe

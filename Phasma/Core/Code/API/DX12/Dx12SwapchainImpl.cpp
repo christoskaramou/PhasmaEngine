@@ -202,7 +202,9 @@ namespace pe
 
     bool Dx12SwapchainImpl::WaitForNextFrame()
     {
-        if (!m_frameLatencyWaitableObject)
+        // A wait takes a frame-latency slot that only a Present gives back. A frame that waited and then drew nothing
+        // (the window had no drawable area) keeps its slot instead of waiting again, or the host would stall forever.
+        if (!m_frameLatencyWaitableObject || m_frameWaited)
             return true;
 
         const DWORD result =
@@ -213,6 +215,7 @@ namespace pe
                     "Dx12SwapchainImpl: frame latency wait failed (%lu)",
                     result == WAIT_FAILED ? ::GetLastError() : result);
         m_initialWaitPending = false;
+        m_frameWaited = true;
         return true;
     }
 
@@ -230,6 +233,7 @@ namespace pe
         const UINT syncInterval = immediate ? 0u : 1u;
         const UINT flags = immediate ? DXGI_PRESENT_ALLOW_TEARING : 0u;
         const HRESULT hr = m_swapchain->Present(syncInterval, flags);
+        m_frameWaited = false;
         if (FAILED(hr))
         {
             Dx12ReportDeviceRemoved();

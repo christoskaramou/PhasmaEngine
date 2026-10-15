@@ -649,7 +649,7 @@ namespace pe
         }
 
         bool presentationReady = true;
-        if (!m_window->isMinimized())
+        if (m_window->IsRenderable())
         {
             try
             {
@@ -703,7 +703,10 @@ namespace pe
             }
         }
 
-        if (!m_window->isMinimized())
+        // Asked after the events, so a minimize handled this frame already skips it.
+        const bool renderable = m_window->IsRenderable();
+
+        if (renderable)
         {
             PE_PROFILE_SCOPE("Update Systems");
             UpdateGlobalSystems();
@@ -715,7 +718,7 @@ namespace pe
         if (runtimeUiFrameOpen)
             runtimeUi->EndFrame();
 
-        if (!m_window->isMinimized())
+        if (renderable)
         {
             PE_PROFILE_SCOPE("Late Script Mutation Catch-Up");
             rendererSystem->LateCatchUpForScriptMutations();
@@ -726,7 +729,7 @@ namespace pe
             ImGui::Render();
         m_frameTimer.CountUpdatesStamp();
 
-        if (!m_window->isMinimized())
+        if (renderable)
         {
             {
                 PE_PROFILE_SCOPE("Draw");

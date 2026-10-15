@@ -19,9 +19,7 @@ namespace pe
         static const Dx12SurfaceImpl *TryFrom(const Surface *s) { return s && s->m_impl ? From(s) : nullptr; }
 
         std::vector<PePresentMode> GetSupportedPresentModes() const override;
-        // DXGI resizes a minimized swapchain happily, so this is only ever false
-        // when the HWND itself is gone.
-        bool IsPresentable() const override { return m_hwnd != nullptr; }
+        bool IsPresentable() const override;
 
         HWND GetHwnd() const { return m_hwnd; }
 

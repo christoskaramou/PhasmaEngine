@@ -17,7 +17,9 @@ namespace pe
         bool ProcessEvents();
         void WrapMouse(int &x, int &y);
         bool IsInsideRenderWindow(int x, int y);
-        bool isMinimized();
+        // False while the window has no drawable area: minimized, or hidden by the OS (Win+D keeps SDL's minimized
+        // flag clear, so the surface is asked too). Nothing may be rendered or its swapchain rebuilt then.
+        bool IsRenderable() const;
         void GetDrawableSize(int &width, int &height);
         void Show();
         void Hide();
@@ -27,5 +29,6 @@ namespace pe
     private:
         EventSystem::CallbackToken m_setTitleToken{0};
         bool m_owned = true;
+        bool m_resizeDeferred = false;
     };
 } // namespace pe

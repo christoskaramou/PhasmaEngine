@@ -45,6 +45,16 @@ namespace pe
             return {PE_PRESENT_MODE_FIFO, PE_PRESENT_MODE_IMMEDIATE};
         return {PE_PRESENT_MODE_FIFO};
     }
+
+    bool Dx12SurfaceImpl::IsPresentable() const
+    {
+        if (!m_hwnd || ::IsIconic(m_hwnd))
+            return false;
+
+        // The same test Vulkan's currentExtent answers: a client area with no pixels cannot be presented into.
+        RECT client{};
+        return ::GetClientRect(m_hwnd, &client) && client.right > client.left && client.bottom > client.top;
+    }
 } // namespace pe
 
 #endif // PE_WIN32

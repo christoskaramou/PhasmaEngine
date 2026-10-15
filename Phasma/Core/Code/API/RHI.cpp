@@ -2040,8 +2040,32 @@ namespace pe
         m_stagingManager = new StagingManager();
     }
 
+    namespace
+    {
+        // A minimized or hidden window has no drawable area and no legal swapchain size. Hosts skip their resize and
+        // frames meanwhile; this is the last line for startup and for a resize racing the OS: wait for the window
+        // (pumping events so it stays responsive) instead of creating a 0x0 swapchain.
+        void WaitForPresentableSurface(const Surface *surface)
+        {
+            if (!surface || surface->IsPresentable())
+                return;
+
+            PE_WARN("[Swapchain] The window has no drawable area; waiting for it before creating the swapchain");
+            while (!surface->IsPresentable())
+            {
+                SDL_PumpEvents();
+                PE_ERROR_IF(SDL_HasEvent(SDL_QUIT), "[Swapchain] The window was closed before the swapchain existed");
+                SDL_Delay(50);
+            }
+
+            PE_INFO("[Swapchain] The window has a drawable area again");
+        }
+    } // namespace
+
     void RHI::CreateSwapchain(Surface *surface)
     {
+        WaitForPresentableSurface(surface);
+
         SwapchainDesc desc{};
         if (surface)
         {

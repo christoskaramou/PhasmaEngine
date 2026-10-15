@@ -576,7 +576,12 @@ namespace pe
     bool AnimatorApp::WindowRenderable() const
     {
         SDL_Window *window = RHII.GetWindow();
-        return window && !IsWindowMinimized(window) && GetWindowDrawableExtent(window).IsValid();
+        const Surface *surface = RHII.GetSurface();
+        if (!window || !surface)
+            return false;
+
+        // The surface is asked too: Win+D leaves SDL's minimized flag clear while Vulkan reports a 0x0 extent.
+        return !IsWindowMinimized(window) && GetWindowDrawableExtent(window).IsValid() && surface->IsPresentable();
     }
 
     bool AnimatorApp::ProcessEvents()
