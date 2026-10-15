@@ -10,4 +10,10 @@ namespace pe
     uint32_t GuardedCreate(decltype(phasma::ScriptDesc::create) create, const phasma::ScriptApi *api, phasma::Node node, void **state, uint32_t *fault);
     uint32_t GuardedUpdate(decltype(phasma::ScriptDesc::update) update, void *state, double dt, uint32_t *fault);
     void GuardedDestroy(decltype(phasma::ScriptDesc::destroy) destroy, void *state, uint32_t *fault);
+    uint32_t GuardedTool(phasma::ToolHandler tool,
+                         void *user,
+                         const char *args,
+                         const char **result,
+                         uint32_t *size,
+                         uint32_t *fault);
 } // namespace pe

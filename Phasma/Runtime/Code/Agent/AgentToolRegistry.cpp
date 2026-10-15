@@ -16,13 +16,28 @@ namespace pe
         {
             if (e.name == name)
             {
-                e.description = std::move(description);
-                e.inputSchema = std::move(inputSchema);
-                e.handler = std::move(handler);
+                e = {std::move(name), std::move(description), std::move(inputSchema), std::move(handler)};
                 return;
             }
         }
         m_tools.push_back({std::move(name), std::move(description), std::move(inputSchema), std::move(handler)});
+    }
+
+    void AgentToolRegistry::RegisterNative(std::string name, std::string description, nlohmann::json inputSchema,
+                                           NativeHandler handler, uint64_t owner)
+    {
+        Entry entry{std::move(name), std::move(description), std::move(inputSchema), {}, std::move(handler), owner};
+
+        std::lock_guard lock(m_mtx);
+        for (Entry &e : m_tools)
+        {
+            if (e.name == entry.name)
+            {
+                e = std::move(entry);
+                return;
+            }
+        }
+        m_tools.push_back(std::move(entry));
     }
 
     void AgentToolRegistry::Unregister(const std::string &name)
@@ -38,10 +53,26 @@ namespace pe
         }
     }
 
-    void AgentToolRegistry::Clear()
+    bool AgentToolRegistry::UnregisterNative(const std::string &name, uint64_t owner)
     {
         std::lock_guard lock(m_mtx);
-        m_tools.clear();
+        const auto removed = std::erase_if(m_tools, [&](const Entry &e)
+                                           { return e.owner == owner && e.name == name; });
+        return removed != 0;
+    }
+
+    void AgentToolRegistry::ClearNative(uint64_t owner)
+    {
+        std::lock_guard lock(m_mtx);
+        std::erase_if(m_tools, [owner](const Entry &e)
+                      { return e.owner != 0 && (owner == 0 || e.owner == owner); });
+    }
+
+    void AgentToolRegistry::ClearLua()
+    {
+        std::lock_guard lock(m_mtx);
+        std::erase_if(m_tools, [](const Entry &e)
+                      { return e.owner == 0; });
     }
 
     std::vector<AgentToolRegistry::Meta> AgentToolRegistry::SnapshotMeta() const
@@ -60,6 +91,7 @@ namespace pe
         // Copy the handle out under the lock, then call without holding it (the handler may itself
         // register/unregister tools). sol::protected_function copies are cheap ref copies.
         sol::protected_function handler;
+        NativeHandler native;
         {
             std::lock_guard lock(m_mtx);
             for (const Entry &e : m_tools)
@@ -67,10 +99,14 @@ namespace pe
                 if (e.name == name)
                 {
                     handler = e.handler;
+                    native = e.native;
                     break;
                 }
             }
         }
+        if (native)
+            return native(args, ok, error);
+
         if (!handler.valid())
         {
             ok = false;

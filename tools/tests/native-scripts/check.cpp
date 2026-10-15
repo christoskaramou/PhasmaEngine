@@ -1,5 +1,6 @@
 #include "CppScriptPath.h"
 #include "DetachedTask.h"
+#include "GameKit.h"
 #include "NativeHandleTable.h"
 #include "NativeScriptGuard.h"
 #include "NativeTrs.h"
@@ -18,6 +19,8 @@
 #include <cmath>
 #include <iterator>
 #include <limits>
+#include <map>
+#include <string>
 #include <vector>
 #if defined(_WIN32)
 #include <windows.h>
@@ -118,7 +121,7 @@ static void CheckController(const char *path)
         else if (!std::strcmp(script.name, "Orbit"))
             orbit = &script;
     }
-    Require(module.Active()->scriptCount == 2 && orbit);
+    Require(module.Active()->scriptCount == 3 && orbit);
     Require(controller && controller->kind == phasma::ScriptKind::Node);
     // Binaries carry bare filenames, never the build machine's source paths.
     Require(controller->sourceFile && !std::strcmp(controller->sourceFile, "PlayerController.cpp"));
@@ -127,14 +130,14 @@ static void CheckController(const char *path)
     duplicateSources[1].name = "DifferentName";
     const phasma::ScriptModule duplicate{phasma::ScriptAbiVersion, sizeof(phasma::ScriptModule), 2, duplicateSources.data()};
     Require(!module.StageLinked(&duplicate));
-    Require(module.Active() && module.Active()->scriptCount == 2);
+    Require(module.Active() && module.Active()->scriptCount == 3);
     // Validation normalizes names the way scenes match them: Windows and POSIX paths to one filename
     // collide on every host, distinct filenames do not.
     duplicateSources[0].sourceFile = "a\\Dup.cpp";
     duplicateSources[1].sourceFile = "b/Dup.cpp";
     Require(!module.StageLinked(&duplicate) && module.Error() == "Node scripts must have unique source filenames");
     duplicateSources[1].sourceFile = "b/Other.cpp";
-    Require(module.StageLinked(&duplicate) && module.Active()->scriptCount == 2);
+    Require(module.StageLinked(&duplicate) && module.Active()->scriptCount == 3);
     void *instance = nullptr;
     api.version = 1;
     Require(!controller->create(&api, 42, &instance) && !instance);
@@ -685,6 +688,28 @@ static void CheckGuard(const char *faultingProbe)
                        { ++*static_cast<int *>(s); }, &destroyed, &fault);
     Require(destroyed == 1 && fault == 0);
 
+    // v29 tool calls: the result passes through; a fault fails the call.
+    const char *result = nullptr;
+    uint32_t size = 0;
+    const auto tool = [](void *user, const char *args, const char **out, uint32_t *length) noexcept -> uint32_t
+    {
+        *out = args;
+        *length = static_cast<uint32_t>(std::strlen(args));
+        return user != nullptr;
+    };
+    fault = 1;
+    Require(pe::GuardedTool(tool, &destroyed, "{}", &result, &size, &fault) == 1 && fault == 0 && size == 2);
+    if (pe::NativeFaultsContained())
+    {
+        const auto faulting = [](void *, const char *, const char **, uint32_t *) noexcept -> uint32_t
+        {
+            static int *volatile target = nullptr;
+            *target = 7;
+            return 1;
+        };
+        Require(pe::GuardedTool(faulting, nullptr, "{}", &result, &size, &fault) == 0 && fault != 0);
+    }
+
     int logs = 0;
     phasma::ScriptApi api{phasma::ScriptAbiVersion, sizeof(phasma::ScriptApi), &logs};
     api.log = [](void *ctx, const char *) noexcept
@@ -889,6 +914,201 @@ static void CheckDetachedTask()
     Require(threw && !task.valid());
 }
 
+// GameKit's driver protocol (ABI 29 tools) against a host that only records registrations.
+namespace
+{
+    struct ToolHost
+    {
+        struct Tool
+        {
+            phasma::ToolHandler handler;
+            void *user;
+        };
+        std::map<std::string, Tool> tools;
+    };
+
+    std::string CallTool(ToolHost &host, const char *name, const char *args)
+    {
+        const ToolHost::Tool &tool = host.tools.at(name);
+        const char *result = nullptr;
+        uint32_t size = 0;
+        Require(tool.handler(tool.user, args, &result, &size) == 1 && result);
+        return std::string(result, size);
+    }
+
+    bool Has(const std::string &json, const char *text)
+    {
+        return json.find(text) != std::string::npos;
+    }
+
+    std::string SessionId(const std::string &json)
+    {
+        const std::string key = "\"session_id\":\"";
+        const size_t start = json.find(key) + key.size();
+        return json.substr(start, json.find('"', start) - start);
+    }
+
+    std::string Act(ToolHost &host, const std::string &session, int state, const char *action)
+    {
+        const std::string args = "{\"session_id\":\"" + session + "\",\"state_id\":" + std::to_string(state) +
+                                 ",\"action_id\":\"" + action + "\"}";
+        return CallTool(host, "game_act", args.c_str());
+    }
+} // namespace
+
+static void CheckGameKit()
+{
+    ToolHost host;
+    phasma::ScriptApi api{phasma::ScriptAbiVersion, sizeof(phasma::ScriptApi), &host};
+    api.registerTool = [](void *ctx, const char *name, const char *, const char *, phasma::ToolHandler handler,
+                          void *user) noexcept -> uint32_t
+    {
+        static_cast<ToolHost *>(ctx)->tools[name] = {handler, user};
+        return 1;
+    };
+    api.unregisterTool = [](void *ctx, const char *name) noexcept -> uint32_t
+    {
+        return static_cast<ToolHost *>(ctx)->tools.erase(name) != 0;
+    };
+
+    struct Fake
+    {
+        int moves = 0;
+        bool busy = false;
+        bool throwOnAct = false;
+        bool badObservation = false;
+        uint32_t seed = 0;
+        std::string last;
+    } game;
+    phasma::gamekit::Game spec;
+    spec.id = "fake";
+    spec.description = "A test game.";
+    spec.observe = [&](phasma::gamekit::State &state)
+    {
+        state.mode = "playing";
+        state.score = game.moves;
+        state.busy = game.busy;
+        state.observation = game.badObservation ? "[1]" : "{\"moves\":" + std::to_string(game.moves) + "}";
+        state.actions = {{"step", "Take a step.", 1.0},
+                         {"wait", "Do nothing.", {}},
+                         {"\xCF\x80", "Pi.", {}},
+                         {"\xF0\x9F\x8E\xB2", "Dice.", {}}};
+    };
+    spec.act = [&](const std::string &id)
+    {
+        if (game.throwOnAct)
+            throw std::runtime_error("boom");
+
+        game.last = id;
+        if (id == "step")
+            ++game.moves;
+    };
+    spec.reset = [&](uint32_t seed)
+    {
+        game.seed = seed;
+        game.moves = 0;
+    };
+
+    {
+        phasma::gamekit::Controller controller(api, spec);
+        Require(host.tools.size() == 4);
+        const std::string describe = CallTool(host, "game_describe", "{}");
+        Require(Has(describe, "\"protocol_version\":1") && Has(describe, "\"reset_supported\":true"));
+        Require(Has(describe, "\"state_tracking\":\"public_state\"") && Has(describe, "\"seed_max\":2147483647"));
+
+        const std::string first = CallTool(host, "game_reset", "{\"seed\":7}");
+        const std::string session = SessionId(first);
+        Require(game.seed == 7 && Has(first, "\"state_id\":1") && Has(first, "\"score\":0,"));
+        Require(Has(first, "{\"id\":\"step\",\"description\":\"Take a step.\",\"score\":1}") &&
+                Has(first, "{\"id\":\"wait\",\"description\":\"Do nothing.\"}"));
+
+        // Malformed requests fail before game code.
+        for (const char *args : {"", "null", "{}", "[]", "{\"session_id\":\"s\",\"state_id\":1}",
+                                 "{\"session_id\":\"s\",\"state_id\":1,\"action_id\":\"step\",\"x\":1}",
+                                 "{\"session_id\":\"s\",\"state_id\":\"1\",\"action_id\":\"step\"}",
+                                 "{\"session_id\":\"s\",\"state_id\":0,\"action_id\":\"step\"}",
+                                 "{\"session_id\":\"s\",\"state_id\":1.0,\"action_id\":\"step\"}",
+                                 "{\"session_id\":\"s\",\"state_id\":01,\"action_id\":\"step\"}",
+                                 "{\"session_id\":{},\"state_id\":1,\"action_id\":\"step\"}",
+                                 "{\"session_id\":\"s\",\"session_id\":\"s\",\"state_id\":1,\"action_id\":\"step\"}",
+                                 "{\"session_id\":\"s\",\"state_id\":1,\"action_id\":\"\"}",
+                                 "{\"session_id\":\"s\",\"state_id\":1,\"action_id\":\"\\ud83c\"}",
+                                 "{\"session_id\":\"s\",\"state_id\":1,\"action_id\":\"step\"} x",
+                                 "{\"session_id\":\"s"})
+            Require(Has(CallTool(host, "game_act", args), "\"code\":\"invalid_request\""));
+        Require(game.moves == 0 && game.last.empty());
+
+        Require(Has(Act(host, "other", 1, "step"), "\"code\":\"stale_state\""));
+        Require(Has(Act(host, session, 2, "step"), "\"code\":\"stale_state\""));
+        Require(Has(Act(host, session, 1, "jump"), "\"code\":\"illegal_action\""));
+        Require(game.moves == 0);
+
+        // Each act consumes its state id; escapes (surrogate pairs included) decode to UTF-8.
+        Require(Has(Act(host, session, 1, "step"), "\"state_id\":2") && game.moves == 1);
+        Require(Has(Act(host, session, 2, "\\u0073tep"), "\"state_id\":3") && game.moves == 2);
+        Require(Has(Act(host, session, 3, "\\u03C0"), "\"state_id\":4") && game.last == "\xCF\x80");
+        Require(Has(Act(host, session, 4, "\\ud83c\\udfb2"), "\"state_id\":5") && game.last == "\xF0\x9F\x8E\xB2");
+        Require(Has(Act(host, session, 4, "step"), "\"code\":\"stale_state\"") && game.moves == 2);
+
+        // A public change advances the state; observing it again does not.
+        game.moves = 10;
+        Require(Has(CallTool(host, "game_observe", "{}"), "\"state_id\":6"));
+        Require(Has(CallTool(host, "game_observe", "{}"), "\"state_id\":6"));
+        game.busy = true;
+        Require(Has(Act(host, session, 7, "step"), "\"code\":\"busy\"") && game.moves == 10);
+        game.busy = false;
+
+        // A throwing act still consumed its token: retrying the same state is stale.
+        game.throwOnAct = true;
+        Require(Has(Act(host, session, 8, "step"), "\"code\":\"callback_failed\"") &&
+                Has(CallTool(host, "game_observe", "{}"), "\"state_id\":9"));
+        game.throwOnAct = false;
+        Require(Has(Act(host, session, 8, "step"), "\"code\":\"stale_state\"") && game.moves == 10);
+
+        game.badObservation = true;
+        Require(Has(CallTool(host, "game_observe", "{}"), "\"code\":\"invalid_observation\""));
+        game.badObservation = false;
+
+        for (const char *args : {"{}",
+                                 "{\"seed\":-1}",
+                                 "{\"seed\":2147483648}",
+                                 "{\"seed\":\"7\"}",
+                                 "{\"seed\":7,\"x\":1}"})
+            Require(Has(CallTool(host, "game_reset", args), "\"code\":\"invalid_request\""));
+        const std::string second = CallTool(host, "game_reset", "{\"seed\":2147483647}");
+        Require(game.seed == 2147483647u && Has(second, "\"state_id\":1") && SessionId(second) != session);
+        Require(Has(Act(host, session, 1, "step"), "\"code\":\"stale_state\""));
+    }
+    Require(host.tools.empty());
+
+    // A real-time game versions decisions by its key: moving visuals keep the state; no reset is unsupported.
+    spec.reset = nullptr;
+    spec.stateKey = [](const phasma::gamekit::State &)
+    {
+        return std::string("epoch");
+    };
+    {
+        phasma::gamekit::Controller controller(api, spec);
+        Require(Has(CallTool(host, "game_describe", "{}"), "\"state_tracking\":\"game_epoch\""));
+        Require(Has(CallTool(host, "game_observe", "{}"), "\"state_id\":1"));
+        game.moves = 11;
+        Require(Has(CallTool(host, "game_observe", "{}"), "\"state_id\":1"));
+        Require(Has(CallTool(host, "game_reset", "{\"seed\":1}"), "\"code\":\"unsupported\""));
+    }
+
+    bool threw = false;
+    spec.id.clear();
+    try
+    {
+        phasma::gamekit::Controller controller(api, spec);
+    }
+    catch (const std::invalid_argument &)
+    {
+        threw = true;
+    }
+    Require(threw && host.tools.empty());
+}
+
 int main(int argc, char **argv)
 {
 #if defined(_WIN32)
@@ -901,6 +1121,7 @@ int main(int argc, char **argv)
     CheckHandleTable();
     CheckTrs();
     CheckDetachedTask();
+    CheckGameKit();
     CheckController(argv[7]);
     CheckInstalledLoad(argv[1]);
     CheckLiveReloadPolicy(argv[1]);

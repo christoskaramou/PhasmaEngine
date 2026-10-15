@@ -34,7 +34,8 @@ endif()
 enable_testing()
 add_library(sample_game SHARED "${ENGINE_ROOT}/Phasma/ProjectNative/Module.cpp"
     "${ENGINE_ROOT}/Phasma/ProjectNative/Sample/Orbit.cpp"
-    "${ENGINE_ROOT}/Phasma/ProjectNative/Sample/PlayerController.cpp")
+    "${ENGINE_ROOT}/Phasma/ProjectNative/Sample/PlayerController.cpp"
+    "${ENGINE_ROOT}/Phasma/ProjectNative/Sample/CoinGrid.cpp")
 target_include_directories(sample_game PRIVATE "${API}")
 include("${ENGINE_ROOT}/Phasma/ProjectNative/ProjectNative.cmake")
 get_target_property(sample_sources sample_game SOURCES)

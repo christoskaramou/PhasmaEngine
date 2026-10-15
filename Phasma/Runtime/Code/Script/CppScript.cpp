@@ -29,6 +29,9 @@
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/Bindings/Input/InputState.h"
 #include "Systems/AnimationSystem.h"
+#if defined(PE_PLAYER_MCP)
+#include "Agent/AgentToolRegistry.h"
+#endif
 #ifdef PE_AUDIO
 #include "Systems/AudioSystem.h"
 #endif
@@ -260,6 +263,16 @@ namespace pe
         {
             for (; s_openProfileScopes > 0; --s_openProfileScopes)
                 Profiler::EndScope();
+        }
+
+        // v29 tools of one instance (0: every C++ tool), dropped before its state or module can go away.
+        void DropTools(uint64_t owner)
+        {
+#if defined(PE_PLAYER_MCP)
+            AgentToolRegistry::Instance().ClearNative(owner);
+#else
+            (void)owner;
+#endif
         }
     } // namespace
 
@@ -1272,6 +1285,73 @@ namespace pe
                     self->pipelineExposeBase();
                     return 1; });
         };
+#if defined(PE_PLAYER_MCP)
+        m_api.registerTool = [](void *ctx, const char *name, const char *description, const char *schema,
+                                phasma::ToolHandler handler, void *user) noexcept -> uint32_t
+        {
+            auto *self = static_cast<CppScriptSystem *>(ctx);
+            const uint64_t owner = self->m_dispatchOwner;
+            const bool named = name && *name;
+            if (!owner || !named || !handler)
+                return 0;
+
+            return GuardApi([&]() -> uint32_t
+                            {
+                nlohmann::json inputSchema; // null: any object
+                if (schema && *schema)
+                {
+                    inputSchema = nlohmann::json::parse(schema, nullptr, false);
+                    if (!inputSchema.is_object())
+                        return 0;
+                }
+
+                auto call = [self, owner, handler, user](const nlohmann::json &args, bool &ok, std::string &error)
+                {
+                    const std::string text = args.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+                    std::string out;
+                    ok = self->CallTool(owner, handler, user, text, out) != 0;
+                    if (!ok)
+                    {
+                        error = out.empty() ? "the tool failed" : out;
+                        return nlohmann::json();
+                    }
+
+                    nlohmann::json result = nlohmann::json::parse(out, nullptr, false);
+                    if (result.is_discarded())
+                    {
+                        ok = false;
+                        error = "the tool returned invalid JSON";
+                        return nlohmann::json();
+                    }
+                    return result;
+                };
+                AgentToolRegistry::Instance().RegisterNative(name,
+                                                             description ? description : "",
+                                                             std::move(inputSchema),
+                                                             std::move(call),
+                                                             owner);
+                return 1; });
+        };
+        m_api.unregisterTool = [](void *ctx, const char *name) noexcept -> uint32_t
+        {
+            const uint64_t owner = static_cast<CppScriptSystem *>(ctx)->m_dispatchOwner;
+            if (!owner || !name)
+                return 0;
+
+            return GuardApi([&]() -> uint32_t
+                            { return AgentToolRegistry::Instance().UnregisterNative(name, owner); });
+        };
+#else
+        m_api.registerTool = [](void *, const char *, const char *, const char *, phasma::ToolHandler,
+                                void *) noexcept -> uint32_t
+        {
+            return 0;
+        };
+        m_api.unregisterTool = [](void *, const char *) noexcept -> uint32_t
+        {
+            return 0;
+        };
+#endif
     }
 
     bool CppScriptSystem::HasModule() const
@@ -1292,14 +1372,14 @@ namespace pe
                 continue;
             m_pipeline = {&desc};
             m_pipeline.started = true;
+            m_pipeline.id = ++m_nextInstanceId;
             m_pipelineOwner = owner;
+            m_dispatchOwner = m_pipeline.id;
             uint32_t fault = 0;
-            if (!GuardedCreate(desc.create, &m_api, 0, &m_pipeline.state, &fault))
-            {
-                m_pipeline.failed = true;
-                m_pipeline.faulted = fault != 0;
-                ScriptError(desc.name, fault);
-            }
+            const uint32_t created = GuardedCreate(desc.create, &m_api, 0, &m_pipeline.state, &fault);
+            m_dispatchOwner = 0;
+            if (!created)
+                Fail(m_pipeline, fault);
             m_pipelineOwner = nullptr;
             CloseScriptProfileScopes();
             return true;
@@ -1319,11 +1399,67 @@ namespace pe
         // Even failed instances own state that must die while their module is loaded; faulted state is leaked.
         uint32_t fault = 0;
         if (instance.started && !instance.faulted)
+        {
+            m_dispatchOwner = instance.id; // its destructor may unregister its tools
             GuardedDestroy(instance.script->destroy, instance.state, &fault);
+            m_dispatchOwner = 0;
+        }
         if (fault)
             ScriptError(instance.script->name, fault);
+
+        if (instance.id)
+            DropTools(instance.id);
         instance.state = nullptr;
         instance.started = instance.failed = instance.faulted = false;
+        instance.id = 0;
+    }
+
+    void CppScriptSystem::Fail(Instance &instance, uint32_t fault)
+    {
+        instance.failed = true;
+        instance.faulted = fault != 0;
+        DropTools(instance.id); // a disabled instance answers no tool calls
+        ScriptError(instance.script->name, fault);
+    }
+
+    CppScriptSystem::Instance *CppScriptSystem::FindInstance(uint64_t id)
+    {
+        Instance *found = m_pipeline.id == id ? &m_pipeline : nullptr;
+        for (auto &instance : m_instances)
+        {
+            if (instance.id == id)
+                found = &instance;
+        }
+        return found && !found->failed ? found : nullptr;
+    }
+
+    uint32_t CppScriptSystem::CallTool(uint64_t owner, phasma::ToolHandler handler, void *user, const std::string &args,
+                                       std::string &out)
+    {
+        Instance *instance = FindInstance(owner);
+        if (!instance)
+        {
+            out = "the tool's C++ script is not running";
+            return 0;
+        }
+
+        const char *result = nullptr;
+        uint32_t size = 0;
+        uint32_t fault = 0;
+        const uint64_t caller = std::exchange(m_dispatchOwner, owner);
+        const uint32_t ok = GuardedTool(handler, user, args.c_str(), &result, &size, &fault);
+        m_dispatchOwner = caller;
+        CloseScriptProfileScopes();
+
+        if (fault)
+        {
+            Fail(*instance, fault);
+            out = "the tool's C++ script faulted";
+            return 0;
+        }
+
+        out.assign(result ? result : "", result ? size : 0);
+        return ok;
     }
 
     void CppScriptSystem::ClearInstances()
@@ -1337,6 +1473,8 @@ namespace pe
     {
         DestroyPipeline();
         ClearInstances();
+        if (m_initialized) // not again from the destructor, which may run after the registry is gone
+            DropTools(0);
         ClearFullscreenPasses();
         navscript::DestroyAll();
         m_module.Reset();
@@ -1501,6 +1639,7 @@ namespace pe
         {
             DestroyPipeline(); // with its module still loaded; ScriptSystem creates it again from the new one
             ClearInstances();
+            DropTools(0); // nothing may call into the old module once Commit unloads it
             m_module.Commit();
             ++m_moduleLoads;
             m_sceneGeneration = UINT32_MAX;
@@ -1529,22 +1668,23 @@ namespace pe
             {
                 const auto node = instance.script->kind == phasma::ScriptKind::Node ? Handle(instance.node.nodeId) : 0;
                 instance.started = true;
+                instance.id = ++m_nextInstanceId;
                 uint32_t fault = 0;
-                if (!GuardedCreate(instance.script->create, &m_api, node, &instance.state, &fault))
+                m_dispatchOwner = instance.id;
+                const uint32_t created = GuardedCreate(instance.script->create, &m_api, node, &instance.state, &fault);
+                m_dispatchOwner = 0;
+                if (!created)
                 {
-                    instance.failed = true;
-                    instance.faulted = fault != 0;
-                    ScriptError(instance.script->name, fault);
+                    Fail(instance, fault);
                     continue;
                 }
             }
             uint32_t fault = 0;
-            if (!GuardedUpdate(instance.script->update, instance.state, dt, &fault))
-            {
-                instance.failed = true;
-                instance.faulted = fault != 0;
-                ScriptError(instance.script->name, fault);
-            }
+            m_dispatchOwner = instance.id;
+            const uint32_t updated = GuardedUpdate(instance.script->update, instance.state, dt, &fault);
+            m_dispatchOwner = 0;
+            if (!updated)
+                Fail(instance, fault);
             CloseScriptProfileScopes(); // a fault or a missing End leaves none open
         }
         CloseScriptProfileScopes(); // and a create that faulted before its update

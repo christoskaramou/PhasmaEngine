@@ -42,6 +42,7 @@ namespace pe
             bool started = false;
             bool failed = false;
             bool faulted = false; // hardware fault: state is leaked, never destroyed
+            uint64_t id = 0;      // owns the v29 tools it registers; assigned at each create
         };
         struct LiveNode
         {
@@ -51,7 +52,14 @@ namespace pe
         NodeId *Resolve(phasma::Node handle);
         void Reconcile();
         void ClearInstances();
-        static void Stop(Instance &instance);
+        void Stop(Instance &instance);
+        void Fail(Instance &instance, uint32_t fault);
+        Instance *FindInstance(uint64_t id);
+        uint32_t CallTool(uint64_t owner,
+                          phasma::ToolHandler handler,
+                          void *user,
+                          const std::string &args,
+                          std::string &out);
         bool Eligible(const Instance &instance) const;
         ProjectNativeModule m_module;
         phasma::ScriptApi m_api{};
@@ -66,5 +74,7 @@ namespace pe
         Instance m_pipeline;
         const void *m_pipelineOwner = nullptr; // set only while the pipeline's create runs
         uint64_t m_moduleLoads = 0;
+        uint64_t m_nextInstanceId = 0;
+        uint64_t m_dispatchOwner = 0; // the instance whose code runs now, which registerTool records
     };
 } // namespace pe

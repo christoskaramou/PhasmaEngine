@@ -2102,9 +2102,9 @@ namespace pe
     void ScriptSystem::DestroyLua()
     {
 #if defined(PE_PLAYER_MCP)
-        // Drop script-registered MCP tools before the Lua state dies so their sol handles never dangle
-        // (on Reload, scripts re-register from init()).
-        AgentToolRegistry::Instance().Clear();
+        // Drop Lua-registered MCP tools before the Lua state dies so their sol handles never dangle
+        // (on Reload, scripts re-register from init()). C++ scripts' tools survive with their scripts.
+        AgentToolRegistry::Instance().ClearLua();
 #endif
 
         for (auto &script : m_scripts)

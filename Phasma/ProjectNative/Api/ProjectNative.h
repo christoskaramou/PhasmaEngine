@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 28;
+    inline constexpr uint32_t ScriptAbiVersion = 29;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -208,6 +208,11 @@ namespace phasma
         float cellSize, cellHeight, agentRadius, agentHeight, agentMaxClimb, agentMaxSlope;
     };
 
+    // v29: an MCP tool's handler, called once per tool call on the main thread. argsJson is the call's arguments as
+    // JSON text (canonical, NUL-terminated). Return 1 and point *result at the result JSON (*size bytes, valid until the
+    // module next runs); return 0 when the call itself failed, *result then optionally holding the error message.
+    using ToolHandler = uint32_t (*)(void *user, const char *argsJson, const char **result, uint32_t *size) noexcept;
+
     // Main-thread calls only. Handles are validated; no engine objects cross this ABI.
     struct ScriptApi
     {
@@ -387,6 +392,15 @@ namespace phasma
         double (*exposeNumber)(void *, const char *name, double defaultValue, const char *shownWhen) noexcept;
         uint32_t (*exposeBool)(void *, const char *name, uint32_t defaultValue, const char *shownWhen) noexcept;
         void (*exposeBase)(void *) noexcept;
+        // v29: MCP tools an external agent calls (the game driver; GameKit.h implements its protocol), as Lua's
+        // mcp.register_tool: a tool belongs to the instance whose create / update / destroy or tool call registers it,
+        // replaces any tool of that name, and is removed when that instance stops or fails and before its module
+        // unloads. schemaJson is the input schema as JSON object text (null: any object). unregisterTool removes only
+        // the calling instance's tool. Both are false outside an instance's code, for invalid input and in builds
+        // without the player MCP server (Android).
+        uint32_t (*registerTool)(void *, const char *name, const char *description, const char *schemaJson,
+                                 ToolHandler handler, void *user) noexcept;
+        uint32_t (*unregisterTool)(void *, const char *name) noexcept;
     };
     struct ScriptDesc
     {
@@ -625,6 +639,12 @@ namespace phasma
         // Pair each Begin with an End (ProfileScope does); the host closes any left open after the update.
         void ProfileBegin(const char *name) const { m_api.profileBegin(m_api.context, name); }
         void ProfileEnd() const { m_api.profileEnd(m_api.context); }
+        bool RegisterTool(const char *name, const char *description, const char *schemaJson, ToolHandler handler,
+                          void *user) const
+        {
+            return m_api.registerTool(m_api.context, name, description, schemaJson, handler, user) != 0;
+        }
+        bool UnregisterTool(const char *name) const { return m_api.unregisterTool(m_api.context, name) != 0; }
 
     private:
         const ScriptApi &m_api;

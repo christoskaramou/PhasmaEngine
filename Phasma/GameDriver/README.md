@@ -140,6 +140,52 @@ hooks({
 })
 ```
 
+A C++ game (ProjectNative) gets the same four tools from
+[GameKit.h](../ProjectNative/Api/GameKit.h) (ABI 29); [CoinGrid](../ProjectNative/Sample/CoinGrid.cpp)
+is a complete one:
+
+```cpp
+#include "GameKit.h"
+#include "ScriptModule.h"
+
+class MyGame
+{
+public:
+    MyGame(const phasma::ScriptApi &api, phasma::Node) : driver(api, Spec()) {}
+    void Update(double) {}
+
+private:
+    phasma::gamekit::Game Spec()
+    {
+        phasma::gamekit::Game game;
+        game.id = "my_game";
+        game.description = "Describe the objective and public controls.";
+        game.observe = [this](phasma::gamekit::State &state)
+        {
+            state.mode = "playing";
+            state.observation = "{\"player\":{\"x\":0,\"y\":0}}"; // JSON, written in a fixed order
+            state.actions = {{"left", "Move left one cell.", 0.0}};
+        };
+        game.act = [this](const std::string &actionId)
+        {
+            // Route to the same controller physical input uses.
+        };
+        game.reset = [this](uint32_t seed)
+        {
+            // Reset through the game's existing controller.
+        };
+        return game;
+    }
+
+    phasma::gamekit::Controller driver; // last: its callbacks use the members above
+};
+PHASMA_NODE_SCRIPT(MyGame)
+```
+
+Attach it to a node (`cpp:MyGame`) and run the Player with MCP enabled. The Controller registers the
+tools while the script instance lives; the engine removes them when the instance stops and before a
+module reload, so a driver connected across a reload stops with `stale_state` (start it again).
+
 `game_describe`, `game_observe`, `game_act` and `game_reset` use protocol version 1.
 Observations include game/session/state IDs, mode, score, terminal/busy flags,
 public state and legal named actions. Requests carry session/state IDs; stale,
@@ -191,5 +237,8 @@ python tools/tests/test_game_driver.py
 ```
 
 The GameKit check requires the existing Python `lupa` package and exercises the
-actual generated topdown script with engine stubs. Production transport uses
+actual generated topdown script with engine stubs. The C++ GameKit is covered by
+`tools/tests/native-scripts` (`CheckGameKit`) and, against a real Player, by
+`python tools/tests/native-scripts/driver_smoke.py --binary-dir <Release folder> --driver build-game-driver/Release/PhasmaGameDriver.exe`
+(see the [ProjectNative README](../ProjectNative/README.md)). Production transport uses
 Windows WinHTTP and the repository's existing JSON header; no dependencies are added.

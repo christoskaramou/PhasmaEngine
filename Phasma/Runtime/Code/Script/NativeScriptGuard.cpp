@@ -75,6 +75,27 @@ namespace pe
         }
         Recover(*fault);
     }
+
+    uint32_t GuardedTool(phasma::ToolHandler tool,
+                         void *user,
+                         const char *args,
+                         const char **result,
+                         uint32_t *size,
+                         uint32_t *fault)
+    {
+        *fault = 0;
+        uint32_t ok = 0;
+        __try
+        {
+            ok = tool(user, args, result, size);
+        }
+        __except (Filter(GetExceptionCode(), fault))
+        {
+            ok = 0;
+        }
+        Recover(*fault);
+        return ok;
+    }
 #else
     bool NativeFaultsContained()
     {
@@ -97,6 +118,17 @@ namespace pe
     {
         *fault = 0;
         destroy(state);
+    }
+
+    uint32_t GuardedTool(phasma::ToolHandler tool,
+                         void *user,
+                         const char *args,
+                         const char **result,
+                         uint32_t *size,
+                         uint32_t *fault)
+    {
+        *fault = 0;
+        return tool(user, args, result, size);
     }
 #endif
 } // namespace pe

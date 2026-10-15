@@ -9,10 +9,10 @@
 
 namespace pe
 {
-    // Registry of MCP tools registered from Lua game scripts (mcp.register_tool{...}). A running script
-    // registers on the MAIN thread; the player's MCP server (PlayerMcp) lists them on its worker thread
-    // and invokes them back on the main thread via the host action queue. The sol::function handler is
-    // only ever touched on the main thread (registration + invocation); the worker thread reads only the
+    // Registry of MCP tools registered from game scripts: Lua (mcp.register_tool{...}) and C++ (ScriptApi
+    // registerTool). A running script registers on the MAIN thread; the player's MCP server (PlayerMcp) lists
+    // them on its worker thread and invokes them back on the main thread via the host action queue. Handlers
+    // are only ever touched on the main thread (registration + invocation); the worker thread reads only the
     // name/description/schema metadata, under the mutex.
     class AgentToolRegistry
     {
@@ -24,15 +24,25 @@ namespace pe
             nlohmann::json inputSchema;
         };
 
+        // A C++ script's tool: returns the result JSON, or sets ok=false and fills error.
+        using NativeHandler = std::function<nlohmann::json(const nlohmann::json &args, bool &ok, std::string &error)>;
+
         static AgentToolRegistry &Instance();
 
         // Main thread (from Lua). Replaces any existing tool with the same name.
         void Register(std::string name, std::string description, nlohmann::json inputSchema,
                       sol::protected_function handler);
         void Unregister(const std::string &name);
-        // Drop every script tool — called on script-system teardown so stale sol handles never outlive
-        // their Lua state.
-        void Clear();
+        // Main thread (from C++ scripts). owner (nonzero) is the registering script instance; same-name
+        // replacement as Register.
+        void RegisterNative(std::string name, std::string description, nlohmann::json inputSchema,
+                            NativeHandler handler, uint64_t owner);
+        bool UnregisterNative(const std::string &name, uint64_t owner);
+        // Drop owner's C++ tools (0: every C++ tool) before that code can go away.
+        void ClearNative(uint64_t owner);
+        // Drop every Lua tool — called on Lua teardown/reload so stale sol handles never outlive their Lua
+        // state. C++ tools survive: their scripts survive a Lua reload.
+        void ClearLua();
 
         // Worker thread: metadata snapshot for tools/list. Never touches a sol::function.
         std::vector<Meta> SnapshotMeta() const;
@@ -50,6 +60,8 @@ namespace pe
             std::string description;
             nlohmann::json inputSchema;
             sol::protected_function handler;
+            NativeHandler native;
+            uint64_t owner = 0; // nonzero for C++ tools
         };
 
         mutable std::mutex m_mtx;

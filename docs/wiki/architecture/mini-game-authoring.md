@@ -56,6 +56,17 @@ before callbacks. Callback failures consume their token to prevent unsafe retry.
 MCP handlers return canonical JSON strings so empty action arrays survive the
 registry's separate Lua-to-JSON conversion; the client accepts this nested form.
 
+C++ games (ProjectNative, ABI 29, verified 2026-10-16) use
+`Phasma/ProjectNative/Api/GameKit.h`: `phasma::gamekit::Controller(api, Game{...})` registers the
+same four tools for its lifetime and applies the Lua adapter's rules (sessions per reset, state IDs,
+`state_key` as `stateKey`, the same error codes; a throwing act still consumes its token). The game
+writes `observation` as JSON object text in a fixed order; requests are read strictly (flat objects
+of strings and non-negative integers) and results go back as JSON objects. The host drops a script's
+tools when its instance stops or fails and before its module unloads; a Lua reload keeps them.
+`Phasma/ProjectNative/Sample/CoinGrid.cpp` is the sample, and
+`tools/tests/native-scripts/driver_smoke.py` plays it with `--policy local`, across a Lua reload and
+a module reload mid-run.
+
 `gamekit/input.lua` adds bounded named input injection to the same axis/button
 sampling used by physical input. `tools/new_game.py` wires its topdown template
 with 12-frame move/wait actions, busy status, deterministic reset and cleanup.

@@ -20,9 +20,9 @@ the existing scene. Private script state resets; migration is not implemented.
 Android player builds statically link the same game sources and validate descriptors at startup;
 they never poll or reload a module. C++ scripting is always built (the `PE_PROJECT_NATIVE` switch was removed 2026-09-29: a build without it ran
 `cpp:` scripts silently as nothing); Gradle accepts an optional
-`-PPE_PROJECT_NATIVE_DIR=/absolute/path/to/native`, and an empty dir builds the Orbit/PlayerController sample. Code changes require rebuilding the APK.
+`-PPE_PROJECT_NATIVE_DIR=/absolute/path/to/native`, and an empty dir builds the Orbit/PlayerController/CoinGrid sample. Code changes require rebuilding the APK.
 The API began with logging, node lookup/validation, cube creation, local
-position reads/writes, held-key input, and source-file metadata; the host is now at `ScriptAbiVersion` 27 (minimum 5, verified 2026-10-07) and the sections below describe the later versions. ABI v4 (verified 2026-09-25) added
+position reads/writes, held-key input, and source-file metadata; the host is now at `ScriptAbiVersion` 29 (minimum 5, verified 2026-10-16) and the sections below describe the later versions (ABI 28, pipeline scripts, is in [rendering](../rendering.md)). ABI v4 (verified 2026-09-25) added
 prefab instantiation, subtree destroy, rotation/scale writes and recursive clip playback. Position
 and rotation writes on a camera node also drive the `Camera`, because `Scene::UpdateCameras`
 overwrites camera nodes from the camera every frame. Lua and native scripts share
@@ -267,6 +267,23 @@ sources and Recast/Detour, force-including
 [NavStandalone.h](../../../../Phasma/Runtime/Code/Navigation/NavStandalone.h) for what the engine's precompiled header
 gives them, and fills its own table; the game DLL itself links nothing (on Android its objects join PhasmaRuntime,
 which already holds the navigation).
+
+ABI 29 (2026-10-16) appends `registerTool` / `unregisterTool`, so C++ games expose MCP tools the way Lua's
+`mcp.register_tool` does. [AgentToolRegistry](../../../../Phasma/Runtime/Code/Agent/AgentToolRegistry.h) entries hold a
+sol handler or a native closure with an owner: the `CppScriptSystem` instance id (`Instance::id`, fresh at each create)
+whose create, update, destroy or tool call was running (`m_dispatchOwner`). `Stop` and `Fail` drop that owner's tools,
+module reload and `Destroy` drop every C++ tool before `Commit` / `Reset` unload the DLL, and `CallTool` refuses an
+owner that is not a live, unfailed instance. `ScriptSystem::DestroyLua` clears Lua tools only (`ClearLua`), so C++
+tools survive a Lua reload. The handler runs once per call under `GuardedTool` (SEH-contained; a fault disables the
+instance) and points at a module-owned result: readFile's probe-and-retry would replay `game_act`. The host parses
+that JSON into the MCP result. Without `PE_PLAYER_MCP` (Android) both calls return 0.
+[GameKit.h](../../../../Phasma/ProjectNative/Api/GameKit.h) ports `gamekit/driver.lua` on top (see
+[mini-game authoring](../mini-game-authoring.md)). Verified 2026-10-16: the native-scripts check with MSVC and clang
+(`CheckGameKit`, the `GuardedTool` fault), a non-MCP compile of `CppScript.cpp`, and
+[driver_smoke.py](../../../../tools/tests/native-scripts/driver_smoke.py) on a Release Player (Vulkan): 40 local-policy
+steps, a Lua reload keeping the session, a module reload mid-run (that run ends `stale_state`, tools return, a fresh
+run completes), node deletion removing the tools, a normal quit with tools registered exiting 0 and a log without
+warnings or errors.
 
 Verified 2026-09-21: [ScriptEditor](../../../../Phasma/Editor/Code/GUI/Widgets/ScriptEditor.cpp)
 opens native sources, creates/imports `.cpp` files in the configured native directory, and

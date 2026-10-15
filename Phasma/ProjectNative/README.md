@@ -7,7 +7,8 @@ they do not link engine libraries, include engine headers, or use Lua/sol2.
 ## Build
 
 C++ scripting is always built. The default module is the
-[Orbit](Sample/Orbit.cpp) and [PlayerController](Sample/PlayerController.cpp) samples. Build independently:
+[Orbit](Sample/Orbit.cpp), [PlayerController](Sample/PlayerController.cpp) and [CoinGrid](Sample/CoinGrid.cpp)
+samples. Build independently:
 
 ```sh
 cmake --build build-review-native --config Release --target PhasmaProjectNative
@@ -177,6 +178,19 @@ return its current value (the scene setting of that name, the scene's saved valu
 shows the engine default pipeline's values. Fullscreen passes it adds belong to the pipeline and survive Play Stop.
 The Lua equivalent is a `.lua` pipeline script (`exposed {}`, `exposed_when {}`, `pipeline.base()`).
 
+ABI 29 adds `RegisterTool(name, description, schemaJson, handler, user)` / `UnregisterTool(name)`, Lua's
+`mcp.register_tool` / `unregister_tool`: tools an agent calls through the Player's MCP server, such as the game
+driver (`Phasma/GameDriver`). A tool belongs to the instance whose constructor, `Update`, destructor or tool call
+registers it, and replaces any tool of that name; `UnregisterTool` removes only that instance's. The host removes an
+instance's tools when it is destroyed or disabled and every C++ tool before a module unloads, so no tool outlives its
+code; a Lua reload keeps them. The handler runs once per call on the main thread with the arguments as JSON text and
+points `*result` at the result JSON, which stays valid until the module next runs (return 0 for a failed call).
+Hardware faults in it are contained like `Update`'s. Both calls return false outside an instance's code and in builds
+without the player MCP server (Android). [GameKit.h](Api/GameKit.h) implements the game driver's protocol on top:
+`phasma::gamekit::Controller(api, Game{...})` registers `game_describe` / `game_observe` / `game_act` / `game_reset`
+for its lifetime from `observe`, `act` and an optional `reset` (see the [game driver](../GameDriver/README.md) and
+[CoinGrid](Sample/CoinGrid.cpp)).
+
 The ABI is append-only: new `ScriptApi` function pointers go at the end with a
 `ScriptAbiVersion` bump, and the `ScriptDesc` / `ScriptModule` / `UiQuad` / `UiSurface` layouts are
 frozen. A module runs on any same-or-newer host; hosts accept modules from `ScriptAbiMinVersion` (5)
@@ -252,11 +266,13 @@ hardware fault in a script callback, such as an access violation or stack overfl
 the instance is disabled, the fault code logged, and its state leaked rather than destroyed.
 Other platforms still crash. Game modules must use `/EHsc` (the CMake default) for this. No STL objects,
 exceptions, allocations requiring cross-module deletion, or mutable callback registries
-cross the boundary. Cleanup receives only the instance: cached handles can already be
+cross the boundary; the ABI 29 tool handlers the host keeps are dropped before their instance or module goes away. Cleanup receives only the instance: cached handles can already be
 invalid after node deletion or scene replacement, so destructors must tolerate that.
 
-The sample registers node scripts only (`Orbit.cpp`, `PlayerController.cpp`); attach them from
+The sample registers node scripts only (`Orbit.cpp`, `PlayerController.cpp`, `CoinGrid.cpp`); attach them from
 Add Component → C++ Script. It registers no global script and never auto-spawns into a project.
+`CoinGrid` is a 9x9 coin walk the game driver plays (`node:set_script("cpp:CoinGrid", "player")`, then
+`PhasmaGameDriver --policy local`): each move is scored by the distance it leaves to the coin.
 
 The same sample module registers `PlayerController`. Attach it to a node with
 `node:set_script("cpp:PlayerController", "player")`, enter Play, and use WASD.
@@ -297,3 +313,15 @@ a Lua reload, ABI rejection and recovery through `engine.native_scripts_status()
 widget state, removal, clearing on Stop) against real engine state, and that a faulting
 script (`probe7`) leaves the editor and MCP session running.
 It uses unsaved test nodes and quits without saving the scene.
+
+The game driver smoke plays `CoinGrid` in a disposable Player copy (MCP on port 8881, display 1, hidden):
+
+```sh
+python tools/tests/native-scripts/driver_smoke.py --binary-dir build-native-driver/Release --driver build-game-driver/Release/PhasmaGameDriver.exe
+```
+
+It checks the tools appear only once the script is attached, a 40-step `--policy local` run, a Lua reload that drops a
+Lua tool but keeps the C++ session, and a module reload during a run: that run ends with `stale_state`, the Player stays
+up, the tools come back with a new session and a fresh run reaches its cap; deleting the node removes the tools, and a
+normal quit with them registered exits 0. Driver traces stay in the temporary runtime. It prints the log's warning and
+error lines.
