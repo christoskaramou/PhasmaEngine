@@ -361,6 +361,15 @@ endif()
 set(LUAJIT_DIR "${PE_SHARED_THIRD_PARTY_DIR}/luajit" CACHE PATH "" FORCE)
 set(LUAJIT_DISABLE_BUFFER OFF)
 add_subdirectory("${PE_SHARED_THIRD_PARTY_DIR}/luajit-cmake" luajit-cmake)
+# luajit-cmake hands buildvm "-DLUAJIT_ENABLE_LUA52COMPAT -DLJ_ARCH_HASFPU=0" as one argument, which cl.exe drops
+# (clang and gcc keep it). The VM then built as Lua 5.1 against 5.2 C sources, and a hot pairs() over a table with
+# __pairs made the JIT recorder trace a metamethod call the VM never made and crash. Pass only the missing define:
+# the HASFPU=0 half comes from a testarch probe that fails under MSVC and would make buildvm soft-float.
+# ponytail: cross builds rely on a clang/gcc host compiler keeping it; a cl host needs it in LUAJIT_HOST_CMAKE_ARGS.
+if(MSVC AND NOT CMAKE_CROSSCOMPILING AND LUAJIT_ENABLE_LUA52COMPAT)
+    target_compile_definitions(buildvm PRIVATE LUAJIT_ENABLE_LUA52COMPAT)
+endif()
+
 # Keep the existing link/interface name so nothing downstream changes.
 add_library(Lua INTERFACE)
 target_link_libraries(Lua INTERFACE luajit::lib luajit::header)

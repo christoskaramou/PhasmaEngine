@@ -421,6 +421,38 @@ namespace pe
                 var.shownWhen = *toggle;
     }
 
+    // sol2 gives each usertype's class table (the global `Buffer`, not its instances) the instances' container
+    // __pairs: on the table it raises "not recognized as a container", and for a container type it would read the
+    // table as userdata. Drop it so pairs() walks a class table like any other table.
+    static void DropUsertypeClassPairs(lua_State *L)
+    {
+        lua_pushvalue(L, LUA_REGISTRYINDEX); // sol2 keeps every class table there, wherever it is exposed
+        lua_pushnil(L);
+        while (lua_next(L, -2) != 0)
+        {
+            if (lua_istable(L, -1) && lua_getmetatable(L, -1))
+            {
+                lua_pushliteral(L, "__sol.storage"); // only a class table's metatable holds the storage pointer
+                lua_rawget(L, -2);
+                const bool isClassTable = !lua_isnil(L, -1);
+                lua_pop(L, 1);
+
+                if (isClassTable)
+                {
+                    lua_pushliteral(L, "__pairs");
+                    lua_pushnil(L);
+                    lua_rawset(L, -3);
+                }
+
+                lua_pop(L, 1); // metatable
+            }
+
+            lua_pop(L, 1); // value
+        }
+
+        lua_pop(L, 1); // registry
+    }
+
     void ScriptSystem::Init(CommandBuffer *cmd)
     {
         m_lua.open_libraries(
@@ -554,6 +586,8 @@ namespace pe
         // Execute all registered binding functions
         for (auto &fn : GetBindings())
             fn(m_lua);
+
+        DropUsertypeClassPairs(m_lua.lua_state());
 
         LoadScripts();
 
