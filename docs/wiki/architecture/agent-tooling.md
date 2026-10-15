@@ -50,6 +50,31 @@ there rather than adding another external agent framework to the repository.
 
 ## MCP Probe And A2A Direction
 
+### Concurrent Editor And Screenshot Notes
+
+Verified 2026-10-15: editor MCP still binds fixed port 8765
+(`Phasma/Editor/Code/GUI/Agent/EditorMcp.cpp`). A separate executable/runtime
+directory with its own `phasma_settings.json` and project assets isolates an
+additional editor. Disable MCP for that project and use its `Assets/Agent`
+file command channel.
+
+Verified 2026-10-15: Player MCP supports per-project `mcp_port` in
+`Assets/Agent/agent_config.json` when `mcp` is true. Missing port preserves 8765;
+non-integer or out-of-range ports disable the listener with a warning
+(`Phasma/Runtime/Code/Runtime/PlayerHost.cpp`, `ReadPlayerMcpPort`). The separate
+`Phasma/GameDriver` executable uses shared GameKit Lua tools through Player;
+its Tetris launcher stages private assets/runtime and defaults to 8876. See
+[the game driver contract](mini-game-authoring.md#reusable-agent-play-interface).
+
+For screenshots from that channel, defer `engine.take_screenshot(path)` with a
+one-shot `script.on_update` callback, then remove the callback after requesting
+the screenshot. A request queued directly during `Window::ProcessEvents`
+can be drained by its event polling loop before the renderer consumes it
+(`Phasma/Editor/Code/Window/Window.cpp`, `EventType::RunCommand`;
+`Phasma/Editor/Code/Systems/RendererSystem.cpp`, `QueueScreenshotReadback`).
+The editor display target includes native runtime UI. Hidden editor chrome
+does not disable file-command polling.
+
 The probe connects directly to the editor's Streamable HTTP MCP endpoint and
 accepts only loopback HTTP URLs. The `npx mcp-remote` bridge is for stdio-only
 clients, not this probe. It follows the HTTP lifecycle needed for smoke testing:

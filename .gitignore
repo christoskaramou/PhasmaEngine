@@ -9,12 +9,17 @@
 !/Phasma/Editor/
 !/Phasma/MCP/
 !/Phasma/Player/
+!/Phasma/GameDriver/
+!/Phasma/GameDriver/**
 !/Phasma/Animator/
 !/Phasma/Cook/
 !/Phasma/Launcher/
 !/Phasma/Runtime/
 !/Phasma/WebGPU/
 !/Projects/
+!/Games/
+/Games/*
+!/Games/PrismTetris/
 !/Projects/**
 !/cmake/
 !/cmake/**
@@ -363,6 +368,8 @@ Projects/*/Assets/Agent/
 !/tools/tests/
 /tools/tests/*
 !/tools/tests/native-scripts/
+!/tools/tests/game_driver_test.lua
+!/tools/tests/test_game_driver.py
 /tools/tests/native-scripts/*
 !/tools/tests/native-scripts/CMakeLists.txt
 !/tools/tests/native-scripts/check.cpp

@@ -1,0 +1,6 @@
+{
+    "version": 1,
+    "name": "PRISM Tetris",
+    "assets": "Assets",
+    "startup_scene": "Assets/Scenes/prism_tetris.pescene"
+}

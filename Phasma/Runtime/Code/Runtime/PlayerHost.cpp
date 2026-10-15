@@ -454,22 +454,38 @@ namespace pe
         // Opt-in gate for the player MCP server: read the project's Assets/Agent/agent_config.json "mcp"
         // flag (same mechanism the editor uses). Default false — the server (which exposes execute_lua =
         // arbitrary code execution) starts only when a project explicitly enables it.
-        bool ReadPlayerMcpEnabled()
+        std::optional<int> ReadPlayerMcpPort()
         {
             const std::string configPath = Path::Assets + "Agent/agent_config.json";
             std::ifstream f(configPath);
             if (!f.is_open())
-                return false;
+                return std::nullopt;
+
             try
             {
                 nlohmann::json j;
                 f >> j;
-                return j.value("mcp", false);
+                if (!j.value("mcp", false))
+                    return std::nullopt;
+
+                const auto port = j.find("mcp_port");
+                if (port == j.end())
+                    return 8765;
+
+                if (!port->is_number_integer() || *port < 1 || *port > 65535)
+                {
+                    PE_WARN("[MCP] Invalid mcp_port in %s: expected an integer from 1 to 65535; "
+                            "player MCP disabled this run",
+                            configPath.c_str());
+                    return std::nullopt;
+                }
+
+                return port->get<int>();
             }
             catch (...)
             {
                 PE_WARN("[MCP] Failed to parse %s — player MCP disabled this run", configPath.c_str());
-                return false;
+                return std::nullopt;
             }
         }
 #endif
@@ -990,11 +1006,12 @@ namespace pe
                 // Player MCP server (opt-in, loopback-only). Started after the ScriptSystem + play session
                 // are live so execute_lua / get_state have a valid VM and scene to act on.
                 std::unique_ptr<PlayerMcp> playerMcp;
-                if (ReadPlayerMcpEnabled())
+                if (const std::optional<int> port = ReadPlayerMcpPort())
                 {
                     playerMcp = std::make_unique<PlayerMcp>(
                         [&mcpActions](std::function<void()> fn)
-                        { mcpActions.Post(std::move(fn)); });
+                        { mcpActions.Post(std::move(fn)); },
+                        *port);
                     playerMcp->Start();
                     if (playerMcp->IsRunning())
                         PE_INFO("[MCP] Player MCP server listening on 127.0.0.1:%d", playerMcp->GetPort());

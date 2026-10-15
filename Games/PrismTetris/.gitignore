@@ -1,0 +1,8 @@
+Assets/Agent/
+Assets/Save/*
+!Assets/Save/.gitkeep
+Assets/editor_config.json
+Assets/imgui.ini
+Assets/Cache/
+Assets/ShadersCache/
+__pycache__/

@@ -18,7 +18,7 @@ local GAMEKIT_DIR = "Scripts/gamekit/"
 
 -- Modules in load order. json first (save depends on it); everything else is flat.
 local MODULES = {
-    "json", "loop", "scene", "pool", "actor", "input", "camera",
+    "json", "driver", "loop", "scene", "pool", "actor", "input", "camera",
     "pick", "spatial", "build", "ui", "timer", "tween", "wave", "grid", "deck", "save", "audio",
 }
 
@@ -38,6 +38,7 @@ end
 
 local kit = {
     json = mods.json,
+    driver = mods.driver,
     loop = mods.loop,
     scene = mods.scene,
     pool = mods.pool,     -- class: kit.pool.new(prefix[, max])
@@ -59,6 +60,7 @@ local kit = {
 
 -- Inject cross-module dependency: save serialises with the json module.
 kit.save._json = kit.json
+kit.driver._json = kit.json
 
 function kit.log(msg)
     if pe_log then pe_log("[gamekit] " .. tostring(msg)) end

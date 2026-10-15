@@ -1,7 +1,228 @@
 # Mini-Game Authoring Speed
 
+## Native 2D Reference: PRISM Tetris
+
+Verified 2026-10-15: `Games/PrismTetris` is a self-contained native runtime-UI
+game, launched with `Games/PrismTetris/run.ps1`. It keeps pure Lua gameplay rules
+separate from a retained UI view and the input/entry script. Its generated PNG
+art and PCM sounds are included; regeneration does not affect engine rendering.
+See `Games/PrismTetris/README.md` and `tests/{rules_test,entry_test}.lua`.
+
+Since 2026-10-15 the launcher copies the Release Player (not the editor) from
+`build-ninja-physics/Release` into `build-prism-tetris/player` with a private
+`project_path`, MCP on its own port (`-Port`, default 8876) and the race driver in
+`Assets/Bots`; the runtime's `Save/` survives relaunches. It no longer writes into
+the repository's `Assets` (the old editor launch wrote `agent_config.json`,
+`editor_config.json` and `Agent/command.lua` there).
+
+Runtime-UI screens default to hidden: `set_screen_overlay` and `set_quad` need
+an explicit `runtime_ui.show(screen)` (`Phasma/Runtime/Code/UI/RuntimeUi.h`,
+`RuntimeUiSystem::Screen`; `RuntimeUi.cpp`, `SetScreenVisible`/`BuildFrame`).
+The view scales a logical canvas to `runtime_ui.get_surface_size()` and avoids
+updating unchanged board widgets; pause/effects/resize behavior has a stubbed
+engine integration check in `Games/PrismTetris/tests/entry_test.lua`.
+
+Styled `set_quad(..., {style="button"})` controls are `WidgetType::Quad`.
+Read `runtime_ui.get_state(screen, id).clicked` for them; `consume_click`
+only consumes `WidgetType::Button` list controls (`RuntimeUi.cpp`,
+`ConsumeButtonClick`/`BuildFrame`). PRISM's shared `clicked` helper and entry
+regression test cover this distinction. Real mouse tests verified Play,
+Pause/Resume, New Game, Sound and FX, including after resizing the editor.
+
 This page captures the 2026-06-18 recommendation for making small playable
 games faster to create in PhasmaEngine.
+
+## Reusable Agent Play Interface
+
+Source-verified 2026-10-15: `Phasma/GameDriver` builds a separate Windows
+`PhasmaGameDriver.exe`. It connects to the existing Player MCP server; game rules,
+observations and legal actions live in Lua adapters. See
+`Phasma/GameDriver/README.md` for build and launch commands.
+
+The canonical `Phasma/Runtime/RuntimeAssets/Scripts/gamekit/driver.lua` registers
+four tools through `mcp.register_tool` and `AgentToolRegistry`. Player MCP invokes
+their callbacks on the main thread. The editor's built-in catalog is unchanged.
+
+| Tool | Contract |
+| --- | --- |
+| `game_describe` | Protocol version 1, game ID, description, reset support and state-tracking mode |
+| `game_observe` | Game/session/state IDs, mode, score, terminal/busy flags, public observation and legal actions |
+| `game_act` | Validate session/state/action IDs, consume the token once and return a fresh observation |
+| `game_reset` | Restart through the existing controller with integer seed 0..2147483647 and a new session |
+
+Each adapter supplies observation/action/reset callbacks and owns lifecycle
+attach/detach. Duplicate, stale, malformed, busy and unavailable actions fail
+before callbacks. Callback failures consume their token to prevent unsafe retry.
+MCP handlers return canonical JSON strings so empty action arrays survive the
+registry's separate Lua-to-JSON conversion; the client accepts this nested form.
+
+`gamekit/input.lua` adds bounded named input injection to the same axis/button
+sampling used by physical input. `tools/new_game.py` wires its topdown template
+with 12-frame move/wait actions, busy status, deterministic reset and cleanup.
+Its `state_key` tracks HP/wave/enemy changes while allowing continuous positions
+to change during model latency. The default adapter invalidates every changed
+public observation. `tools/tests/test_game_driver.py` executes the generated
+script with engine stubs and covers the shared protocol/input lifecycle.
+
+PRISM's `tetris_agent.lua` enumerates reachable placements including hold, computes
+board consequences locally, and executes movement/rotation/drop through the same
+`prism.lua` controller as keyboard input. Since 2026-10-15 (Milestone 2) the piece
+keeps falling under guideline gravity (`(0.8 - (L - 1) * 0.007) ^ (L - 1)` s per row,
+20G from level 20, `tetris_rules.lua`) while the agent decides. The adapter's
+`state_key` is its decision key: board, piece kind/column/rotation, hold, queue,
+lines, level, score, mode and busy, but not the falling row, and it also keys the
+cached action list, so one `state_id` always names one action list. `act` only
+stores the target landing; `agent.tick` (called by `prism.lua` every frame) feeds
+one input every 0.07 s, re-planned by BFS from the piece's current position, and
+`busy` stays true until the drop. A placement ends when its landing becomes
+unreachable (the piece keeps falling), when the piece locks first (the active-piece
+table changes on every spawn), when a human key takes over, or on a new game.
+A human key or New Game also hands the run to the human: agent mode is part of the
+decision key and no actions are offered until `game_reset` (the 2026-10-15 final
+review found the real-time driver's re-decide otherwise took the piece straight back).
+Automated scores do not replace the human high score. This protection remains
+after human takeover until New Game starts a fresh run. The headless local policy
+completes 50 timed placements, 18 lines and 4,896 points with seed 42.
+`tests/agent_test.lua` checks real gravity during decisions, 0.07 s input spacing,
+pause, hold, unreachable landings, locks mid-placement, takeover, stale requests,
+reset determinism and saved-score protection.
+
+The generic executable requires explicit `--policy jev` or `--policy local`.
+Jev selects a legal action ID via TypeSafe HTTPS; credentials come only from
+`JEV_API_KEY` or `TYPESAFE_API_KEY`. The offline policy requires numeric action
+scores from an adapter and is labelled LOCAL. Calls have deadlines, cancellation,
+no automatic retries, bounded steps and JSONL latency/token accounting. Protocol
+fixtures and mock MCP integration run without model calls. A game describing
+`state_tracking: "game_epoch"` is real-time to the driver (`IsRealtime`): it waits
+out busy, pauses and empty action lists without the 30 s deadline, and an act
+answered `stale_state`/`busy` (`ClassifyActResult` -> `Redecide`) writes a
+`redecide` row and decides again (another paid call); counts appear as `redecides`
+in the finish row and `Finished:` line, and `--steps` caps decisions plus re-decides.
+`--pace-ms` still waits after every placement; a real-time game keeps running through
+the wait, so the driver observes again before deciding (acting on the pre-wait
+observation was the review's finding: at level 15 with 800 ms pacing it topped out
+after 2 placements). Long paces still cost pieces at high levels, which lock before
+the agent reacts. `tests/RealtimeLoopTests.ps1` serves a scripted game over loopback
+MCP to the real executable for these paths. Live under real gravity (2026-10-15, seed 42,
+cap 500, display 1): the local policy ran 60 timed placements in 19.8 s (3.0/s); Jev
+topped out after 61 placements (9 lines, level 1) in one run and reached level 15 in
+the next (409 placements, 148 lines, score 156,435, 230 s, 1.78/s, 1.22 M input
+tokens, about $0.05), with 0 re-decides and 2 placements abandoned at levels 13-14.
+Jev saw each piece at spawn through level 9; from level 10 the piece had already
+fallen 1-15 rows (mean 6 at level 15) when the observation arrived. The measurements
+below predate real gravity (the game then froze while Jev decided). Measured 2026-10-15
+(Tetris, seed 42, `jev-1.13.0`, 20 placements, 20 calls): 5.93 s total (3.37
+placements/s), decision mean 278.7 ms, p95 288 ms, first 643 ms, 62,869 in / 9,160
+out tokens, score 1416. A second run (same seed, cap 500) ended in game over after
+80 placements (21.8 s, 3.67/s, mean 257.9 ms, p95 282 ms): score 7278, 20 lines
+(2 four-line clears), 246,290 in / 34,432 out tokens; Jev took the top-scored hint
+46 of 80 times and never took fewer lines than an available option. A third run
+(same seed) lasted 211 placements, 71 lines, score 45,586 (local: 51,026 at the same
+count), stack height 1-5 until about placement 150 then 18 by 176 and game over;
+58.5 s, 666,370 in / 95,124 out tokens. A run in between aborted at placement 97 when
+the driver rejected a Jev reply as "inconsistent action probabilities" (sum off or the
+choice not the highest probability); the error now prints the numbers, cause not yet
+seen. Same seed, three different Jev outcomes (80, 96+ aborted, 211): the local
+policy (argmax of the hint score) never lost, 6,809+ placements before being stopped.
+The prompt Jev gets is generic (no height/strategy advice) and stateless per move.
+`run-tetris.ps1 -PaceMs N` (`--pace-ms`) holds each placement to at least N ms from
+the start of its decision and `-ShowWindow` shows the Player; a paced 800 ms Jev
+run measured 810 ms median between placements (1.23/s), game over at 143, 43 lines.
+Jev cost is input-only, $0.042 per million tokens (docs.typesafe.ai/models,
+checked 2026-10-15): about $0.00013 per placement.
+`Measure-GameTrace` used `[Math]::Max(0, seconds)`, which PowerShell resolves to
+the integer overload and rounds elapsed time to whole seconds (5.93 -> 6); fixed
+with `Max(0.0, ...)` and a fractional-elapsed fixture. Older summaries are rounded.
+
+Verified 2026-10-15: an ad-hoc live-test wrapper used the profiler helper's
+PasswordVault fallback through Python/PowerShell; Bitdefender flagged that chain
+before a game decision was recorded. The supported driver/launcher reads only
+explicit `JEV_API_KEY`/`TYPESAFE_API_KEY` environment variables by default;
+`-UseVault` (`--key-source vault`) opts into reading the `jev`/`api-key` Web
+Credential in-process through WinRT `PasswordVault` (`Vault.cpp`, no child
+process, nothing printed). That read ran once on 2026-10-15 with no new
+Bitdefender quarantine entry (62 files before and after). Credential preflight
+runs before MCP connection/reset; newly launched Players do not inherit model
+keys. Use `Phasma/GameDriver/run-tetris.ps1` directly. It writes completed-run
+speed/latency/token summaries beside the JSONL trace. Launcher regressions cover
+missing/invalid keys, Player credential isolation and incomplete traces. No
+antivirus exclusions or PowerShell/Python credential-store reads belong in this play path.
+
+Verified 2026-10-15 (Bitdefender data under `C:\ProgramData\Bitdefender`): the
+flag was a behavioural `ATC.Malicious` / `SuspiciousBehavior.67C61B9B02DF9550`
+on `pwsh -> python build-game-driver/benchmark-jev.py -> powershell
+PasswordVault.Retrieve('jev','api-key')`; that command is byte-identical to
+`tools/jev_advise.py` `VAULT_READ` (unmodified since `2c2215b1`). The
+remediation quarantined 14 files from the whole Codex process tree (this
+repo's `tests/mock_mcp.py`, `.testpool/tests/player_mcp_port.py`, the
+renderdoc/pix/nsight/vulkan/mixar MCP launchers, uv `python.exe`, Codex plugin
+hooks) under `Desktop\Quarantine`. Re-creating a quarantined `.py` path is
+denied (file or directory, any process) while other names in the same folder
+work; release it from the Bitdefender UI. The same read still exists in the
+Profiler "Ask Jev" button (`Phasma/Profiler/main.cpp`, `tools/jev_advise.py`)
+and `~/.claude/skills/jev-browser/jev.mjs`; set `JEV_API_KEY` there too.
+
+`PlayerHost.cpp` reads optional integer `mcp_port` from the project's
+`Assets/Agent/agent_config.json` when `mcp` is enabled. It defaults to 8765;
+invalid ports disable the listener with a warning. `run-tetris.ps1` uses 8876 in
+its own copied runtime/assets, leaving other editor instances alone. It starts the
+Player with `--display 1` (`RuntimeHost.cpp` parses `--display`). Pitfall (2026-10-15):
+every session using that port drives the same Player, so one session's `execute_lua`
+experiment (a render-type switch) showed up in another's frames as an "opaque" bug.
+Give experiments their own runtime folder and `mcp_port`.
+
+PRISM's race against Jev (2026-10-15, plan `docs/superpowers/plans/2026-10-15-prism-versus-race.md`):
+`prism.lua` keeps two rules games from one seed (`game` = you, `rival` = Jev) and two pooled 3D boards
+built at load: yours always at x = -7.5, Jev's at +7.5 with `lead = false` (its effects never shake the
+camera, flare bloom or shift the aurora) and hidden outside a race (`Board:set_shown`). Solo centres the
+camera and aurora on your board; `Stage:set_layout("versus")` centres on 0 and fits both boards' rows to
+250-850 design px, with `Stage.CUTOUTS` matching `hud_versus.png`. The agent adapter reads its game through
+`options.game()`, so in a race it plays Jev's board, your keys never end agent mode, and a finished race is
+terminal. `prism_jev.lua` starts `Bots/PhasmaGameDriver.exe` through `proc` (attach, no `--seed`, which
+would reset the game), reads step and re-decide lines (`input_tokens=` since then) for think time, calls
+and cost, ends the race with the driver's failure line, and stops a driver that has not exited 3 s after
+the race. Only your seat plays sounds; races never touch the solo best. `Games/PrismTetris/run.ps1` now
+runs a private Player copy (`build-prism-tetris/player`) with MCP on its port and the driver in
+`Assets/Bots`. Same day (user requests): MENU replaces PAUSE and holds SOLO, VS JEV and JEV KEY;
+the key panel runs the driver's `--key-status`, `--save-key-from-clipboard` and `--remove-key` (one
+`KEY <word>` line each, never the key; never beside a race driver). FX off now means no particles, sweeps,
+flashes, shake, sway or bloom pulse; the earlier 30% reduction read as no change.
+
+PRISM's 3D renderer (2026-10-15, spec `docs/superpowers/specs/2026-10-15-prism-showcase-design.md`):
+`Games/PrismTetris/Assets/Scripts/prism_stage.lua` (post settings, camera fitted to the HUD board
+cutout, key light, aurora wall), `prism_board3d.lua` (200 pooled crystal cubes per board, piece/ghost,
+sweeps, flash lights, bursts) and `prism_hud.lua` (runtime_ui over a transparent `hud.png`); headless
+coverage in `tests/render_test.lua` with `tests/engine3d_stubs.lua`. Findings verified live in the
+Player that day:
+
+- Post effects need a Scene Settings node: `scene.add_empty_node(...)` + `set_scene_settings(true)`,
+  then `settings.set("hdr"|"bloom"|...)`. Without it they stay off (why the earlier NeonTetris looked flat).
+- With `linear_color` off (PRISM, most games) base-colour and emissive textures are sampled raw, not sRGB-decoded (`SceneBuffers.cpp` `MaterialSlotView`, `GBufferPS.hlsl` emissive); turning `linear_color` on would roughly halve PRISM's block glow.
+- Hidden pooled cubes (`node:set_visible(false)`) still showed in transmission mode. Hidden cubes drew with stale
+  colours, a falling piece on a hidden cell's spot vanished with its glow, ghost cubes inside hidden cells never
+  showed, and the back glass behind them stayed dark. `set_enabled(false)` on those cells cleared it. Cause
+  (2026-10-15): the scene runs Hybrid (`render_mode: 1`), whose `RayTracingPass` ray-traces transparent instances
+  over the raster frame, and `set_visible(false)` never reached the TLAS. A never-painted hidden cube (black, no
+  emissive) on the piece's spot won the hit. Fixed in the engine (hidden nodes get TLAS mask 0; see
+  [Rendering](rendering.md), Ray Tracing Cameras And Geometry), with pool test `transmission-hidden-rt`. Opaque
+  cubes were never affected. The report of an opaque case came from frames where another session had switched every
+  cell and the piece to transmission over the same MCP port. Neither session reproduced it in opaque on the same
+  binary, so PRISM (opaque cubes) dropped its y = -1000 parking on 2026-10-15; hidden cells now wait on their own
+  grid spots (`render_test.lua` "hidden cells stay hidden on their grid spots").
+- A long-lived `particles.add_emitter` with `spawn_radius` 28 rendered its motes in one horizontal band
+  (two settings tried); bursts (`emit_burst`) looked right. Cause and fix (2026-10-15):
+  [Particle helper surface](runtime/runtime-particle-helper-surface.md) (spawn randomness). With the fix the same
+  emitter fills both sides of the board in the PRISM Player.
+- On display 1 (59 Hz secondary) the Player sometimes ran at 30 fps, even after `rhi.change_present_mode("immediate")`;
+  a later run there held 61 fps, and the same scene rendered at 150-214 fps on the 170 Hz primary. Cause not found.
+- `run-tetris.ps1` connected the driver as soon as the port opened; once, after the load grew, MCP
+  rejected that first request and a retry worked.
+
+Universal accelerated simulation remains absent. `FrameTimer::Tick` uses wall
+time, `gamekit/loop.lua` polls/clamps frame metrics, and `PhysicsSystem::Update`
+owns another wall-time accumulator. Tetris can advance at decision boundaries;
+real-time games use actual engine ticks. General fast-forward would need a shared
+simulation-delta boundary across those systems.
 
 ## Current Bottleneck
 

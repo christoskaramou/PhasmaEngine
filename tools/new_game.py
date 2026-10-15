@@ -78,16 +78,26 @@ local spawn_points = {{
 local hud_wave = kit.scene.find("HUD_Wave")
 local hud_hp = kit.scene.find("HUD_HP")
 local wave_num = 0
+local current_wave = nil
+local next_wave_timer = nil
+local player_spawn = player:position()
 
 local function start_wave()
     wave_num = wave_num + 1
-    local w = kit.wave.new({{ pool = enemies, points = spawn_points, count = 8, interval = 0.6 }})
-    w:on_clear(function() kit.timer.after(1.5, start_wave) end)
-    kit.loop.add(function(dt) w:update(dt) end, "main")
-    w:start()
+    current_wave = kit.wave.new({{ pool = enemies, points = spawn_points, count = 8, interval = 0.6 }})
+    current_wave:on_clear(function()
+        next_wave_timer = kit.timer.after(1.5, start_wave)
+    end)
+    current_wave:start()
     if hud_wave then kit.ui.text(hud_wave, "WAVE " .. wave_num) end
     kit.log("wave start wave=" .. wave_num)
 end
+
+kit.loop.add(function(dt)
+    if current_wave then
+        current_wave:update(dt)
+    end
+end, "main")
 
 -- Enemies home in on the player; on contact they "hit" and recycle to the pool,
 -- so a wave eventually clears and the next begins.
@@ -116,8 +126,105 @@ kit.loop.add(function(dt)
     end
 end, "main")
 
+-- Agent actions use the same named input map as WASD and release after 12 frames.
+local directions = {{
+    left = {{ x = -1, y = 0 }},
+    right = {{ x = 1, y = 0 }},
+    up = {{ x = 0, y = -1 }},
+    down = {{ x = 0, y = 1 }},
+    wait = {{ x = 0, y = 0 }},
+}}
+local actions = {{
+    {{ id = "left", description = "Move left for 12 frames." }},
+    {{ id = "right", description = "Move right for 12 frames." }},
+    {{ id = "up", description = "Move up for 12 frames." }},
+    {{ id = "down", description = "Move down for 12 frames." }},
+    {{ id = "wait", description = "Wait for 12 frames." }},
+}}
+
+local function public_state()
+    local position = player:position()
+    local visible_enemies = {{}}
+
+    enemies:each_active(function(node)
+        local p = node:get_position()
+        visible_enemies[#visible_enemies + 1] = {{ id = node:get_name(), x = p.x, z = p.z }}
+    end)
+    table.sort(visible_enemies, function(a, b)
+        return a.id < b.id
+    end)
+
+    local busy = kit.input.injected("move")
+
+    return {{
+        mode = "survival",
+        terminal = false,
+        score = wave_num - 1,
+        busy = busy,
+        observation = {{
+            player = {{ x = position.x, z = position.z, hp = player.hp }},
+            wave = wave_num,
+            enemies = visible_enemies,
+        }},
+        actions = busy and {{}} or actions,
+    }}
+end
+
+local game_driver = kit.driver.new({{
+    id = "{name}",
+    description = "Topdown survival. Move with bounded named inputs; observe until busy is false.",
+    observe = public_state,
+    -- Movement intent stays legal while positions change; HP/wave/enemy changes invalidate it.
+    state_key = function(state)
+        local ids = {{}}
+
+        for _, enemy in ipairs(state.observation.enemies) do
+            ids[#ids + 1] = enemy.id
+        end
+
+        return {{
+            hp = state.observation.player.hp,
+            wave = wave_num,
+            enemies = ids,
+            busy = state.busy,
+        }}
+    end,
+    act = function(action_id)
+        kit.input.inject("move", directions[action_id], 12)
+    end,
+    reset = function(seed)
+        kit.input.clear_injected()
+        kit.timer.cancel(next_wave_timer)
+        next_wave_timer = nil
+
+        enemies:release_all()
+        table.sort(enemies.free, function(a, b)
+            return a:get_name() < b:get_name()
+        end)
+
+        player.hp = player.max_hp
+        player.dead = false
+        player_node:set_position(vec3(player_spawn.x, player_spawn.y, player_spawn.z))
+
+        wave_num = 0
+        math.randomseed(seed)
+        start_wave()
+    end,
+}})
+
 start_wave()
 kit.start()
+hooks({{
+    init = function()
+        game_driver:attach()
+        kit.loop.start()
+    end,
+    destroy = function()
+        game_driver:detach()
+        kit.input.clear_injected()
+        kit.loop.stop()
+    end,
+}})
 kit.log("{name} ready")
 '''
 
