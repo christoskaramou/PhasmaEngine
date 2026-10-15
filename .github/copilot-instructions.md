@@ -57,6 +57,46 @@ Follow the ponytail ladder — stop at the first rung that holds:
 
 Default engine posture is ponytail **full**. Use `/ponytail lite|ultra` when the user wants a different intensity.
 
+## Rules — code layout (readable, not crammed)
+
+**Hard rule:** the smallest correct change is measured in lines of logic, never in blank lines or braces. `clang-format` runs with `ColumnLimit: 0`, so it keeps whatever line breaks you write and will not un-cram code for you. Before writing, open the neighbouring hand-written file and match its density.
+
+- **One statement per line.** No `if (x) return;`, no `int a = 1, b = 2;`, no braceless `for`/`if` that contains another control statement, no braceless body under a condition that spans lines.
+- **Blank lines between steps.** Put one between logical steps of a function (gather / validate / compute / apply / return), after a group of guard clauses, and before and after any block you insert next to existing code. One blank line between functions, classes and declaration groups; never glue a new function to the closing `}` above it.
+- **Wrap by operand.** A condition, argument list or string concatenation that no longer fits goes one operand or argument per line. Past three operands, name the sub-conditions as `const bool`. No line of code you write passes about 120 columns (comments, string literals and constant tables excepted).
+- **Lambdas span lines.** `sol::overload` arms and multi-statement lambdas get a multi-line body; only one trivial expression may stay on one line.
+- **Short functions.** A new function over about 50 lines, or with three or more `// ---` phases, is split into named helpers in the same change.
+- **Same in every language.** Shaders (`.hlsl`, `.slang`), CMake and Lua follow the same rules; `constexpr` tables may stay dense.
+- **Layout is not extra code.** It never justifies new abstractions, wrappers or comments (ponytail still applies); it only decides how the code you needed is written out.
+
+Bad (real example from a past change) and good:
+
+```cpp
+if (meshIdx < 0) return;
+Mesh &mesh = s->GetMesh(meshIdx);
+if (!mesh.material) return;
+MaterialInstance *inst = ensureInstance(s, mesh);
+if (!inst) return;
+inst->SetParam(name, v);
+MirrorOpenPBRToLegacy(*inst);
+```
+
+```cpp
+if (meshIdx < 0)
+    return;
+
+Mesh &mesh = s->GetMesh(meshIdx);
+if (!mesh.material)
+    return;
+
+MaterialInstance *inst = ensureInstance(s, mesh);
+if (!inst)
+    return;
+
+inst->SetParam(name, v);
+MirrorOpenPBRToLegacy(*inst);
+```
+
 ## Rules — tools
 
 - **Use Grep / Glob for code lookups.** Use live source and focused wiki excerpts.
