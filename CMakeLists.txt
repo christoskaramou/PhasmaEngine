@@ -218,6 +218,29 @@ if(PE_PHYSICS2D)
     endif()
 endif()
 
+# --- MaterialX (OpenPBR shader generation; PhasmaCook only) ---
+option(PE_MATERIALX "Build MaterialX shader generation into PhasmaCook" ON)
+# MaterialX 1.39.5 needs CMake 3.26; older CMake keeps building the engine, without OpenPBR generation.
+if(PE_MATERIALX AND NOT ANDROID AND CMAKE_VERSION VERSION_LESS 3.26)
+    message(WARNING "PE_MATERIALX needs CMake 3.26 or newer (MaterialX 1.39.5): building without OpenPBR generation")
+elseif(PE_MATERIALX AND NOT ANDROID)
+    include(FetchContent)
+
+    foreach(mx_off GEN_GLSL GEN_OSL GEN_MDL GEN_MSL RENDER TESTS VIEWER GRAPH_EDITOR PYTHON DOCS OIIO OCIO)
+        set(MATERIALX_BUILD_${mx_off} OFF CACHE BOOL "" FORCE)
+    endforeach()
+    set(MATERIALX_BUILD_GEN_SLANG ON CACHE BOOL "" FORCE)
+    set(MATERIALX_BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
+
+    FetchContent_Declare(MaterialX
+        GIT_REPOSITORY https://github.com/AcademySoftwareFoundation/MaterialX.git
+        GIT_TAG        v1.39.5
+        GIT_PROGRESS   TRUE
+    )
+    FetchContent_MakeAvailable(MaterialX)
+    set(PE_MATERIALX_LIBRARIES_DIR "${materialx_SOURCE_DIR}/libraries" CACHE INTERNAL "")
+endif()
+
 # --- Recast/Detour navigation ---
 option(PE_NAV "Enable Recast/Detour navigation meshes" ON)
 if(PE_NAV)
@@ -606,6 +629,15 @@ if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
             add_dependencies(${pe_sdl_application} PhasmaRuntimeAssets)
         endif()
     endforeach()
+
+    # The editor and player compile PhasmaCook's generated default OpenPBR module from RuntimeAssets.
+    if(TARGET PeOpenPBRDefaultModule)
+        foreach(pe_openpbr_application PhasmaEditor PhasmaPlayer)
+            if(TARGET ${pe_openpbr_application})
+                add_dependencies(${pe_openpbr_application} PeOpenPBRDefaultModule)
+            endif()
+        endforeach()
+    endif()
 
     # Copy the bundled super-minimal default project into the build so the launcher always
     # opens to a valid, launchable project (used as the fallback when no user project is set).

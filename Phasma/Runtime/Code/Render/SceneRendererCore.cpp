@@ -76,8 +76,15 @@ namespace pe
 
     void SceneRendererCore::CreateRenderTargets(bool hasRayTracingGeometry, bool scaleOutput)
     {
-        m_colorFormatChanged = m_viewportRT && m_hdr != SceneUsesHDR();
+        m_colorFormatChanged = m_colorFormatChanged ||
+                               (m_viewportRT && (m_hdr != SceneUsesHDR() || m_openpbr != SceneUsesOpenPBR()));
+
+        if (m_openpbr != SceneUsesOpenPBR())
+            SyncOpenPBREnvironment();
+
         m_hdr = SceneUsesHDR();
+        m_openpbr = SceneUsesOpenPBR();
+
         const SceneRenderTargets targets =
             CreateDefaultSceneRenderTargets(m_renderTargets, m_depthStencilTargets, hasRayTracingGeometry, scaleOutput);
         m_depthStencil = targets.depthStencil;
@@ -104,7 +111,18 @@ namespace pe
 
     bool SceneRendererCore::SyncOptionalRenderTargets(bool hasRayTracingGeometry)
     {
-        return SyncOptionalSceneRenderTargets(m_renderTargets, hasRayTracingGeometry);
+        if (!SyncOptionalSceneRenderTargets(m_renderTargets, hasRayTracingGeometry))
+            return false;
+
+        // The visibility target switches shader variants: Resize must rebuild pipelines, not only descriptors.
+        if (m_openpbr != SceneUsesOpenPBR())
+        {
+            SyncOpenPBREnvironment();
+            m_openpbr = SceneUsesOpenPBR();
+            m_colorFormatChanged = true;
+        }
+
+        return true;
     }
 
     void SceneRendererCore::BlitToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex)
@@ -129,6 +147,23 @@ namespace pe
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
+    }
+
+    // Turning OpenPBR on reloads the sky: its environment pyramid is built from the HDR file's own equirect, which the
+    // legacy load drops once the cube exists.
+    void SceneRendererCore::SyncOpenPBREnvironment()
+    {
+        if (!m_skyBox.IsLoaded())
+            return;
+
+        if (SceneUsesOpenPBR())
+        {
+            ReloadSkyFromSettings();
+            return;
+        }
+
+        RHII.WaitDeviceIdle();
+        m_skyBox.DestroyOpenPBREnvironment();
     }
 
     void SceneRendererCore::DestroySky()

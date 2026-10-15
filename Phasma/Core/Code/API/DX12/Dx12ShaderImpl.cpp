@@ -589,7 +589,7 @@ namespace pe
             const std::string shaderCode =
                 "#define PE_DX12 1\n" + prepareDx12ShaderCode(owner->GetCache().GetShaderCode());
 
-            if (Shader::GetCompiler() == ShaderCompiler::Slang)
+            if (Shader::UsesSlang(owner->GetCache().GetSourcePath()))
             {
                 std::vector<uint8_t> bytes;
                 std::string log;

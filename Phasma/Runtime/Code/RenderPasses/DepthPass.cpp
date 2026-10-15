@@ -9,19 +9,38 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Render/SceneRendererHost.h"
+#include "Render/SceneRenderTargets.h"
 
 namespace pe
 {
+    BlendState VisibilityBlendState(bool write)
+    {
+        return BlendState(false, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ZERO, PE_BLEND_OP_ADD, PE_BLEND_FACTOR_ONE,
+                          PE_BLEND_FACTOR_ZERO, PE_BLEND_OP_ADD,
+                          write ? PE_COLOR_COMPONENT_RGBA : static_cast<PeColorComponentFlags>(0));
+    }
+
     void DepthPass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         m_depthStencil = rs->GetDepthStencilTarget("depthStencil");
+        m_visibility = SceneUsesOpenPBR() ? rs->GetRenderTarget("visibility") : nullptr;
 
-        m_attachments.resize(1);
-        m_attachments[0] = {};
-        m_attachments[0].image = m_depthStencil;
-        m_attachments[0].loadOp = PE_LOAD_OP_CLEAR;
-        m_attachments[0].storeOp = PE_STORE_OP_STORE;
+        m_attachments.clear();
+        if (m_visibility)
+        {
+            Attachment visibility{};
+            visibility.image = m_visibility;
+            visibility.loadOp = PE_LOAD_OP_CLEAR;
+            visibility.storeOp = PE_STORE_OP_STORE;
+            m_attachments.push_back(visibility);
+        }
+
+        Attachment depth{};
+        depth.image = m_depthStencil;
+        depth.loadOp = PE_LOAD_OP_CLEAR;
+        depth.storeOp = PE_STORE_OP_STORE;
+        m_attachments.push_back(depth);
 
         if (!m_passInfoDS)
             m_passInfoDS = std::make_shared<PassInfo>();
@@ -29,13 +48,30 @@ namespace pe
 
     void DepthPass::UpdatePassInfo()
     {
-        auto configureDepthPass = [](PassInfo &passInfo, const std::string &name, PeCullMode cullMode)
+        const bool visibility = m_visibility != nullptr;
+        auto configureDepthPass = [visibility](PassInfo &passInfo, const std::string &name, PeCullMode cullMode)
         {
+            const std::vector<Define> defines = visibility ? std::vector<Define>{Define{"VISIBILITY", "1"}}
+                                                           : std::vector<Define>{};
+            const std::string fragmentSource = visibility ? "Shaders/Depth/VisibilityPS.hlsl" : "Shaders/Depth/DepthPS.hlsl";
+
             passInfo.name = name;
-            passInfo.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
-            passInfo.pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthPS.hlsl", .entryPoint = "mainPS", .stage = PE_SHADER_STAGE_FRAGMENT, .defines = std::vector<Define>{}});
+            passInfo.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthVS.hlsl",
+                                                   .entryPoint = "mainVS",
+                                                   .stage = PE_SHADER_STAGE_VERTEX,
+                                                   .defines = defines});
+            passInfo.pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + fragmentSource,
+                                                   .entryPoint = "mainPS",
+                                                   .stage = PE_SHADER_STAGE_FRAGMENT,
+                                                   .defines = defines});
             passInfo.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
             passInfo.cullMode = cullMode;
+
+            passInfo.colorFormats = visibility ? std::vector<::PeFormat>{PE_FORMAT_R32G32B32A32_UINT}
+                                               : std::vector<::PeFormat>{};
+            passInfo.colorBlendAttachments = visibility ? std::vector<BlendState>{VisibilityBlendState(true)}
+                                                        : std::vector<BlendState>{};
+
             passInfo.depthFormat = RHII.GetDepthFormat();
             passInfo.depthTestEnable = true;
             passInfo.depthWriteEnable = true;
@@ -87,6 +123,10 @@ namespace pe
                 Descriptor *setUniforms = sets[0];
                 setUniforms->SetBuffer(0, scene.GetUniforms(frame));
                 setUniforms->SetBuffer(1, scene.GetMeshConstants());
+
+                if (setUniforms->HasBinding(2)) // DX12 VISIBILITY variant: DepthVS's IndirectAll
+                    setUniforms->SetBuffer(2, scene.GetIndirectAll());
+
                 setUniforms->Update();
             }
         }
@@ -120,6 +160,9 @@ namespace pe
         if (m_scene->GetMeshCount() == 0)
         {
             ClearDepthStencil(cmd);
+
+            if (m_visibility) // the resolve must never read last frame's IDs
+                cmd->ClearColors({m_visibility});
         }
         else
         {
@@ -141,7 +184,7 @@ namespace pe
             Buffer *opaqueDS = occlusion ? m_scene->GetOccOpaqueDSA(frame) : m_scene->GetIndirectOpaqueDS(frame);
             Buffer *alphaCutDS = occlusion ? m_scene->GetOccAlphaCutDSA(frame) : m_scene->GetIndirectAlphaCutDS(frame);
 
-            cmd->BeginPass(1, m_attachments.data(), "DepthPass");
+            cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "DepthPass");
             cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencil->GetWidth(), m_depthStencil->GetHeight());
             cmd->BindPipeline(*m_passInfo);
@@ -165,6 +208,21 @@ namespace pe
     void DepthPass::Resize(uint32_t width, uint32_t height)
     {
         Init();
+
+        // Depth-only passes need an explicit rebuild when visibility changes the shaders and color formats.
+        const std::vector<::PeFormat> wanted = m_visibility ? std::vector<::PeFormat>{PE_FORMAT_R32G32B32A32_UINT}
+                                                            : std::vector<::PeFormat>{};
+        if (m_passInfo && m_passInfo->colorFormats != wanted)
+        {
+            for (PassInfo *pi : GetPassInfos())
+            {
+                if (pi)
+                    pi->DestroyShaders();
+            }
+
+            UpdatePassInfo();
+        }
+
         UpdateDescriptorSets();
     }
 

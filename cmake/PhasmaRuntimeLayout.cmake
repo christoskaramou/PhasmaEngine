@@ -163,6 +163,22 @@ function(pe_install_runtime_layout)
         )
     endif()
 
+    # OpenPBR: the build-time default module goes beside the installed runtime assets (installed under Assets/), and
+    # the installed PhasmaCook --mtlx reads MaterialX's library data and PE's overrides from <exe>/MaterialX.
+    if(TARGET PeOpenPBRDefaultModule)
+        install(FILES "${PHASMA_CONFIG_OUTPUT_DIR}/RuntimeAssets/Shaders/MaterialX/Generated/PeOpenPBRDefault.slang"
+                      "${PHASMA_CONFIG_OUTPUT_DIR}/RuntimeAssets/Shaders/MaterialX/Generated/PeOpenPBRDefault.json"
+            DESTINATION "Assets/Shaders/MaterialX/Generated"
+            COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}")
+    endif()
+
+    if(TARGET PhasmaCook AND TARGET MaterialXGenSlang)
+        install(DIRECTORY "${PE_MATERIALX_LIBRARIES_DIR}/" DESTINATION "MaterialX/libraries"
+            COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}")
+        install(DIRECTORY "${PE_RUNTIME_ASSETS_SOURCE_DIR}/MaterialX/pe_overrides/" DESTINATION "MaterialX/pe_overrides"
+            COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}")
+    endif()
+
     pe_install_root_runtime_dependency_files(".")
 
     install(DIRECTORY "${PE_RUNTIME_ASSETS_SOURCE_DIR}/"

@@ -53,6 +53,36 @@ namespace pe
         return Settings::Get<SceneSettings>().linear_color;
     }
 
+    bool SceneUsesOpenPBR()
+    {
+        if (!Settings::Get<SceneSettings>().openpbr)
+            return false;
+
+#if defined(PE_ANDROID)
+        static bool warnedAndroid = false;
+        if (!warnedAndroid)
+            PE_WARN("openpbr: the visibility-buffer path is desktop-only; Android renders the legacy material path");
+        warnedAndroid = true;
+
+        return false;
+#else
+        const auto &f = RHII.GetGpuFeatureSupport();
+        const bool ok = f.fragmentBarycentric && f.computeDerivativeQuads && RHII.GetGpuLimits().maxColorAttachments >= 7;
+
+        static bool warned = false;
+        if (!ok && !warned)
+            PE_WARN("openpbr: this GPU lacks fragment barycentrics or compute quad derivatives; using the legacy material path");
+        warned = warned || !ok;
+
+        return ok;
+#endif
+    }
+
+    bool SceneUsesOpenPBRDebug()
+    {
+        return SceneUsesOpenPBR() && Settings::Get<SceneSettings>().openpbr_debug;
+    }
+
     vec3 SceneColor(const vec3 &srgb)
     {
         if (!SceneUsesLinearColor())
@@ -141,8 +171,9 @@ namespace pe
         desc.format = format;
         desc.width = width;
         desc.height = height;
+        // TRANSFER_SRC: every scene target can be read back (MCP capture_image_resource, pool tests) on Vulkan too.
         desc.usage = usage | PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE |
-                     PE_IMAGE_USAGE_TRANSFER_DST;
+                     PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST;
         if (useMips)
             desc.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > height ? width : height))) + 1;
         desc.clearColor = clearColor;
@@ -306,6 +337,11 @@ namespace pe
         CreateSceneRenderTarget(renderTargets, "emissive", sceneColorFormat);
         CreateSceneRenderTarget(renderTargets, "transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
 
+        if (SceneUsesOpenPBR())
+            CreateSceneRenderTarget(renderTargets, "visibility", PE_FORMAT_R32G32B32A32_UINT);
+        if (SceneUsesOpenPBRDebug())
+            CreateSceneRenderTarget(renderTargets, "visibility_debug", PE_FORMAT_R8G8B8A8_UNORM, PE_IMAGE_USAGE_TRANSFER_SRC);
+
         return targets;
     }
 
@@ -316,9 +352,13 @@ namespace pe
         Image *velocity = GetSceneRenderTarget(renderTargets, "velocity");
         const ::PeFormat normalFormat = SceneNormalRTFormat();
         Image *normal = GetSceneRenderTarget(renderTargets, "normal");
+        Image *visibility = GetSceneRenderTarget(renderTargets, "visibility");
+        Image *visibilityDebug = GetSceneRenderTarget(renderTargets, "visibility_debug");
         const bool velocityChanged = needVelocity ? !velocity || velocity->GetFormat() != velocityFormat : velocity != nullptr;
         const bool normalChanged = !normal || normal->GetFormat() != normalFormat;
-        if (!velocityChanged && !normalChanged)
+        const bool visibilityChanged = SceneUsesOpenPBR() != (visibility != nullptr);
+        const bool visibilityDebugChanged = SceneUsesOpenPBRDebug() != (visibilityDebug != nullptr);
+        if (!velocityChanged && !normalChanged && !visibilityChanged && !visibilityDebugChanged)
             return false;
 
         RHII.WaitDeviceIdle();
@@ -336,6 +376,22 @@ namespace pe
             if (normal)
                 DestroySceneRenderTarget(renderTargets, "normal");
             CreateSceneRenderTarget(renderTargets, "normal", normalFormat);
+        }
+
+        if (visibilityChanged)
+        {
+            if (visibility)
+                DestroySceneRenderTarget(renderTargets, "visibility");
+            else
+                CreateSceneRenderTarget(renderTargets, "visibility", PE_FORMAT_R32G32B32A32_UINT);
+        }
+
+        if (visibilityDebugChanged)
+        {
+            if (visibilityDebug)
+                DestroySceneRenderTarget(renderTargets, "visibility_debug");
+            else
+                CreateSceneRenderTarget(renderTargets, "visibility_debug", PE_FORMAT_R8G8B8A8_UNORM, PE_IMAGE_USAGE_TRANSFER_SRC);
         }
 
         return true;

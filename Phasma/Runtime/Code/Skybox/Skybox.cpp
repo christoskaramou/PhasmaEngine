@@ -4,6 +4,7 @@
 #include "API/Image.h"
 #include "API/Pipeline.h"
 #include "API/Shader.h"
+#include "Render/SceneRenderTargets.h"
 
 #include "API/RHI.h"
 #include "stb_image.h"
@@ -26,7 +27,7 @@ namespace pe
             ImageBarrierInfo barrier{};
             barrier.image = image;
             barrier.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER | PE_STAGE_RAY_TRACING_SHADER_KHR;
+            barrier.stageFlags = PE_STAGE_FRAGMENT_SHADER | PE_STAGE_RAY_TRACING_SHADER_KHR | PE_STAGE_COMPUTE_SHADER;
             barrier.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
             barrier.mipLevels = image->GetMipLevels();
             cmd->ImageBarrier(barrier);
@@ -107,6 +108,128 @@ namespace pe
             cmd->AddAfterWaitCallback([passInfo]()
                                       { delete passInfo; });
         }
+
+        // The OpenPBR radiance pyramid is a lat-long image in PE's equirect convention (EquirectangularToCubemap.hlsl), so
+        // MaterialX's filtered importance sampling runs on the kind of map it was written for.
+        constexpr uint32_t kOpenPBREnvMaxWidth = 4096;
+
+        Image *CreateOpenPBREnvironmentImage(const std::string &name,
+                                             uint32_t width,
+                                             uint32_t height,
+                                             uint32_t mipLevels)
+        {
+            ImageDesc desc{};
+            desc.format = PE_FORMAT_R32G32B32A32_SFLOAT;
+            desc.width = width;
+            desc.height = height;
+            desc.mipLevels = mipLevels;
+            desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE;
+            desc.name = name;
+            Image *image = Image::Create(desc);
+            image->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+
+            SamplerDesc sampler = Sampler::CreateInfoInit();
+            sampler.addressModeU = PE_SAMPLER_ADDRESS_MODE_REPEAT;
+            sampler.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            sampler.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            sampler.anisotropyEnable = false;
+            image->SetSampler(Sampler::Create(sampler, name + "_Sampler"));
+
+            return image;
+        }
+
+        void BindOpenPBREnvironmentPass(CommandBuffer *cmd,
+                                        const std::string &shader,
+                                        const std::vector<Define> &defines,
+                                        ImageView *input,
+                                        Sampler *inputSampler,
+                                        Image *output)
+        {
+            PassInfo *pass = new PassInfo();
+            pass->name = shader + "_pipeline";
+            const std::string sourcePath = Path::RuntimeAssets + "Shaders/Compute/" + shader + ".hlsl";
+            pass->pCompShader = Shader::Create({.sourcePath = sourcePath,
+                                                .entryPoint = "main",
+                                                .stage = PE_SHADER_STAGE_COMPUTE,
+                                                .defines = defines});
+            pass->Update();
+
+            std::vector<ImageView *> views(output->GetMipLevels());
+            for (uint32_t mip = 0; mip < output->GetMipLevels(); ++mip)
+            {
+                output->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, mip);
+                views[mip] = output->GetUAV(mip);
+            }
+
+            Descriptor *descriptor = pass->GetDescriptors(RHII.GetFrameIndex())[0];
+            if (views.size() == 1)
+                descriptor->SetImageView(0, views[0]);
+            else
+                descriptor->SetImageViews(0, views);
+
+            descriptor->SetImageView(1, input);
+            if (inputSampler)
+                descriptor->SetSampler(2, inputSampler);
+
+            descriptor->Update();
+
+            ImageBarrierInfo barrier{};
+            barrier.image = output;
+            barrier.layout = PE_IMAGE_LAYOUT_GENERAL;
+            barrier.stageFlags = PE_STAGE_COMPUTE_SHADER;
+            barrier.accessMask = PE_ACCESS_SHADER_WRITE;
+            barrier.mipLevels = output->GetMipLevels();
+            cmd->ImageBarrier(barrier);
+            cmd->BindPipeline(*pass);
+            cmd->AddAfterWaitCallback([pass]()
+                                      { delete pass; });
+        }
+
+        void BuildOpenPBRRadiance(CommandBuffer *cmd, Image *source, bool sourceIsCube, Image *radiance)
+        {
+            const std::vector<Define> defines = sourceIsCube ? std::vector<Define>{{"PE_ENV_FROM_CUBE", "1"}}
+                                                             : std::vector<Define>{};
+            BindOpenPBREnvironmentPass(cmd,
+                                       "OpenPBREnvPyramid",
+                                       defines,
+                                       source->GetSRV(),
+                                       sourceIsCube ? source->GetSampler() : nullptr,
+                                       radiance);
+
+            for (uint32_t mip = 0; mip < radiance->GetMipLevels(); ++mip)
+            {
+                cmd->SetConstantAt(0, mip);
+                cmd->SetConstantAt(1, radiance->GetWidth());
+                cmd->SetConstantAt(2, radiance->GetHeight());
+                cmd->PushConstants();
+
+                const uint32_t width = std::max(1u, radiance->GetWidth() >> mip);
+                const uint32_t height = std::max(1u, radiance->GetHeight() >> mip);
+                cmd->Dispatch((width + 7u) / 8u, (height + 7u) / 8u, 1);
+            }
+
+            TransitionSkyboxToShaderRead(cmd, radiance);
+        }
+
+        void BuildOpenPBRIrradiance(CommandBuffer *cmd, Image *radiance, Image *irradiance)
+        {
+            uint32_t mip = 0;
+            // 256x128 keeps the convolution within 0.3% of the full map (64x32 is up to 3% off); smaller maps are used as they are.
+            while ((radiance->GetWidth() >> mip) > 256 && mip + 1 < radiance->GetMipLevels())
+                ++mip;
+
+            radiance->CreateSRV(PE_IMAGE_VIEW_TYPE_2D, mip);
+            BindOpenPBREnvironmentPass(cmd, "OpenPBREnvIrradiance", {}, radiance->GetSRV(mip), nullptr, irradiance);
+
+            cmd->SetConstantAt(0, irradiance->GetWidth());
+            cmd->SetConstantAt(1, irradiance->GetHeight());
+            cmd->SetConstantAt(2, std::max(1u, radiance->GetWidth() >> mip));
+            cmd->SetConstantAt(3, std::max(1u, radiance->GetHeight() >> mip));
+            cmd->PushConstants();
+            cmd->Dispatch((irradiance->GetWidth() + 7u) / 8u, (irradiance->GetHeight() + 7u) / 8u, 1);
+
+            TransitionSkyboxToShaderRead(cmd, irradiance);
+        }
     } // namespace
 
     bool SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames)
@@ -171,6 +294,9 @@ namespace pe
         }
 
         TransitionSkyboxToShaderRead(cmd, m_cubeMap);
+        if (SceneUsesOpenPBR())
+            BuildOpenPBREnvironment(cmd);
+
         return true;
     }
 
@@ -255,6 +381,9 @@ namespace pe
                                     Image *im = equiImage;
                                     Image::Destroy(im);
                                     delete passInfo; });
+        if (SceneUsesOpenPBR())
+            BuildOpenPBREnvironment(cmd, equiImage);
+
         return true;
     }
 
@@ -298,10 +427,42 @@ namespace pe
         }
 
         TransitionSkyboxToShaderRead(cmd, m_cubeMap);
+
+        if (SceneUsesOpenPBR())
+            BuildOpenPBREnvironment(cmd);
+    }
+
+    // The pyramid is MaterialX's lat-long environment, so it is built from the sky's own equirect when the load had one
+    // (an HDR file up to kOpenPBREnvMaxWidth wide; the legacy cube resamples it with aliasing at high latitudes and
+    // adds ~2% energy), else from the legacy cube resampled to a 2:1 lat-long.
+    void SkyBox::BuildOpenPBREnvironment(CommandBuffer *cmd, Image *equirect)
+    {
+        if (!SceneUsesOpenPBR() || !m_cubeMap || m_openpbrRadiance)
+            return;
+
+        const bool fromEquirect = equirect && equirect->GetWidth() <= kOpenPBREnvMaxWidth;
+        const uint32_t width = fromEquirect ? equirect->GetWidth()
+                                            : std::min(m_cubeMap->GetWidth() * 4u, kOpenPBREnvMaxWidth);
+        const uint32_t height = fromEquirect ? equirect->GetHeight() : width / 2u;
+        m_openpbrRadiance = CreateOpenPBREnvironmentImage(
+            "Skybox_OpenPBRRadiance", width, height, Image::CalculateMips(width, height));
+        m_openpbrIrradiance = CreateOpenPBREnvironmentImage("Skybox_OpenPBRIrradiance", 128, 64, 1);
+
+        cmd->BeginDebugRegion("Skybox OpenPBR Environment");
+        BuildOpenPBRRadiance(cmd, fromEquirect ? equirect : m_cubeMap, !fromEquirect, m_openpbrRadiance);
+        BuildOpenPBRIrradiance(cmd, m_openpbrRadiance, m_openpbrIrradiance);
+        cmd->EndDebugRegion();
+    }
+
+    void SkyBox::DestroyOpenPBREnvironment()
+    {
+        Image::Destroy(m_openpbrRadiance);
+        Image::Destroy(m_openpbrIrradiance);
     }
 
     void SkyBox::Destroy()
     {
+        DestroyOpenPBREnvironment();
         Image::Destroy(m_cubeMap);
     }
 } // namespace pe

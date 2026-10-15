@@ -57,6 +57,7 @@ namespace pe
 
         void LoadSky(CommandBuffer *cmd);
         void ReloadSkyFromSettings();
+        void SyncOpenPBREnvironment();
         void DestroySky();
 
         void CreateRenderPassComponents(bool includeRayTracingPass, CommandBuffer *cmd);
@@ -126,6 +127,7 @@ namespace pe
         float m_renderTargetScale = 0.0f;
         bool m_hdr = false;
         bool m_colorFormatChanged = false;
+        bool m_openpbr = false; // SceneUsesOpenPBR() the passes were last built for
 
         SkyBox m_skyBox;
         Image *m_ibl_brdf_lut = nullptr;

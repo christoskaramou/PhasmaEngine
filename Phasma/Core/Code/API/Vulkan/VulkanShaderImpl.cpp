@@ -246,7 +246,7 @@ namespace pe
                          const std::vector<Define> &localDefines,
                          std::vector<uint32_t> &outSpirv)
         {
-            if (Shader::GetCompiler() == ShaderCompiler::Slang)
+            if (Shader::UsesSlang(owner->GetCache().GetSourcePath()))
                 return CompileHlslWithSlang(owner, stage, globalDefines, localDefines, outSpirv);
 
             std::vector<LPCWSTR> args{};

@@ -134,6 +134,9 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     output.metRough = float4(1.0f, roughness, 0.0f, 0.0f); // full occlusion, per-layer roughness, no metal
     output.emissive = float4(0.0f, 0.0f, 0.0f, 1.0f);
     output.transparency = pc.passType ? 1.0f : 0.0f;
+#ifdef GBUFFER_VISIBILITY
+    output.visibility = uint4(0, 0, 0, 0); // clear the prepass payload where this surface wins depth
+#endif
 
 #ifndef GBUFFER_NO_VELOCITY
     // Velocity (matches stock GBuffer PS).

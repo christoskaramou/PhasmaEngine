@@ -57,6 +57,8 @@ namespace pe
 
         static void SetCompiler(ShaderCompiler compiler);
         static ShaderCompiler GetCompiler();
+        // .slang sources always compile with slangc (Slang syntax); everything else follows GetCompiler().
+        static bool UsesSlang(const std::string &sourcePath);
 
         static void AddGlobalDefine(const std::string &name, const std::string &value);
         static size_t GetGlobalDefinesHash();

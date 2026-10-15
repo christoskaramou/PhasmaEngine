@@ -23,6 +23,9 @@ namespace pe
     bool SceneNeedsVelocityRT(bool hasRayTracingGeometry);
     bool SceneUsesHDR();
     bool SceneUsesLinearColor();
+    // openpbr is on and this platform/GPU runs the MaterialX visibility-buffer path (warns once when it cannot).
+    bool SceneUsesOpenPBR();
+    bool SceneUsesOpenPBRDebug();
     // An sRGB-authored colour as the frame uses it: decoded in a linear-colour scene (values above 1 keep their
     // brightness), unchanged otherwise.
     vec3 SceneColor(const vec3 &srgb);

@@ -29,6 +29,7 @@ namespace pe
     class Buffer;
     class CommandBuffer;
     class Sampler;
+    struct Define;
 
     class LightOpaquePass : public IRenderPassComponent
     {
@@ -44,6 +45,8 @@ namespace pe
         void Destroy() override;
 
     private:
+        friend class MaterialShadePass; // reads m_uniforms (written only in Init)
+
         std::vector<Buffer *> m_uniforms;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
@@ -100,5 +103,38 @@ namespace pe
         bool m_boundForwardPlusEnabled = true;
         std::vector<Buffer *> m_boundLightStorage; // per frame: a grown light buffer replaces the old one
         LightPassUBO m_ubo;
+    };
+
+    // Material pass 2 (desktop OpenPBR): MaterialX's generated shading for visibility pixels of MaterialX materials,
+    // over LightOpaque's result. Shares LightOpaquePass's bindings (Lighting.hlsl sets 0-3), uniform and push
+    // constants; lives in LightPass.cpp for its helpers.
+    class MaterialShadePass : public IRenderPassComponent
+    {
+    public:
+        void Init() override;
+        void UpdatePassInfo() override;
+        void CreateUniforms(CommandBuffer *cmd) override {}
+        void UpdateDescriptorSets() override;
+        void Update() override;
+        void DeclareInputs(RGBuilder &builder) override;
+        void DeclareOutputs(RGBuilder &builder) override;
+        void ExecutePass(CommandBuffer *cmd) override;
+        void Resize(uint32_t width, uint32_t height) override;
+        void Destroy() override;
+
+    private:
+        std::vector<Define> Defines() const;
+        void BindFrame(uint32_t frame);
+
+        Image *m_viewportRT = nullptr;
+        Image *m_visibility = nullptr;
+        Image *m_albedoRT = nullptr; // bound to Ssao when the SSAO target is absent, as LightOpaquePass does
+        std::string m_builtDefines;
+        std::vector<bool> m_boundFrames;
+        // Its own shadow fallbacks: LightOpaquePass rewrites its copies in its Update, which runs in parallel.
+        std::vector<Buffer *> m_shadowFallbackUniforms;
+        Image *m_shadowFallbackTexture = nullptr;
+        Sampler *m_shadowFallbackSampler = nullptr;
+        std::vector<ImageView *> m_shadowFallbackViews;
     };
 } // namespace pe

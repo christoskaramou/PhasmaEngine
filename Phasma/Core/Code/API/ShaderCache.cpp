@@ -102,7 +102,7 @@ namespace pe
             m_hash.CombineValue(RHII.GetCaps().spirvTargetVulkanVersion);
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             m_hash.CombineValue(12u); // DX12 cache embeds readable source in a private DXIL container part.
-        if (Shader::GetCompiler() == ShaderCompiler::Slang)
+        if (Shader::UsesSlang(m_sourcePath))
             m_hash.CombineString("slang-compiler"); // never reuse the other compiler's bytecode
 #if defined(PE_SLANG_VALIDATION)
         // Slang validation runs on cache misses only; its own cache entries make turning it on check every shader.

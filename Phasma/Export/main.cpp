@@ -188,10 +188,22 @@ namespace
             "shaderc_shared.dll",
             "dxcompiler.dll",
             "vulkan-1.dll",
+            "slangc.exe",
+            "slangc",
+            "slang.dll",
+            "slang-compiler.dll",
+            "slang-glslang.dll",
+            "slang-glsl-module.dll",
+            "slang-rt.dll",
         };
         return exact.contains(name) || name.starts_with("libPhasmaCore.so") || name.starts_with("libSDL2") ||
                name.starts_with("libshaderc_shared.so") || name.starts_with("libdxcompiler.so") ||
-               name.starts_with("libvulkan.so");
+               name.starts_with("libvulkan.so") ||
+               name.starts_with("libslang.so") ||
+               name.starts_with("libslang-compiler.so") ||
+               name.starts_with("libslang-glslang.so") ||
+               name.starts_with("libslang-glsl-module.so") ||
+               name.starts_with("libslang-rt.so");
     }
 
     // Path::Init picks Path::RuntimeAssets by DIRECTORY EXISTENCE and falls back to Assets/ when

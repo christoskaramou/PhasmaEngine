@@ -48,8 +48,11 @@ namespace pe
         MotionBlur,
         Grid,
         SelectionOutline,
-        ScreenProbes, // Lumen-style screen probe gather for the opaque lighting pass
-        Reflections,  // Lumen-style ray-traced reflections for the opaque lighting pass
+        ScreenProbes,    // Lumen-style screen probe gather for the opaque lighting pass
+        Reflections,     // Lumen-style ray-traced reflections for the opaque lighting pass
+        VisibilityDebug, // openpbr_debug: quad-exact reconstruction check of the visibility payload
+        MaterialThin,    // openpbr: material pass 1 (thin G-buffer)
+        MaterialShade,   // openpbr: material pass 2 (MaterialX shading)
         Count
     };
 
@@ -94,6 +97,9 @@ namespace pe
         IRenderPassComponent *motionBlur = nullptr;
         IRenderPassComponent *grid = nullptr;
         IRenderPassComponent *selectionOutline = nullptr;
+        IRenderPassComponent *visibilityDebug = nullptr;
+        IRenderPassComponent *materialThin = nullptr;
+        IRenderPassComponent *materialShade = nullptr;
     };
 
     using SceneRenderGraphPassCondition = std::function<bool(SceneRenderGraphPassId)>;

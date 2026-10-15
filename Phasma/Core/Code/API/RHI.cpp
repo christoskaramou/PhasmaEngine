@@ -954,6 +954,15 @@ namespace pe
             m_gpuFeatureSupport.preciseOcclusionQuery = true; // OCCLUSION returns exact sample counts
             m_gpuFeatureSupport.binaryOcclusionQuery = true;  // D3D12_QUERY_TYPE_BINARY_OCCLUSION
             m_gpuFeatureSupport.queryPoolHostReset = false;   // DX12 query heaps have no host/explicit reset
+
+            D3D12_FEATURE_DATA_D3D12_OPTIONS3 options3{};
+            const bool barycentrics =
+                SUCCEEDED(dx->GetDevice()->CheckFeatureSupport(D3D12_FEATURE_D3D12_OPTIONS3, &options3, sizeof(options3))) &&
+                options3.BarycentricsSupported;
+            m_gpuFeatureSupport.fragmentBarycentric = barycentrics;
+            m_gpuFeatureSupport.computeDerivativeQuads = true; // Dx12RhiImpl::Init requires SM 6.6: compute derivatives on 2x2 quads
+            PE_INFO("[OpenPBR] caps barycentrics=%d derivatives=1", barycentrics ? 1 : 0);
+
             m_maxUniformBufferSize = D3D12_REQ_CONSTANT_BUFFER_ELEMENT_COUNT * 16u;
             m_maxStorageBufferSize = std::numeric_limits<uint32_t>::max();
             m_minUniformBufferOffsetAlignment = D3D12_CONSTANT_BUFFER_DATA_PLACEMENT_ALIGNMENT;
@@ -1630,6 +1639,10 @@ namespace pe
             IsDeviceExtensionValid(VK_KHR_RAY_QUERY_EXTENSION_NAME);
         const bool depthClipExtAvailable =
             optionalExtensionsAllowed && IsDeviceExtensionValid(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+        const bool barycentricExtAvailable =
+            optionalExtensionsAllowed && IsDeviceExtensionValid(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
+        const bool derivativesExtAvailable =
+            optionalExtensionsAllowed && IsDeviceExtensionValid(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME);
         const bool descriptorBufferExtAvailable =
             optionalExtensionsAllowed && IsDeviceExtensionValid(VK_EXT_DESCRIPTOR_BUFFER_EXTENSION_NAME);
         const bool presentWait2ExtensionsAvailable =
@@ -1732,6 +1745,20 @@ namespace pe
             featureQueryChain = &depthClipFeatures;
         }
 
+        vk::PhysicalDeviceFragmentShaderBarycentricFeaturesKHR barycentricFeatures{};
+        if (barycentricExtAvailable)
+        {
+            barycentricFeatures.pNext = featureQueryChain;
+            featureQueryChain = &barycentricFeatures;
+        }
+
+        vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR derivativeFeatures{};
+        if (derivativesExtAvailable)
+        {
+            derivativeFeatures.pNext = featureQueryChain;
+            featureQueryChain = &derivativeFeatures;
+        }
+
         VkPhysicalDeviceDescriptorBufferFeaturesEXT supportedDescriptorBufferFeatures{};
         supportedDescriptorBufferFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_DESCRIPTOR_BUFFER_FEATURES_EXT;
         VkPhysicalDeviceDescriptorBufferFeaturesEXT requestedDescriptorBufferFeatures{};
@@ -1783,6 +1810,14 @@ namespace pe
 
         if (depthClipExtAvailable && depthClipFeatures.depthClipEnable)
             deviceExtensions.push_back(VK_EXT_DEPTH_CLIP_ENABLE_EXTENSION_NAME);
+
+        const bool barycentricEnabled = barycentricExtAvailable && barycentricFeatures.fragmentShaderBarycentric;
+        const bool derivativeQuadsEnabled = derivativesExtAvailable && derivativeFeatures.computeDerivativeGroupQuads;
+        if (barycentricEnabled)
+            deviceExtensions.push_back(VK_KHR_FRAGMENT_SHADER_BARYCENTRIC_EXTENSION_NAME);
+        if (derivativeQuadsEnabled)
+            deviceExtensions.push_back(VK_KHR_COMPUTE_SHADER_DERIVATIVES_EXTENSION_NAME);
+
         m_caps.pushDescriptor = pushDescriptorExtensionAvailable ||
                                 (vulkan14Available && static_cast<bool>(deviceFeatures14.pushDescriptor));
         m_caps.descriptorBuffer.supported = false;
@@ -1909,6 +1944,23 @@ namespace pe
             depthClipFeatures.pNext = deviceFeatureChain;
             deviceFeatureChain = &depthClipFeatures;
         }
+
+        vk::PhysicalDeviceFragmentShaderBarycentricFeaturesKHR barycentricEnable{};
+        barycentricEnable.fragmentShaderBarycentric = VK_TRUE;
+        if (barycentricEnabled)
+        {
+            barycentricEnable.pNext = deviceFeatureChain;
+            deviceFeatureChain = &barycentricEnable;
+        }
+
+        vk::PhysicalDeviceComputeShaderDerivativesFeaturesKHR derivativeEnable{};
+        derivativeEnable.computeDerivativeGroupQuads = VK_TRUE;
+        if (derivativeQuadsEnabled)
+        {
+            derivativeEnable.pNext = deviceFeatureChain;
+            deviceFeatureChain = &derivativeEnable;
+        }
+
         if (m_caps.descriptorBuffer.supported)
         {
             requestedDescriptorBufferFeatures.pNext = deviceFeatureChain;
@@ -1946,6 +1998,11 @@ namespace pe
         deviceCreateInfo.pNext = &deviceFeatures2;
 
         vk->m_device = vk->m_gpu.createDevice(deviceCreateInfo);
+
+        m_gpuFeatureSupport.fragmentBarycentric = barycentricEnabled;
+        m_gpuFeatureSupport.computeDerivativeQuads = derivativeQuadsEnabled;
+        PE_INFO("[OpenPBR] caps barycentrics=%d derivatives=%d", barycentricEnabled ? 1 : 0, derivativeQuadsEnabled ? 1 : 0);
+
         VULKAN_HPP_DEFAULT_DISPATCHER.init(vk->m_device);
 
         // Debug naming

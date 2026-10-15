@@ -1,5 +1,6 @@
 #include "Scene/Scene.h"
 #include "Scene/Material.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "Scene/MaterialReflection.h"
 #include "Scene/MeshConstants.h"
 #include "Scene/ModelAsset.h"
@@ -148,6 +149,8 @@ namespace pe
                     flags |= 2u;
                 if (mesh.material && mesh.material->terrain)
                     flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
+                if (MeshUsesOpenPBR(mesh))
+                    flags |= 32u; // MaterialX material: the material passes shade its visibility pixels
 
                 BufferRange range{};
                 range.data = &flags;
@@ -924,7 +927,21 @@ namespace pe
                     if (!IsValidMeshIndex(meshIdx))
                         continue;
                     Mesh &mesh = m_meshes[meshIdx];
-                    if (mesh.indexCount == 0 || !mesh.material || !mesh.material->passInfoAsset)
+                    if (mesh.indexCount == 0 || !mesh.material)
+                        continue;
+
+                    if (MeshUsesOpenPBR(mesh)) // legacy record + OpenPBR inputs, per instance (before the standard_pbr pass packing)
+                    {
+                        MaterialInstance *inst = mesh.materialInstance;
+                        if (inst->gpuByteOffset != 0xFFFFFFFF)
+                            continue;
+
+                        inst->gpuByteOffset = 0; // gathered; final offsets follow byte packing
+                        byteEntries.push_back({&inst->gpuByteOffset, &inst->gpuByteSize, {}, mesh.material, inst, nullptr});
+                        continue;
+                    }
+
+                    if (!mesh.material->passInfoAsset)
                         continue;
 
                     Material *mat = mesh.material;
@@ -971,6 +988,13 @@ namespace pe
                 for (size_t i = begin; i < end; ++i)
                 {
                     auto &entry = byteEntries[i];
+
+                    if (!entry.layout) // MaterialX instance
+                    {
+                        entry.data = BuildOpenPBRBytes(*entry.instance);
+                        continue;
+                    }
+
                     const auto &layout = *entry.layout;
                     entry.data = entry.instance ? entry.instance->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize)
                                                 : entry.material->BuildByteAddressData(layout.structMembers, layout.textureSlots, layout.totalByteSize);
@@ -1191,6 +1215,19 @@ namespace pe
                     inst->dirty = false;
                     continue;
                 }
+
+                if (inst->GetOpenPBR() && OpenPBREligible(*parent)) // same predicate as MeshUsesOpenPBR
+                {
+                    if (inst->gpuByteOffset == 0xFFFFFFFF)
+                    {
+                        pendingDirty = true; // the full rebuild that use_openpbr requested packs it
+                        continue;
+                    }
+
+                    byteDirtyEntries.push_back({inst->gpuByteOffset, &inst->dirty, BuildOpenPBRBytes(*inst)});
+                    continue;
+                }
+
                 // Standard PBR instances only need the structured material table upload above.
                 if (!parent->passInfoAsset)
                 {
@@ -2326,6 +2363,8 @@ namespace pe
             flags |= 2u;
         if (mesh.material && mesh.material->terrain)
             flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
+        if (MeshUsesOpenPBR(mesh))
+            flags |= 32u; // MaterialX material: the material passes shade its visibility pixels
         constants.editorFlags = flags;
         constants.renderType = static_cast<uint32_t>(mesh.renderType);
 

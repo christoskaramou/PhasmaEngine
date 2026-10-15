@@ -36,7 +36,10 @@
 #include "RenderPasses/TAAPass.h"
 #include "RenderPasses/TonemapPass.h"
 #include "RenderPasses/UpsamplePass.h"
+#include "RenderPasses/VisibilityDebugPass.h"
+#include "RenderPasses/MaterialThinPass.h"
 #include "Scene/Scene.h"
+#include "Scene/OpenPBRMaterial.h"
 
 namespace pe
 {
@@ -61,9 +64,12 @@ namespace pe
             {SceneRenderGraphPassId::GBufferOpaque, 300, "GBufferOpaque", &SceneRenderGraphPassComponents::gbufferOpaque},
             {SceneRenderGraphPassId::VoxelHiZ, 310, "VoxelHiZ", &SceneRenderGraphPassComponents::voxelHiZPyramid},
             {SceneRenderGraphPassId::SSAO, 400, "SSAO", &SceneRenderGraphPassComponents::ssao},
+            {SceneRenderGraphPassId::VisibilityDebug, 305, "VisibilityDebug", &SceneRenderGraphPassComponents::visibilityDebug},
+            {SceneRenderGraphPassId::MaterialThin, 307, "MaterialThin", &SceneRenderGraphPassComponents::materialThin},
             {SceneRenderGraphPassId::ForwardPlusLightCulling, 450, "ForwardPlusLightCulling",
              &SceneRenderGraphPassComponents::forwardPlusLightCulling},
             {SceneRenderGraphPassId::LightOpaque, 500, "LightOpaque", &SceneRenderGraphPassComponents::lightOpaque},
+            {SceneRenderGraphPassId::MaterialShade, 510, "MaterialShade", &SceneRenderGraphPassComponents::materialShade},
             {SceneRenderGraphPassId::GlobalIllumination, 460, "GlobalIllumination", &SceneRenderGraphPassComponents::globalIllumination},
             {SceneRenderGraphPassId::ScreenProbes, 470, "ScreenProbes", &SceneRenderGraphPassComponents::screenProbes},
             {SceneRenderGraphPassId::Reflections, 480, "Reflections", &SceneRenderGraphPassComponents::reflections},
@@ -215,6 +221,15 @@ namespace pe
             if (component == components.selectionOutline)
                 return isPassEnabled(SceneRenderGraphPassId::SelectionOutline);
 
+            if (component == components.visibilityDebug)
+                return isPassEnabled(SceneRenderGraphPassId::VisibilityDebug);
+
+            if (component == components.materialThin)
+                return isPassEnabled(SceneRenderGraphPassId::MaterialThin);
+
+            if (component == components.materialShade)
+                return isPassEnabled(SceneRenderGraphPassId::MaterialShade);
+
             return true;
         }
     } // namespace
@@ -304,6 +319,9 @@ namespace pe
         CreateSceneRenderGraphPassComponent<MotionBlurPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<GridPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<SelectionOutlinePass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<VisibilityDebugPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<MaterialThinPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<MaterialShadePass>(renderPassComponents);
         if (includeRayTracingPass)
         {
             CreateSceneRenderGraphPassComponent<GlobalIlluminationPass>(renderPassComponents);
@@ -433,6 +451,9 @@ namespace pe
         scenePasses.motionBlur = GetGlobalComponent<MotionBlurPass>();
         scenePasses.grid = GetGlobalComponent<GridPass>();
         scenePasses.selectionOutline = GetGlobalComponent<SelectionOutlinePass>();
+        scenePasses.visibilityDebug = GetGlobalComponent<VisibilityDebugPass>();
+        scenePasses.materialThin = GetGlobalComponent<MaterialThinPass>();
+        scenePasses.materialShade = GetGlobalComponent<MaterialShadePass>();
         return scenePasses;
     }
 
@@ -520,6 +541,13 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline,
                            gs.selection_outline && (dx12RenderRaster || dx12RayTracing));
+
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::VisibilityDebug, SceneUsesOpenPBRDebug() && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialThin,
+                           SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialShade,
+                           SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && dx12RenderRaster);
+
             return;
         }
 
@@ -568,6 +596,12 @@ namespace pe
         // viewport", not raster-only, else full RT (renderRaster == false) silently drops the outline.
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline,
                        gs.selection_outline && (renderRaster || renderRayTracing));
+
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::VisibilityDebug, SceneUsesOpenPBRDebug() && renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialThin,
+                       SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialShade,
+                       SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && renderRaster);
     }
 
     void UpdateSceneRenderGraphPassComponents(const OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,

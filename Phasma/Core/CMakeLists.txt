@@ -182,6 +182,49 @@ if(PE_ENABLE_RUNTIME_SHADER_COMPILER)
     # Forward slashes: the path becomes a C string literal, where Windows backslashes are escapes.
     file(TO_CMAKE_PATH "${PE_SLANGC_PATH}" PE_SLANGC_PATH_DEFINE)
     target_compile_definitions(PhasmaCore PRIVATE PE_SLANGC_PATH="${PE_SLANGC_PATH_DEFINE}")
+
+    # The .slang passes need runtime Slang; only a full-path slangc can be shipped.
+    get_filename_component(PE_SLANGC_DIR "${PE_SLANGC_PATH}" DIRECTORY)
+
+    if(PE_SLANGC_DIR)
+        if(WIN32)
+            set(PE_SLANGC_NAME slangc.exe)
+            set(PE_SLANG_LIBRARY_NAMES slang.dll slang-compiler.dll slang-glslang.dll slang-glsl-module.dll slang-rt.dll)
+        else()
+            set(PE_SLANGC_NAME slangc)
+            set(PE_SLANG_LIBRARY_NAMES libslang.so libslang-compiler.so libslang-glslang.so libslang-glsl-module.so libslang-rt.so)
+        endif()
+
+        set(PE_SLANG_RUNTIME_FILES)
+        if(EXISTS "${PE_SLANGC_DIR}/${PE_SLANGC_NAME}")
+            list(APPEND PE_SLANG_RUNTIME_FILES "${PE_SLANGC_DIR}/${PE_SLANGC_NAME}")
+            install(PROGRAMS "${PE_SLANGC_DIR}/${PE_SLANGC_NAME}" DESTINATION "."
+                COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}")
+        endif()
+
+        set(PE_SLANG_RUNTIME_LIBRARIES)
+        foreach(PE_SLANG_LIBRARY IN LISTS PE_SLANG_LIBRARY_NAMES)
+            if(EXISTS "${PE_SLANGC_DIR}/${PE_SLANG_LIBRARY}")
+                list(APPEND PE_SLANG_RUNTIME_LIBRARIES "${PE_SLANGC_DIR}/${PE_SLANG_LIBRARY}")
+            elseif(NOT WIN32 AND EXISTS "${PE_SLANGC_DIR}/../lib/${PE_SLANG_LIBRARY}")
+                list(APPEND PE_SLANG_RUNTIME_LIBRARIES "${PE_SLANGC_DIR}/../lib/${PE_SLANG_LIBRARY}")
+            endif()
+        endforeach()
+
+        if(PE_SLANG_RUNTIME_LIBRARIES)
+            list(APPEND PE_SLANG_RUNTIME_FILES ${PE_SLANG_RUNTIME_LIBRARIES})
+            install(FILES ${PE_SLANG_RUNTIME_LIBRARIES} DESTINATION "."
+                COMPONENT "${PHASMA_RUNTIME_INSTALL_COMPONENT}")
+        endif()
+
+        if(PE_SLANG_RUNTIME_FILES)
+            add_custom_command(TARGET PhasmaCore POST_BUILD
+                COMMAND ${CMAKE_COMMAND} -E copy_if_different ${PE_SLANG_RUNTIME_FILES} "$<TARGET_FILE_DIR:PhasmaCore>"
+                VERBATIM)
+        endif()
+    else()
+        message(STATUS "A bare PE_SLANGC_PATH ships no Slang files; installs and exports need slangc on PATH")
+    endif()
 endif()
 if(PE_SLANG_VALIDATION AND NOT (PE_ENABLE_RUNTIME_SHADER_COMPILER AND PE_HAS_DXC))
     message(WARNING "PE_SLANG_VALIDATION needs PE_ENABLE_RUNTIME_SHADER_COMPILER and DXC; Slang validation is off")

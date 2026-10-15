@@ -113,6 +113,8 @@ namespace pe
         bool depthClipControl = false;
         bool depthClamp = false;
         bool geometryShader = false;
+        bool fragmentBarycentric = false;    // enabled: GetAttributeAtVertex (VK_KHR_fragment_shader_barycentric / D3D12 OPTIONS3)
+        bool computeDerivativeQuads = false; // enabled: [DerivativeGroupQuad] compute (VK_KHR_compute_shader_derivatives / SM 6.6)
     };
 
     struct SystemProcMem

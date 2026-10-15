@@ -197,6 +197,11 @@ namespace pe
         void SetTexture(TextureType slot, ResourceHandle<Image> img);
         void SetTextureMask(uint32_t mask);
 
+        // OpenPBR via MaterialX (desktop, setting openpbr): this mesh is shaded by the default OpenPBR module from the
+        // params keyed by OpenPBR input name (see OpenPBRMaterial.h). Not persisted until Phase 3.
+        void SetOpenPBR(bool enabled);
+        bool GetOpenPBR() const { return m_openpbr; }
+
         // Clear a specific override so it falls through to parent
         void ClearBaseColorOverride();
         void ClearMetallicOverride();
@@ -298,6 +303,7 @@ namespace pe
         std::optional<vec3> m_attenuationColorOverride;
         std::optional<RenderType> m_renderTypeOverride;
         std::optional<uint32_t> m_textureMaskOverride;
+        bool m_openpbr = false;
 
         ResourceHandle<Image> m_textureOverrides[5];
         bool m_hasTextureOverride[5] = {};

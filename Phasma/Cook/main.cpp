@@ -24,6 +24,10 @@
 #include "Scene/ModelAssetAssimp.h"
 #include "Scene/ModelAssetCooked.h"
 
+#ifdef PE_MATERIALX
+#include "MaterialX/MaterialXGen.h"
+#endif
+
 #if defined(_WIN32)
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
@@ -259,6 +263,19 @@ int main(int argc, char *argv[])
         LocalFree(wargv);
     }
 
+#ifdef PE_MATERIALX
+    if (args.size() >= 4 && args[1] == L"--mtlx")
+    {
+        std::string error;
+        if (!pe::GenerateMaterialXSlang(std::filesystem::path(args[2]), std::filesystem::path(args[3]), error))
+        {
+            std::fprintf(stderr, "[Cook] MaterialX generation failed: %s\n", error.c_str());
+            return 1;
+        }
+        return 0;
+    }
+#endif
+
     if (args.size() >= 3 && args[1] == L"--batch")
         return RunBatch(std::filesystem::path(args[2]), args.size() > 3 && args[3] == L"--clusters");
     if (args.size() >= 3)
@@ -266,6 +283,20 @@ int main(int argc, char *argv[])
     return pe::RunCookUI();
 #else
     // POSIX argv is UTF-8; build paths from char8_t so they are not re-decoded as a narrow locale.
+#ifdef PE_MATERIALX
+    if (argc >= 4 && std::strcmp(argv[1], "--mtlx") == 0)
+    {
+        std::string error;
+        if (!pe::GenerateMaterialXSlang(std::filesystem::path(reinterpret_cast<const char8_t *>(argv[2])),
+                                        std::filesystem::path(reinterpret_cast<const char8_t *>(argv[3])), error))
+        {
+            std::fprintf(stderr, "[Cook] MaterialX generation failed: %s\n", error.c_str());
+            return 1;
+        }
+        return 0;
+    }
+#endif
+
     if (argc >= 3 && std::strcmp(argv[1], "--batch") == 0)
         return RunBatch(std::filesystem::path(reinterpret_cast<const char8_t *>(argv[2])), argc > 3 && std::strcmp(argv[3], "--clusters") == 0);
     if (argc >= 3)

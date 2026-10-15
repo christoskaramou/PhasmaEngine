@@ -64,6 +64,45 @@ target_link_libraries(PhasmaCook PRIVATE
     SDL2
     SDL2main
 )
+
+if(TARGET MaterialXGenSlang)
+    target_link_libraries(PhasmaCook PRIVATE MaterialXGenSlang MaterialXFormat)
+    target_compile_definitions(PhasmaCook PRIVATE PE_MATERIALX)
+    target_sources(PhasmaCook PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code/MaterialX/MaterialXGen.cpp"
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code/MaterialX/PeSurfaceNodeSlang.cpp")
+
+    # Generation reads MaterialX's library data (<exe>/MaterialX/libraries) and PE's overrides at cook time.
+    add_custom_command(TARGET PhasmaCook POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${PE_MATERIALX_LIBRARIES_DIR}"
+                "$<TARGET_FILE_DIR:PhasmaCook>/MaterialX/libraries"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/Phasma/Runtime/RuntimeAssets/MaterialX/pe_overrides"
+                "$<TARGET_FILE_DIR:PhasmaCook>/MaterialX/pe_overrides")
+
+    # PE's default OpenPBR module (every untextured OpenPBR material shares it), generated into the runtime assets
+    # on every change. The overrides are copied first so a changed override regenerates with itself.
+    file(GLOB_RECURSE PE_MATERIALX_OVERRIDE_FILES CONFIGURE_DEPENDS "${CMAKE_SOURCE_DIR}/Phasma/Runtime/RuntimeAssets/MaterialX/*")
+    set(PE_OPENPBR_GENERATED_DIR "${PHASMA_CONFIG_OUTPUT_DIR}/RuntimeAssets/Shaders/MaterialX/Generated")
+
+    add_custom_command(
+        OUTPUT "${PE_OPENPBR_GENERATED_DIR}/PeOpenPBRDefault.slang"
+               "${PE_OPENPBR_GENERATED_DIR}/PeOpenPBRDefault.json"
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+                "${CMAKE_SOURCE_DIR}/Phasma/Runtime/RuntimeAssets/MaterialX/pe_overrides"
+                "$<TARGET_FILE_DIR:PhasmaCook>/MaterialX/pe_overrides"
+        COMMAND "$<TARGET_FILE:PhasmaCook>" --mtlx
+                "${CMAKE_SOURCE_DIR}/Phasma/Runtime/RuntimeAssets/MaterialX/pe_default_openpbr.mtlx"
+                "${PE_OPENPBR_GENERATED_DIR}"
+        DEPENDS PhasmaCook ${PE_MATERIALX_OVERRIDE_FILES}
+        COMMENT "[Phasma] Generating the default OpenPBR module (PhasmaCook --mtlx)"
+        VERBATIM)
+
+    add_custom_target(PeOpenPBRDefaultModule ALL DEPENDS "${PE_OPENPBR_GENERATED_DIR}/PeOpenPBRDefault.slang")
+    add_dependencies(PeOpenPBRDefaultModule PhasmaRuntimeAssets)
+endif()
+
 pe_link_project_native(PhasmaCook)
 if(TARGET assimp)
     target_link_libraries(PhasmaCook PRIVATE assimp)

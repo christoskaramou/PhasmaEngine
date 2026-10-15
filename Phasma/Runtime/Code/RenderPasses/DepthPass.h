@@ -9,6 +9,7 @@ namespace pe
     class CommandBuffer;
     class PassInfo;
     class Scene;
+    struct BlendState;
 
     struct PushConstants_DepthPass
     {
@@ -42,7 +43,11 @@ namespace pe
         std::shared_ptr<PassInfo> m_passInfoDS;
 
         Image *m_depthStencil;
+        Image *m_visibility = nullptr;
         Scene *m_scene = nullptr;
         uint64_t m_lastGeometryVersion = 0;
     };
+
+    // Integer visibility attachments overwrite; write=false preserves the prepass payload in the G-buffer.
+    BlendState VisibilityBlendState(bool write);
 } // namespace pe

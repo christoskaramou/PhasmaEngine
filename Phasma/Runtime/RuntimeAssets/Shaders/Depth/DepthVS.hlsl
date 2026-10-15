@@ -12,6 +12,20 @@
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
 
+#if defined(VISIBILITY) && defined(PE_DX12)
+struct DrawIndexedIndirectCommand
+{
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+
+// Set 0 keeps this away from DepthPS's unbounded textures[] table in set 1.
+[[vk::binding(2, 0)]] StructuredBuffer<DrawIndexedIndirectCommand> IndirectAll;
+#endif
+
 static const uint MATRIX_SIZE = 64u;
 static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u + 16u; // +16B: NodeGpuData render-visible/flags tail
 
@@ -64,6 +78,19 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
     output.position = ApplyViewportYConvention(positionCS);
     output.uv = input.uv;
     output.alphaFactor = constants[id].baseColorAlpha;
+
+#ifdef VISIBILITY
+    // Vulkan's VertexIndex includes the base vertex; D3D12's SV_VertexID does not.
+#ifdef PE_DX12
+    output.vertexId = input.vertexId + uint(IndirectAll[id].vertexOffset);
+#else
+    output.vertexId = input.vertexId;
+#endif
+    // Vertices skinned above, and animated sprites, keep the raster path until Phase 4 pre-skins them. Same test as the
+    // skinning branch: static meshes cooked before boneless meshes got zero weights carry weight 1.
+    const float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
+    output.visEligible = (spriteFrameBlend || (pc.jointsCount > 0 && weightSum > 0.0)) ? 0u : 1u;
+#endif
 
     return output;
 }

@@ -23,6 +23,27 @@ namespace pe
 {
     namespace
     {
+        const std::filesystem::path &SlangCompilerPath()
+        {
+            static const std::filesystem::path path = []
+            {
+                std::filesystem::path compiler = PathFromUtf8(Path::ExecutablePath()) /
+#if defined(PE_WIN32)
+                                                 "slangc.exe";
+#else
+                                                 "slangc";
+#endif
+
+                std::error_code ec;
+                if (!std::filesystem::exists(compiler, ec))
+                    compiler = PathFromUtf8(PE_SLANGC_PATH);
+
+                PE_INFO("[Shader] slangc: %s", PathUtf8(compiler).c_str());
+                return compiler;
+            }();
+            return path;
+        }
+
         const char *SlangStageName(PeShaderStageFlags stage)
         {
             switch (stage)
@@ -480,10 +501,11 @@ namespace pe
         ProcessOptions options{};
         options.captureOutput = true;
         options.timeoutMs = 120000;
-        const ProcessResult result = RunProcess(PathFromUtf8(PE_SLANGC_PATH), args, options);
+        const std::filesystem::path &compiler = SlangCompilerPath();
+        const ProcessResult result = RunProcess(compiler, args, options);
         if (!result.started)
         {
-            log = std::string("could not start slangc at '") + PE_SLANGC_PATH + "' (set the PE_SLANGC_PATH CMake cache variable)";
+            log = std::string("could not start slangc at '") + PathUtf8(compiler) + "' (set the PE_SLANGC_PATH CMake cache variable)";
             return SlangCompileStatus::NotStarted;
         }
         std::error_code ec;

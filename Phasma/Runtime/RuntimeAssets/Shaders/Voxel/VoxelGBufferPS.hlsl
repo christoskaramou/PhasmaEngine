@@ -60,6 +60,9 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Voxel input)
     // the opaque voxel draw (unchanged) and non-zero for the transparent (water) draw, matching the stock
     // GBuffer PS so LightTransparent composites voxel water exactly like standard transparent meshes.
     output.transparency = pc.passType ? 1.0f : 0.0f;
+#ifdef GBUFFER_VISIBILITY
+    output.visibility = uint4(0, 0, 0, 0); // clear the prepass payload where this surface wins depth
+#endif
 
 #ifndef GBUFFER_NO_VELOCITY
     // Velocity (matches stock GBuffer PS).

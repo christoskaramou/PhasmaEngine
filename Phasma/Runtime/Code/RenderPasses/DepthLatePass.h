@@ -42,6 +42,7 @@ namespace pe
         std::shared_ptr<PassInfo> m_passInfoDS;
 
         Image *m_depthStencil = nullptr;
+        Image *m_visibility = nullptr;
         Scene *m_scene = nullptr;
         uint64_t m_lastGeometryVersion = 0;
     };

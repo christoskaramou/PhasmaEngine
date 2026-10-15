@@ -263,6 +263,11 @@ namespace pe
         return s_compiler;
     }
 
+    bool Shader::UsesSlang(const std::string &sourcePath)
+    {
+        return GetCompiler() == ShaderCompiler::Slang || std::filesystem::path(sourcePath).extension() == ".slang";
+    }
+
     void Shader::AddGlobalDefine(const std::string &name, const std::string &value)
     {
         for (auto &def : m_globalDefines)

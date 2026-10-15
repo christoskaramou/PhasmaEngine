@@ -306,6 +306,61 @@ namespace pe
             if (!barriers.empty())
                 cmd->BufferBarriers(barriers);
         }
+
+        // LightingPS's compile-time configuration, shared by the opaque lighting pass and material pass 2.
+        std::vector<Define> LightingDefines()
+        {
+            return {Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<SceneSettings>().num_cascades)},
+                    Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<SceneSettings>().shadow_map_size)},
+                    Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<SceneSettings>().shadow_map_size)},
+                    Define{"FORWARD_PLUS_TILE_SIZE", std::to_string(ForwardPlusLightCullingPass::TileSize)},
+                    Define{"FORWARD_PLUS_MAX_LIGHTS_PER_TILE", std::to_string(ForwardPlusLightCullingPass::MaxLightsPerTile)}};
+        }
+
+        // PushConstants_Lighting by dword index (Structures.hlsl), shared by the opaque lighting pass and pass 2.
+        void SetLightingPushConstants(CommandBuffer *cmd, Image *viewport, uint32_t passType)
+        {
+            const auto &gSettings = Settings::Get<SceneSettings>();
+            const uint32_t shadowmapCascades = gSettings.num_cascades;
+            ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+            const bool shadowsAvailable = ShadowsActive(shadows);
+            Scene &scene = *GetActiveScene();
+
+            cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
+            cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
+            cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
+            cmd->SetConstantAt(3, 0u);                                      // padding
+            cmd->SetConstantAt(4, viewport->GetWidth_f());                  // framebuffer width
+            cmd->SetConstantAt(5, viewport->GetHeight_f());                 // framebuffer height
+            cmd->SetConstantAt(6, passType);                                // is transparent pass
+
+            for (uint32_t i = 0; i < shadowmapCascades; i++)
+            {
+                // shadowmap cascade distances
+                cmd->SetConstantAt(i + 8, shadowsAvailable ? shadows.GetCascadeViewZ(i) : 0.0f);
+            }
+
+            for (uint32_t i = 0; i < shadowmapCascades; i++)
+            {
+                // cascade world-space texel sizes
+                cmd->SetConstantAt(i + 12, shadowsAvailable ? shadows.GetCascadeTexelSizeWorld(i) : 0.0f);
+            }
+
+            cmd->SetConstantAt(16, gSettings.shadow_distance);
+            cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
+            cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
+            cmd->SetConstantAt(19, gSettings.shadow_filter_radius);
+            cmd->SetConstantAt(20, static_cast<uint32_t>(std::clamp(gSettings.shadow_debug_mode, 0, 2)));
+        }
+
+        std::string DefinesKey(const std::vector<Define> &defines)
+        {
+            std::string key;
+            for (const Define &define : defines)
+                key += define.name + "=" + define.value + ";";
+
+            return key;
+        }
     } // namespace
 
     void LightOpaquePass::Init()
@@ -339,12 +394,7 @@ namespace pe
 
     void LightOpaquePass::UpdatePassInfo()
     {
-        const std::vector<Define> definesFrag{
-            Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<SceneSettings>().num_cascades)},
-            Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<SceneSettings>().shadow_map_size)},
-            Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<SceneSettings>().shadow_map_size)},
-            Define{"FORWARD_PLUS_TILE_SIZE", std::to_string(ForwardPlusLightCullingPass::TileSize)},
-            Define{"FORWARD_PLUS_MAX_LIGHTS_PER_TILE", std::to_string(ForwardPlusLightCullingPass::MaxLightsPerTile)}};
+        const std::vector<Define> definesFrag = LightingDefines();
 
         // Opaque light pass
         m_passInfo->name = "lighting_opaque_pipeline";
@@ -527,33 +577,9 @@ namespace pe
 
     void LightOpaquePass::ExecutePass(CommandBuffer *cmd)
     {
-        uint32_t shadowmapCascades = Settings::Get<SceneSettings>().num_cascades;
-        const auto &gSettings = Settings::Get<SceneSettings>();
-        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
-        const bool shadowsAvailable = ShadowsActive(shadows);
-
-        Scene &scene = *GetActiveScene();
         const uint32_t frame = RHII.GetFrameIndex();
         AddForwardPlusReadBarriers(cmd, frame);
-
-        cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
-        cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
-        cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
-        cmd->SetConstantAt(3, 0u);                                      // padding
-        cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());              // framebuffer width
-        cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
-        cmd->SetConstantAt(6, 0u);                                      // is transparent pass
-        for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 8,
-                               shadowsAvailable ? shadows.GetCascadeViewZ(i) : 0.0f); // shadowmap cascade distances
-        for (uint32_t i = 0; i < shadowmapCascades; i++)
-            cmd->SetConstantAt(i + 12,
-                               shadowsAvailable ? shadows.GetCascadeTexelSizeWorld(i) : 0.0f); // cascade world-space texel sizes
-        cmd->SetConstantAt(16, gSettings.shadow_distance);
-        cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
-        cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
-        cmd->SetConstantAt(19, gSettings.shadow_filter_radius);
-        cmd->SetConstantAt(20, static_cast<uint32_t>(std::clamp(gSettings.shadow_debug_mode, 0, 2)));
+        SetLightingPushConstants(cmd, m_viewportRT, 0u);
 
         cmd->BeginPass(1, m_attachments.data(), "LightOpaquePass");
         cmd->BindPipeline(*m_passInfo);
@@ -844,5 +870,247 @@ namespace pe
                                             m_shadowFallbackSampler,
                                             m_shadowFallbackViews);
         DestroyForwardPlusFallbackResources(m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
+    }
+
+    void MaterialShadePass::Init()
+    {
+        SceneRendererHost *rs = &RequireActiveSceneRendererHost();
+        m_viewportRT = rs->GetRenderTarget("viewport");
+        m_visibility = rs->GetRenderTarget("visibility");
+        m_albedoRT = rs->GetRenderTarget("albedo");
+        m_boundFrames.assign(RHII.GetSwapchainImageCount(), false);
+    }
+
+    std::vector<Define> MaterialShadePass::Defines() const
+    {
+        std::vector<Define> defines = LightingDefines();
+        defines.push_back(Define{"PE_OPENPBR_SHADE", "1"});
+        if (m_viewportRT && m_viewportRT->GetFormat() == PE_FORMAT_R8G8B8A8_UNORM)
+            defines.push_back(Define{"PE_VIEWPORT_RGBA8", "1"});
+
+        return defines;
+    }
+
+    void MaterialShadePass::UpdatePassInfo()
+    {
+        const std::vector<Define> defines = Defines();
+        m_builtDefines = DefinesKey(defines);
+
+        m_passInfo->name = "MaterialShade_pipeline";
+        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/MaterialX/MaterialShade.slang",
+                                                  .entryPoint = "mainCS",
+                                                  .stage = PE_SHADER_STAGE_COMPUTE,
+                                                  .defines = defines});
+        m_passInfo->Update();
+    }
+
+    void MaterialShadePass::BindFrame(uint32_t frame)
+    {
+        if (frame >= m_boundFrames.size())
+            return;
+
+        m_boundFrames[frame] = false;
+
+        EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                           m_shadowFallbackTexture,
+                                           m_shadowFallbackSampler,
+                                           m_shadowFallbackViews,
+                                           "MaterialShade");
+
+        auto *opaque = GetGlobalComponent<LightOpaquePass>();
+        Scene *scene = GetActiveScene();
+        if (!opaque ||
+            !scene ||
+            frame >= opaque->m_uniforms.size() ||
+            !opaque->m_uniforms[frame] ||
+            !m_visibility ||
+            !m_viewportRT ||
+            frame >= m_shadowFallbackUniforms.size() ||
+            !scene->GetBuffer() ||
+            !scene->GetMaterialByteBuffer())
+        {
+            return;
+        }
+
+        SceneRendererHost &renderer = RequireActiveSceneRendererHost();
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        const bool useShadowResources = ShadowsActive(shadows);
+        const std::vector<ImageView *> shadowViews = useShadowResources ? GetLiveShadowViews(shadows) : m_shadowFallbackViews;
+        Sampler *shadowSampler = useShadowResources ? shadows.GetSampler() : m_shadowFallbackSampler;
+        Image *ssao = renderer.GetRenderTarget("ssao");
+        Image *radiance = renderer.GetSkyBox().GetOpenPBRRadiance();
+        Image *irradiance = renderer.GetSkyBox().GetOpenPBRIrradiance();
+        if (!radiance || !irradiance)
+            return;
+
+        auto image = [](Descriptor *set, uint32_t binding, Image *img)
+        {
+            if (img && set->HasBinding(binding))
+                set->SetImageView(binding, img->GetSRV(), img->GetSampler());
+        };
+        auto buffer = [](Descriptor *set, uint32_t binding, Buffer *b)
+        {
+            if (b && set->HasBinding(binding))
+                set->SetBuffer(binding, b);
+        };
+
+        const auto &sets = m_passInfo->GetDescriptors(frame);
+
+        Descriptor *set0 = sets[0];
+        buffer(set0, 4, scene->GetLightUniform(frame));
+        image(set0, 5, ssao ? ssao : m_albedoRT);
+        buffer(set0, 7, opaque->m_uniforms[frame]); // PassUBO: the opaque pass's per-frame LightPassUBO
+        image(set0, 9, renderer.GetIBL_LUT());
+        buffer(set0, 10, scene->GetLightStorage(frame));
+
+        if (set0->HasBinding(14))
+            set0->SetImageView(14, m_visibility->GetSRV());
+        buffer(set0, 15, scene->GetBuffer());
+        buffer(set0, 16, scene->GetUniforms(frame));
+        buffer(set0, 17, scene->GetMeshConstants());
+        buffer(set0, 18, scene->GetMaterialByteBuffer());
+        if (set0->HasBinding(19))
+            set0->SetImageView(19, m_viewportRT->GetUAV(0));
+        set0->Update();
+
+        if (sets.size() > 1)
+        {
+            Descriptor *set1 = sets[1];
+            buffer(set1, 0, useShadowResources ? shadows.GetUniform(frame) : m_shadowFallbackUniforms[frame]);
+            if (set1->HasBinding(1))
+                set1->SetImageViews(1, shadowViews, {});
+            if (set1->HasBinding(2))
+                set1->SetSampler(2, shadowSampler);
+            set1->Update();
+        }
+
+        if (sets.size() > 2)
+        {
+            Image *cube = renderer.GetSkyBox().GetCubeMap();
+            image(sets[2], 0, cube);
+
+            if (sets[2]->HasBinding(3))
+                sets[2]->SetImageView(3, radiance->GetSRV());
+            if (sets[2]->HasBinding(4))
+                sets[2]->SetImageView(4, irradiance->GetSRV());
+            if (sets[2]->HasBinding(5))
+                sets[2]->SetSampler(5, radiance->GetSampler());
+
+            sets[2]->Update();
+        }
+
+        BindProbeLighting(*m_passInfo,
+                          opaque->m_uniforms[frame],
+                          frame,
+                          true,
+                          ActiveScreenIrradiance(frame),
+                          ActiveReflections(frame));
+
+        m_boundFrames[frame] = true;
+    }
+
+    void MaterialShadePass::UpdateDescriptorSets()
+    {
+        for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
+            BindFrame(i);
+    }
+
+    void MaterialShadePass::Update()
+    {
+        // Every frame, as the light storage, shadow and GI resources it shares with LightOpaque can be replaced.
+        BindFrame(RHII.GetFrameIndex());
+    }
+
+    void MaterialShadePass::DeclareInputs(RGBuilder &builder)
+    {
+        if (!m_visibility || !m_viewportRT)
+            return;
+
+        builder.ReadCompute(m_visibility);
+
+        Image *ssao = RequireActiveSceneRendererHost().GetRenderTarget("ssao");
+        if (ssao && ActivePostProcessProfile().ssao)
+            builder.ReadCompute(ssao);
+
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        if (ShadowsActive(shadows))
+        {
+            for (auto *tex : shadows.GetTextures())
+                builder.ReadCompute(tex);
+        }
+
+        auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+        Scene *scene = GetActiveScene();
+        if (Settings::Get<SceneSettings>().global_illumination &&
+            gi &&
+            scene &&
+            scene->GetTLAS() &&
+            gi->GetIrradianceHistory())
+        {
+            builder.ReadCompute(gi->GetIrradianceHistory());
+            builder.ReadCompute(gi->GetDistanceHistory());
+        }
+
+        if (Image *screen = ActiveScreenIrradiance(RHII.GetFrameIndex()))
+            builder.ReadCompute(screen);
+        if (Image *reflections = ActiveReflections(RHII.GetFrameIndex()))
+            builder.ReadCompute(reflections);
+
+        builder.WriteCompute(m_viewportRT); // keeps LightOpaque's result: only MaterialX pixels are written
+    }
+
+    void MaterialShadePass::DeclareOutputs(RGBuilder &builder)
+    {
+        if (m_viewportRT && m_visibility)
+            builder.OutputCustom(m_viewportRT, PE_IMAGE_LAYOUT_GENERAL, PE_STAGE_COMPUTE_SHADER, PE_ACCESS_SHADER_WRITE);
+    }
+
+    void MaterialShadePass::ExecutePass(CommandBuffer *cmd)
+    {
+        Scene *scene = GetActiveScene();
+        const uint32_t frame = RHII.GetFrameIndex();
+        if (!scene || !m_visibility || !m_viewportRT || frame >= m_boundFrames.size() || !m_boundFrames[frame])
+            return;
+
+        SetLightingPushConstants(cmd, m_viewportRT, 0u);
+        cmd->SetConstantAt(21, static_cast<uint32_t>(scene->GetVerticesOffset())); // vertices_offset (PE_OPENPBR_SHADE)
+        const int envSamples = std::clamp(Settings::Get<SceneSettings>().openpbr_env_samples, 1, 512);
+        cmd->SetConstantAt(22, static_cast<uint32_t>(envSamples));
+
+        cmd->BeginDebugRegion("MaterialShadePass");
+        cmd->BindPipeline(*m_passInfo);
+        cmd->PushConstants();
+        cmd->Dispatch((m_visibility->GetWidth() * 2u + 7u) / 8u, (m_visibility->GetHeight() * 2u + 7u) / 8u, 1);
+        cmd->EndDebugRegion();
+    }
+
+    void MaterialShadePass::Resize(uint32_t width, uint32_t height)
+    {
+        (void)width;
+        (void)height;
+        Init();
+
+        // HDR (viewport format) and the shadow settings change the shader: rebuild (only graphics passes are rebuilt for us).
+        if (m_passInfo->pCompShader && DefinesKey(Defines()) != m_builtDefines)
+        {
+            m_passInfo->DestroyShaders();
+            UpdatePassInfo();
+        }
+
+        UpdateDescriptorSets();
+    }
+
+    void MaterialShadePass::Destroy()
+    {
+        DestroyLightShadowFallbackResources(m_shadowFallbackUniforms,
+                                            m_shadowFallbackTexture,
+                                            m_shadowFallbackSampler,
+                                            m_shadowFallbackViews);
+
+        if (m_passInfo)
+            Shader::Destroy(m_passInfo->pCompShader);
+
+        m_viewportRT = m_visibility = m_albedoRT = nullptr;
+        m_boundFrames.clear();
     }
 } // namespace pe

@@ -191,7 +191,7 @@ namespace pe
         inputs.Combine(static_cast<size_t>(scene->GetGeometryVersion()));
         const auto &pp = ActivePostProcessProfile();
         for (float value : {pp.IBL ? 1.f : 0.f, pp.IBL_intensity * ActivePostProcessBlend().IBL,
-                            settings.shadows ? 1.f : 0.f, settings.use_Disney_PBR ? 1.f : 0.f})
+                            settings.shadows ? 1.f : 0.f, settings.use_Disney_PBR ? 1.f : 0.f, settings.openpbr ? 1.f : 0.f})
             inputs.Combine(value);
         const bool changed = static_cast<size_t>(inputs) != m_historyInputs;
         m_historyInputs = static_cast<size_t>(inputs);

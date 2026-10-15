@@ -409,6 +409,12 @@ namespace pe
         dirty = true;
     }
 
+    void MaterialInstance::SetOpenPBR(bool enabled)
+    {
+        m_openpbr = enabled;
+        dirty = true;
+    }
+
     void MaterialInstance::SetTexture(TextureType slot, ResourceHandle<Image> img)
     {
         int idx = static_cast<int>(slot);

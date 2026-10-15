@@ -160,6 +160,8 @@ namespace pe
         ui::ItemTooltip("Preserve bright lighting for tone mapping and scene bloom before the HUD. Uses more GPU memory; GI enables this automatically.");
         changed |= ImGui::Checkbox("Linear Color", &gs.linear_color);
         ui::ItemTooltip("Decode sRGB colour textures and colours before lighting and encode the image once at the end, as Unreal does. Forces HDR scene color and changes how the scene looks.");
+        changed |= ImGui::Checkbox("OpenPBR", &gs.openpbr);
+        changed |= ImGui::Checkbox("OpenPBR debug view", &gs.openpbr_debug);
         bool dynamicRendering = gs.dynamic_rendering;
         ImGui::BeginDisabled(!RHII.GetCaps().dynamicRendering);
         if (ImGui::Checkbox("Dynamic Rendering", &dynamicRendering))

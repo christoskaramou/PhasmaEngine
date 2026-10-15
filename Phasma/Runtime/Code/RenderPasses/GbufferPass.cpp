@@ -1,4 +1,5 @@
 #include "GbufferPass.h"
+#include "DepthPass.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -18,27 +19,36 @@ namespace pe
 {
     namespace
     {
-        void ApplyGBufferSurface(PassInfo &pi, const PassVariant &surface, bool writeVelocity)
+        void ApplyGBufferSurface(PassInfo &pi, const PassVariant &surface, bool writeVelocity, bool visibilityAttachment,
+                                 bool writeVisibility)
         {
             pi.Apply(surface);
-            if (writeVelocity)
-                return;
 
-            if (!surface.fragmentShader.empty() && pi.pFragShader)
+            const bool visibilityVariant = visibilityAttachment && writeVisibility;
+            if ((!writeVelocity || visibilityVariant) && !surface.fragmentShader.empty() && pi.pFragShader)
             {
                 ShaderDesc desc{};
                 desc.sourcePath = Path::ResolveAsset(surface.fragmentShader);
                 desc.entryPoint = "mainPS";
                 desc.stage = PE_SHADER_STAGE_FRAGMENT;
-                desc.defines = {{"GBUFFER_NO_VELOCITY", "1"}};
+
+                if (!writeVelocity)
+                    desc.defines.push_back({"GBUFFER_NO_VELOCITY", "1"});
+                if (visibilityVariant)
+                    desc.defines.push_back({"GBUFFER_VISIBILITY", "1"});
+
                 Shader *oldFrag = pi.pFragShader;
                 pi.pFragShader = Shader::Create(desc);
                 Shader::Destroy(oldFrag);
             }
 
             // .pass lists 6 color blends: n,a,srm,velocity,emissive,transparency → drop velocity.
-            if (pi.colorBlendAttachments.size() >= 6)
+            if (!writeVelocity && pi.colorBlendAttachments.size() >= 6)
                 pi.colorBlendAttachments.erase(pi.colorBlendAttachments.begin() + 3);
+
+            // Standard meshes preserve the prepass payload; terrain and voxels clear it where they win depth.
+            if (visibilityAttachment)
+                pi.colorBlendAttachments.push_back(VisibilityBlendState(writeVisibility));
         }
 
         void BuildGBufferAttachments(std::vector<Attachment> &attachments,
@@ -49,6 +59,7 @@ namespace pe
                                      Image *emissive,
                                      Image *transparency,
                                      Image *depth,
+                                     Image *visibility,
                                      PeLoadOp colorLoadOp)
         {
             attachments.clear();
@@ -68,6 +79,15 @@ namespace pe
             pushColor(emissive);
             pushColor(transparency);
 
+            if (visibility)
+            {
+                Attachment a{};
+                a.image = visibility;
+                a.loadOp = PE_LOAD_OP_LOAD; // the depth prepass wrote the payload
+                a.storeOp = PE_STORE_OP_STORE;
+                attachments.push_back(a);
+            }
+
             Attachment depthAtt{};
             depthAtt.image = depth;
             depthAtt.loadOp = PE_LOAD_OP_LOAD;
@@ -80,13 +100,16 @@ namespace pe
                                                          Image *srm,
                                                          Image *velocity,
                                                          Image *emissive,
-                                                         Image *transparency)
+                                                         Image *transparency,
+                                                         Image *visibility)
         {
             std::vector<::PeFormat> formats{normal->GetFormat(), albedo->GetFormat(), srm->GetFormat()};
             if (velocity)
                 formats.push_back(velocity->GetFormat());
             formats.push_back(emissive->GetFormat());
             formats.push_back(transparency->GetFormat());
+            if (visibility)
+                formats.push_back(visibility->GetFormat());
             return formats;
         }
     } // namespace
@@ -103,6 +126,7 @@ namespace pe
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_transparencyRT = rs->GetRenderTarget("transparency");
         m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
+        m_visibilityRT = SceneUsesOpenPBR() ? rs->GetRenderTarget("visibility") : nullptr;
 
         BuildGBufferAttachments(m_attachments,
                                 m_normalRT,
@@ -112,6 +136,7 @@ namespace pe
                                 m_emissiveRT,
                                 m_transparencyRT,
                                 m_depthStencilRT,
+                                m_visibilityRT,
                                 PE_LOAD_OP_CLEAR);
 
         if (!m_passInfoDS)
@@ -132,7 +157,7 @@ namespace pe
 
         const bool writeVelocity = m_velocityRT != nullptr;
         std::vector<::PeFormat> colorformats = BuildGBufferColorFormats(
-            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT, m_visibilityRT);
 
         ::PeFormat depthFormat = RHII.GetDepthFormat();
 
@@ -140,7 +165,7 @@ namespace pe
         PE_ERROR_IF(!surface, "standard_pbr.pass missing 'surface' variant");
 
         m_passInfo->name = "gbuffer_opaque_pipeline";
-        ApplyGBufferSurface(*m_passInfo, *surface, writeVelocity);
+        ApplyGBufferSurface(*m_passInfo, *surface, writeVelocity, m_visibilityRT != nullptr, false);
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
         m_passInfo->Update();
@@ -150,7 +175,7 @@ namespace pe
         m_passInfoDS->name = "gbuffer_opaque_ds_pipeline";
         try
         {
-            ApplyGBufferSurface(*m_passInfoDS, *surface, writeVelocity);
+            ApplyGBufferSurface(*m_passInfoDS, *surface, writeVelocity, m_visibilityRT != nullptr, false);
             m_passInfoDS->cullMode = PE_CULL_MODE_NONE;
             m_passInfoDS->colorFormats = colorformats;
             m_passInfoDS->depthFormat = depthFormat;
@@ -195,7 +220,7 @@ namespace pe
                     return;
                 }
                 pi->name = pipelineName;
-                ApplyGBufferSurface(*pi, *surf, writeVelocity);
+                ApplyGBufferSurface(*pi, *surf, writeVelocity, m_visibilityRT != nullptr, true);
                 pi->colorFormats = colorformats;
                 pi->depthFormat = depthFormat;
                 pi->Update();
@@ -484,7 +509,7 @@ namespace pe
     {
         Init();
         const std::vector<::PeFormat> colorFormats = BuildGBufferColorFormats(
-            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT, m_visibilityRT);
         if (m_passInfo && m_passInfo->colorFormats == colorFormats && m_passInfo->depthFormat == RHII.GetDepthFormat())
             return;
 
@@ -559,6 +584,7 @@ namespace pe
                                 m_emissiveRT,
                                 m_transparencyRT,
                                 m_depthStencilRT,
+                                nullptr,
                                 PE_LOAD_OP_LOAD);
 
         if (!m_voxelPassInfo)
@@ -574,7 +600,7 @@ namespace pe
 
         const bool writeVelocity = m_velocityRT != nullptr;
         std::vector<::PeFormat> colorformats = BuildGBufferColorFormats(
-            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT, nullptr);
 
         ::PeFormat depthFormat = RHII.GetDepthFormat();
 
@@ -582,7 +608,7 @@ namespace pe
         PE_ERROR_IF(!transparent, "standard_pbr.pass missing 'transparent' variant");
 
         m_passInfo->name = "gbuffer_transparent_pipeline";
-        ApplyGBufferSurface(*m_passInfo, *transparent, writeVelocity);
+        ApplyGBufferSurface(*m_passInfo, *transparent, writeVelocity, false, false);
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
         if (Settings::Get<SceneSettings>().reverse_depth)
@@ -616,7 +642,7 @@ namespace pe
             else
             {
                 m_voxelPassInfo->name = "gbuffer_voxel_transparent_pipeline";
-                ApplyGBufferSurface(*m_voxelPassInfo, *voxelTransparent, writeVelocity);
+                ApplyGBufferSurface(*m_voxelPassInfo, *voxelTransparent, writeVelocity, false, false);
                 m_voxelPassInfo->colorFormats = colorformats;
                 m_voxelPassInfo->depthFormat = depthFormat;
                 m_voxelPassInfo->Update();
@@ -811,7 +837,7 @@ namespace pe
     {
         Init();
         const std::vector<::PeFormat> colorFormats = BuildGBufferColorFormats(
-            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT);
+            m_normalRT, m_albedoRT, m_srmRT, m_velocityRT, m_emissiveRT, m_transparencyRT, nullptr);
         if (m_passInfo && m_passInfo->colorFormats == colorFormats && m_passInfo->depthFormat == RHII.GetDepthFormat())
             return;
 

@@ -69,6 +69,7 @@ namespace pe
         Image *m_viewportRT;
         Image *m_transparencyRT;
         Image *m_depthStencilRT;
+        Image *m_visibilityRT = nullptr;
 
         Scene *m_scene = nullptr;
         uint64_t m_lastGeometryVersion = 0;

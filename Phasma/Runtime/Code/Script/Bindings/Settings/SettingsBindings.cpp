@@ -32,6 +32,8 @@ namespace pe
         {"global_illumination", &SceneSettings::global_illumination},
         {"hdr", &SceneSettings::hdr},
         {"linear_color", &SceneSettings::linear_color},
+        {"openpbr", &SceneSettings::openpbr},
+        {"openpbr_debug", &SceneSettings::openpbr_debug},
         {"cluster_geometry", &SceneSettings::cluster_geometry},
         {"randomize_lights", &SceneSettings::randomize_lights},
         {"physical_point_falloff", &SceneSettings::physical_point_falloff},
@@ -99,6 +101,7 @@ namespace pe
     };
 
     static const std::unordered_map<std::string_view, int SceneSettings::*> s_intSettings = {
+        {"openpbr_env_samples", &SceneSettings::openpbr_env_samples},
         {"motion_blur_samples", &SceneSettings::motion_blur_samples},
         {"ssao_samples", &SceneSettings::ssao_samples},
         {"shadow_debug_mode", &SceneSettings::shadow_debug_mode},

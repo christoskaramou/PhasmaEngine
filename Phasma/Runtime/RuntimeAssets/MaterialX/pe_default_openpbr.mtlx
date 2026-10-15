@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<materialx version="1.39">
+  <!-- PhasmaEngine's default OpenPBR material: every input at its OpenPBR default and exposed as a uniform
+       (SHADER_INTERFACE_COMPLETE), so every untextured OpenPBR material shares this one generated module. -->
+  <open_pbr_surface name="pe_openpbr" type="surfaceshader" />
+  <surfacematerial name="PeOpenPBRDefault" type="material">
+    <input name="surfaceshader" type="surfaceshader" nodename="pe_openpbr" />
+  </surfacematerial>
+</materialx>

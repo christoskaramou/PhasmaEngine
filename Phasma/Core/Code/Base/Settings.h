@@ -157,7 +157,10 @@ namespace pe
         bool lod_enabled = true;
         bool global_illumination = false;
         bool hdr = false;
-        bool linear_color = false; // decode sRGB colour inputs, light in linear, encode once in Tonemap; forces HDR
+        bool linear_color = false;    // decode sRGB colour inputs, light in linear, encode once in Tonemap; forces HDR
+        bool openpbr = false;         // OpenPBR via MaterialX on the visibility buffer (desktop)
+        bool openpbr_debug = false;   // openpbr: write the visibility_debug reconstruction codes
+        int openpbr_env_samples = 32; // openpbr: filtered importance samples per specular lobe, clamped 1-512
         float gi_probe_spacing = 2.f;
         float gi_intensity = 1.f;
         float gi_hysteresis = 0.999f; // ceiling of the per-probe average; restarts on lighting changes

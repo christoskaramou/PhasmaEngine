@@ -92,6 +92,10 @@ struct PushConstants_Lighting
     float shadow_normal_bias;
     float shadow_filter_radius;
     uint shadow_debug_mode;
+#ifdef PE_OPENPBR_SHADE
+    uint vertices_offset; // material pass 2 only: Scene::GetVerticesOffset()
+    uint env_samples;     // dword 22: OpenPBR filtered importance samples
+#endif
 };
 #endif
 
@@ -167,6 +171,9 @@ struct VS_INPUT_Depth
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
     uint id : PE_DRAW_ID;
+#ifdef VISIBILITY
+    uint vertexId : SV_VertexID;
+#endif
 };
 
 struct VS_INPUT_Gbuffer
@@ -207,6 +214,10 @@ struct VS_OUTPUT_Position_Uv_ID
     nointerpolation uint id : TEXCOORD2;
     float2 nextUv : TEXCOORD3;
     float spriteBlend : TEXCOORD4;
+#ifdef VISIBILITY
+    nointerpolation uint vertexId : TEXCOORD5;
+    nointerpolation uint visEligible : TEXCOORD6;
+#endif
     float4 position : SV_POSITION;
 };
 
@@ -260,6 +271,10 @@ struct PS_INPUT_Position_Uv_ID
     nointerpolation uint id : TEXCOORD2;
     float2 nextUv : TEXCOORD3;
     float spriteBlend : TEXCOORD4;
+#ifdef VISIBILITY
+    nointerpolation uint vertexId : TEXCOORD5;
+    nointerpolation uint visEligible : TEXCOORD6;
+#endif
     float4 position : SV_POSITION;
 };
 
@@ -281,10 +296,16 @@ struct PS_OUTPUT_Gbuffer
 #ifdef GBUFFER_NO_VELOCITY
     float4 emissive : SV_TARGET3;
     float transparency : SV_TARGET4;
+#ifdef GBUFFER_VISIBILITY
+    uint4 visibility : SV_TARGET5;
+#endif
 #else
     float2 velocity : SV_TARGET3;
     float4 emissive : SV_TARGET4;
     float transparency : SV_TARGET5;
+#ifdef GBUFFER_VISIBILITY
+    uint4 visibility : SV_TARGET6;
+#endif
 #endif
 };
 
