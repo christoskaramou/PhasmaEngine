@@ -15,7 +15,8 @@ Python installed. The Player builder reuses this workspace's cached engine depen
 ./Phasma/GameDriver/run-tetris.ps1 -Policy local -Steps 50
 ```
 
-The launcher creates a private Player runtime and project under
+The launcher copies PRISM Tetris from the PhasmaProjects checkout beside the engine
+(`../PhasmaProjects/PrismTetris`) into a private Player runtime and project under
 `build-game-driver/tetris`, using port 8876. It leaves the window open after play.
 It reuses that Player on subsequent runs; close its window before rebuilding or
 refreshing copied game assets. Another occupied port causes a clear error; select
@@ -233,7 +234,7 @@ deterministic game checks:
 
 ```powershell
 python tools/tests/test_game_driver.py
-./build-ninja-physics/Release/luajit.exe Games/PrismTetris/tests/agent_test.lua
+./build-ninja-physics/Release/luajit.exe ../PhasmaProjects/PrismTetris/tests/agent_test.lua
 ```
 
 The GameKit check requires the existing Python `lupa` package and exercises the

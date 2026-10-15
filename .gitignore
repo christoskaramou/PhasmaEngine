@@ -17,9 +17,6 @@
 !/Phasma/Runtime/
 !/Phasma/WebGPU/
 !/Projects/
-!/Games/
-/Games/*
-!/Games/PrismTetris/
 !/Projects/**
 !/cmake/
 !/cmake/**

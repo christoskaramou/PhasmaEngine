@@ -63,6 +63,8 @@ $assets = Join-Path $runtime 'Assets'
 $player = Join-Path $runtime 'PhasmaPlayer.exe'
 $driver = Join-Path $build 'Release/PhasmaGameDriver.exe'
 $instancePath = Join-Path $runtime 'instance.json'
+# PRISM lives in the PhasmaProjects checkout beside the engine (as CMake finds PhasmaProjects/Sample).
+$prism = [IO.Path]::GetFullPath((Join-Path $repoRoot '../PhasmaProjects/PrismTetris'))
 
 if ($Policy -eq 'jev' -and -not $UseVault) {
     $configuredKey = if ($env:JEV_API_KEY) { $env:JEV_API_KEY } else { $env:TYPESAFE_API_KEY }
@@ -79,6 +81,10 @@ foreach ($required in @($driver, (Join-Path $source 'PhasmaPlayer.exe'), (Join-P
     if (-not (Test-Path -LiteralPath $required)) {
         throw "Missing $required. Run build.ps1 and build-player.ps1 first."
     }
+}
+
+if (-not (Test-Path -LiteralPath (Join-Path $prism 'Assets'))) {
+    throw "Missing PRISM Tetris: expected $prism (clone PhasmaProjects beside the engine)."
 }
 
 $running = $null
@@ -116,7 +122,7 @@ if (-not $running) {
     }
 
     foreach ($folder in @('Audio', 'Scenes', 'Scripts', 'Textures')) {
-        Copy-Item -LiteralPath (Join-Path $repoRoot "Games/PrismTetris/Assets/$folder") `
+        Copy-Item -LiteralPath (Join-Path $prism "Assets/$folder") `
             -Destination $assets -Recurse -Force
     }
 

@@ -2,11 +2,16 @@
 
 ## Native 2D Reference: PRISM Tetris
 
-Verified 2026-10-15: `Games/PrismTetris` is a self-contained native runtime-UI
-game, launched with `Games/PrismTetris/run.ps1`. It keeps pure Lua gameplay rules
+Verified 2026-10-15: `PrismTetris` is a self-contained native runtime-UI
+game, launched with `PrismTetris/run.ps1`. It keeps pure Lua gameplay rules
 separate from a retained UI view and the input/entry script. Its generated PNG
 art and PCM sounds are included; regeneration does not affect engine rendering.
-See `Games/PrismTetris/README.md` and `tests/{rules_test,entry_test}.lua`.
+See `PrismTetris/README.md` and `tests/{rules_test,entry_test}.lua`.
+
+Moved 2026-10-16 from the engine's `Games/PrismTetris` to the sibling PhasmaProjects repo
+(`../PhasmaProjects/PrismTetris`): its `run.ps1` finds the engine as `../../PhasmaEngine` and
+`Phasma/GameDriver/run-tetris.ps1` finds PRISM as `../PhasmaProjects/PrismTetris`, the same
+sibling layout CMake uses for `PhasmaProjects/Sample`. Paths to it below are relative to PhasmaProjects.
 
 Since 2026-10-15 the launcher copies the Release Player (not the editor) from
 `build-ninja-physics/Release` into `build-prism-tetris/player` with a private
@@ -20,7 +25,7 @@ an explicit `runtime_ui.show(screen)` (`Phasma/Runtime/Code/UI/RuntimeUi.h`,
 `RuntimeUiSystem::Screen`; `RuntimeUi.cpp`, `SetScreenVisible`/`BuildFrame`).
 The view scales a logical canvas to `runtime_ui.get_surface_size()` and avoids
 updating unchanged board widgets; pause/effects/resize behavior has a stubbed
-engine integration check in `Games/PrismTetris/tests/entry_test.lua`.
+engine integration check in `PrismTetris/tests/entry_test.lua`.
 
 Styled `set_quad(..., {style="button"})` controls are `WidgetType::Quad`.
 Read `runtime_ui.get_state(screen, id).clicked` for them; `consume_click`
@@ -192,7 +197,7 @@ camera and aurora on your board; `Stage:set_layout("versus")` centres on 0 and f
 terminal. `prism_jev.lua` starts `Bots/PhasmaGameDriver.exe` through `proc` (attach, no `--seed`, which
 would reset the game), reads step and re-decide lines (`input_tokens=` since then) for think time, calls
 and cost, ends the race with the driver's failure line, and stops a driver that has not exited 3 s after
-the race. Only your seat plays sounds; races never touch the solo best. `Games/PrismTetris/run.ps1` now
+the race. Only your seat plays sounds; races never touch the solo best. `PrismTetris/run.ps1` now
 runs a private Player copy (`build-prism-tetris/player`) with MCP on its port and the driver in
 `Assets/Bots`. Same day (user requests): MENU replaces PAUSE and holds SOLO, VS JEV and JEV KEY;
 the key panel runs the driver's `--key-status`, `--save-key-from-clipboard` and `--remove-key` (one
@@ -200,7 +205,7 @@ the key panel runs the driver's `--key-status`, `--save-key-from-clipboard` and 
 flashes, shake, sway or bloom pulse; the earlier 30% reduction read as no change.
 
 PRISM's 3D renderer (2026-10-15, spec `docs/superpowers/specs/2026-10-15-prism-showcase-design.md`):
-`Games/PrismTetris/Assets/Scripts/prism_stage.lua` (post settings, camera fitted to the HUD board
+`PrismTetris/Assets/Scripts/prism_stage.lua` (post settings, camera fitted to the HUD board
 cutout, key light, aurora wall), `prism_board3d.lua` (200 pooled crystal cubes per board, piece/ghost,
 sweeps, flash lights, bursts) and `prism_hud.lua` (runtime_ui over a transparent `hud.png`); headless
 coverage in `tests/render_test.lua` with `tests/engine3d_stubs.lua`. Findings verified live in the
