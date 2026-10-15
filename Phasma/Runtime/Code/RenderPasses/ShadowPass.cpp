@@ -359,7 +359,13 @@ namespace pe
 
             const uint32_t frame = RHII.GetFrameIndex();
             const auto &gSettings = Settings::Get<SceneSettings>();
-            const bool shadowCull = gSettings.frustum_culling && m_cullPassInfo && m_cullPassInfo->pCompShader;
+
+            // The cull also drops set_visible(false) casters, so it runs with frustum culling off too, against
+            // planes that keep everything (n = 0, d = 1).
+            const bool shadowCull = m_cullPassInfo && m_cullPassInfo->pCompShader;
+            std::array<vec4, 6> keepAll{};
+            keepAll.fill(vec4(0.f, 0.f, 0.f, 1.f));
+
             const uint32_t arenaBase = m_scene->GetArenaSlotBase();
             const bool hasVoxels = m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
                                    m_scene->GetVoxelIndexBuffer() && m_voxelPassInfo &&
@@ -372,7 +378,10 @@ namespace pe
             for (uint32_t i = 0; i < cascades; i++)
             {
                 if (shadowCull)
-                    m_scene->DispatchShadowCull(cmd, m_cullPassInfo.get(), m_cascadePlanes[i].data());
+                {
+                    const vec4 *planes = gSettings.frustum_culling ? m_cascadePlanes[i].data() : keepAll.data();
+                    m_scene->DispatchShadowCull(cmd, m_cullPassInfo.get(), planes);
+                }
 
                 pushConstants.vp = m_cascades[i];
 

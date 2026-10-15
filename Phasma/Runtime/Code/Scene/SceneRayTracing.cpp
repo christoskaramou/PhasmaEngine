@@ -216,6 +216,9 @@ namespace pe
                                         mesh.renderType == RenderType::Transmission ||
                                         mesh.renderType == RenderType::AlphaCut);
             const mat4 &t = m_nodeRuntime[record.nodeIndex].gpuData.worldMatrix;
+            // set_visible(false) keeps the instance (no rebuild); mask 0 makes every ray skip it.
+            const bool hidden = m_nodeRuntime[record.nodeIndex].gpuData.renderVisible == 0u;
+            const uint32_t mask = hidden ? 0x00u : (isTransparent ? 0x80u : 0x01u);
 
             if (vkInstances)
             {
@@ -223,7 +226,7 @@ namespace pe
                 FillVulkanTransform(transformMatrix, t);
                 vkInstances[i].transform = transformMatrix;
                 vkInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
-                vkInstances[i].mask = isTransparent ? 0x80 : 0x01;
+                vkInstances[i].mask = mask;
                 vkInstances[i].instanceShaderBindingTableRecordOffset = 0;
                 vkInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(
                     vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
@@ -234,7 +237,7 @@ namespace pe
             {
                 FillDx12Transform(dxInstances[i].Transform, t);
                 dxInstances[i].InstanceID = static_cast<UINT>(i);
-                dxInstances[i].InstanceMask = isTransparent ? 0x80 : 0x01;
+                dxInstances[i].InstanceMask = mask;
                 dxInstances[i].InstanceContributionToHitGroupIndex = 0;
                 dxInstances[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
                 dxInstances[i].AccelerationStructure = blasIt->second->GetDeviceAddress();
@@ -697,7 +700,7 @@ namespace pe
         if (!m_tlas || !m_scratchBuffer || m_rtInstances.empty())
             return;
 
-        if (m_nodesMoved.empty())
+        if (m_nodesMoved.empty() && !m_tlasMasksDirty)
             return;
 
         // The GI probe pass and the hybrid ray-tracing pass both call this each frame: refit once.
@@ -723,9 +726,10 @@ namespace pe
             if (anyRtNodeMoved)
                 break;
         }
-        if (!anyRtNodeMoved)
+        if (!anyRtNodeMoved && !m_tlasMasksDirty)
             return;
         m_tlasRefitFrame = RHII.GetFrameCounter();
+        m_tlasMasksDirty = false;
         m_giInputVersion++;
 
         const uint32_t frameCount = RHII.GetSwapchainImageCount();

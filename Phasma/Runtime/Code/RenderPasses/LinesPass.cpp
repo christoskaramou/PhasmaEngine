@@ -115,7 +115,7 @@ namespace pe
         {
             NodeId *node = scene->GetNodeId(i);
             const NodeRuntime &rt = scene->GetNodeRuntime(node);
-            if (rt.gpuPending)
+            if (rt.gpuPending || rt.gpuData.renderVisible == 0u)
                 continue;
 
             const auto &refs = scene->GetMeshRefs(node);
@@ -155,7 +155,7 @@ namespace pe
         {
             NodeId *node = scene->GetNodeId(i);
             const NodeRuntime &rt = scene->GetNodeRuntime(node);
-            if (rt.gpuPending)
+            if (rt.gpuPending || rt.gpuData.renderVisible == 0u)
                 continue;
 
             for (int meshIdx : scene->GetMeshRefs(node))

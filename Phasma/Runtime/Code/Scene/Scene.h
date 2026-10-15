@@ -187,8 +187,9 @@ namespace pe
         bool SubtreeHasMeshRefs(const NodeId *node) const; // node or any descendant has mesh refs
         // Cheap per-instance render visibility (a cull-flag in NodeGpuData honored by CullingCS),
         // distinct from hierarchy enable/disable: flips a flag re-uploaded via the per-frame
-        // dirtyUniforms path with NO RebuildRasterInstances / TLAS rebuild. Use for frequent
-        // show/hide (pooled props, LOD popping); set_enabled remains the structural path.
+        // dirtyUniforms path with NO RebuildRasterInstances / TLAS rebuild (ray tracing refits the
+        // TLAS instance masks instead). Use for frequent show/hide (pooled props, LOD popping);
+        // set_enabled remains the structural path.
         void SetNodeRenderVisible(NodeId *node, bool visible);
         bool IsNodeRenderVisible(const NodeId *node) const;
         // The off-screen animation cull (SceneSettings::cull_offscreen_animation), kept apart from the script's choice.
@@ -781,6 +782,7 @@ namespace pe
         // Node graph internals (SceneNode.cpp)
         void SwapAndPopNode(uint32_t index);
         void UpdateNodeMatrix(NodeId *node);
+        void UpdateRenderVisible(NodeRuntime &rt);
         void DestroyAllNodeEntities();
         void RetireAllNodeIds();
         void ForgetSingletonNode(const NodeId *node, uint32_t flags = ~0u);
@@ -1023,8 +1025,9 @@ namespace pe
         std::vector<int> m_pendingUvUploads;
 
         // RT dirty flags (independent of raster geometry)
-        bool m_blasDirty = false; // BLAS rebuild needed (geometry buffer was recreated)
-        bool m_tlasDirty = false; // TLAS rebuild needed (instance set changed)
+        bool m_blasDirty = false;      // BLAS rebuild needed (geometry buffer was recreated)
+        bool m_tlasDirty = false;      // TLAS rebuild needed (instance set changed)
+        bool m_tlasMasksDirty = false; // render visibility changed: refit the TLAS instance masks
 
         // --- Light data ---
         LightsUBO m_lightsUBO{};

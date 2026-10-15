@@ -1047,7 +1047,8 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
                 lighting += RT_ComputeAreaLight(k, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
         }
 
-        lighting += emissive;
+        if (!isTransmissive)
+            lighting += emissive;
     }
 
     // Transmission & Volume
@@ -1160,6 +1161,11 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         // already put their shadow rays at maxRecursionDepth (4).
         lighting = skybox.SampleLevel(material_sampler, WorldRayDirection(), 0).rgb * cb_iblIntensity;
     }
+
+    // Glass emits on top of what it transmits, once at its entry face, as LightingPS adds emissive after its
+    // transmission lerp. Mixed into the surface term above, a transmission factor of 1 cut the glow to the Fresnel weight.
+    if (isTransmissive && dot(WorldRayDirection(), normalWorld) <= 0.0)
+        lighting += emissive;
 
     payload.radiance = lighting;
     payload.t        = RayTCurrent();

@@ -530,8 +530,21 @@ namespace pe
         // existing per-frame dirtyUniforms path. CullingCS skips the draw when 0 — no
         // RebuildRasterInstances and no TLAS rebuild, unlike SetNodeEnabled.
         rt.hidden = !visible;
+        UpdateRenderVisible(rt);
+    }
+
+    void Scene::UpdateRenderVisible(NodeRuntime &rt)
+    {
         rt.gpuData.renderVisible = !rt.hidden && !rt.viewCulled ? 1u : 0u;
         rt.dirtyUniforms = 0xFF;
+
+        // Rays still reach the node's TLAS instances: WriteRTInstances masks hidden ones out on the next refit.
+        const bool ownsRtInstances = std::any_of(rt.rtInstanceIndices.begin(),
+                                                 rt.rtInstanceIndices.end(),
+                                                 [](int index)
+                                                 { return index >= 0; });
+        if (ownsRtInstances)
+            m_tlasMasksDirty = true;
     }
 
     bool Scene::IsNodeRenderVisible(const NodeId *node) const
@@ -550,8 +563,7 @@ namespace pe
             return;
         // CullingCS and ShadowCullCS both skip a node whose renderVisible is 0.
         rt.viewCulled = culled;
-        rt.gpuData.renderVisible = !rt.hidden && !rt.viewCulled ? 1u : 0u;
-        rt.dirtyUniforms = 0xFF;
+        UpdateRenderVisible(rt);
     }
 
     bool Scene::IsNodeViewCulled(const NodeId *node) const

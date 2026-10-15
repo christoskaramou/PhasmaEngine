@@ -4,18 +4,24 @@
 [[vk::binding(0, 0)]] RWStructuredBuffer<Particle> particles;
 [[vk::binding(1, 0)]] StructuredBuffer<ParticleEmitter> emitters;
 
-// Random number generator
-float rand(inout float2 seed)
+// PCG hash (Jarzynski & Olano 2020): integer state, so the stream stays uniform however large totalTime grows.
+uint Hash(uint value)
 {
-    seed += float2(-0.6, 0.4);
-    return frac(sin(dot(seed, float2(12.9898, 78.233))) * 43758.5453);
+    uint state = value * 747796405u + 2891336453u;
+    uint word = ((state >> ((state >> 28u) + 4u)) ^ state) * 277803737u;
+    return (word >> 22u) ^ word;
+}
+
+// Random number in [0, 1)
+float rand(inout uint seed)
+{
+    seed = Hash(seed);
+    return float(seed >> 8) * (1.0 / 16777216.0);
 }
 
 // Reset particle
-void Reset(inout Particle p, uint index, ParticleEmitter emitter, uint emitterIndex)
+void Reset(inout Particle p, inout uint seed, ParticleEmitter emitter, uint emitterIndex)
 {
-    float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
-    
     // --- 1. Position ---
     float3 center = emitter.position.xyz;
     float spawnRadius = emitter.physics.y;
@@ -104,15 +110,16 @@ void mainCS(uint3 DTid : SV_DispatchThreadID)
     
     if (currentLife <= 0.0)
     {
-        // Respawn check
-        float2 seed = float2(index * 1.37, pc.totalTime * (index + 1));
-        
+        // Respawn check. Reset continues this stream: restarting it made theta repeat the spawn draw, which
+        // only passes below spawnRate * dt, and flattened every emitter's spawn sphere into a disc.
+        uint seed = Hash(index + Hash(asuint(pc.totalTime)));
+
         bool shouldSpawn = oneShot ? abs(particles[index].extra.w - emitter.position.w) > 0.5
                                    : rand(seed) < saturate(spawnRate * pc.deltaTime);
 
         if (shouldSpawn)
         {
-            Reset(particles[index], index, emitter, emitterIndex);
+            Reset(particles[index], seed, emitter, emitterIndex);
         }
         else
         {
