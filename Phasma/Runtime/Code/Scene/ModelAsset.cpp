@@ -3,6 +3,7 @@
 #include "API/RHI.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAssetCooked.h"
+#include "Scene/OpenPBRMaterial.h"
 #if defined(PE_ENABLE_ASSIMP)
 #include "Scene/ModelAssetAssimp.h"
 #endif
@@ -19,6 +20,33 @@ namespace pe
     ModelAsset::~ModelAsset()
     {
         Unload();
+    }
+
+    bool ModelAsset::WriteMaterialDocuments(const std::filesystem::path &file,
+                                            std::vector<std::pair<std::string, std::string>> &references) const
+    {
+        references.resize(m_materials.size());
+        for (size_t i = 0; i < m_materials.size(); ++i)
+        {
+            if (!m_materials[i])
+                continue;
+
+            const auto &source = m_materials[i]->openpbrSource;
+            if (!source || source->path.empty())
+                continue;
+
+            const auto document = std::filesystem::u8path(source->path);
+            const auto relative = document.lexically_relative(std::filesystem::absolute(file).parent_path());
+            if (relative.empty() || relative.is_absolute() || *relative.begin() == "..")
+            {
+                PE_WARN("[OpenPBR] Re-cook the source model to relocate its material documents: %s", source->path.c_str());
+                return false;
+            }
+
+            const auto u8 = relative.generic_u8string();
+            references[i] = {std::string(reinterpret_cast<const char *>(u8.data()), u8.size()), source->material};
+        }
+        return true;
     }
 
     void ModelAsset::Unload()

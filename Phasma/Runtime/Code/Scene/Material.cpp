@@ -129,6 +129,7 @@ namespace pe
         combine(static_cast<size_t>(renderType));
         combine(static_cast<size_t>(textureMask));
         combine(static_cast<size_t>(doubleSided));
+        combine(std::hash<const void *>{}(openpbrSource.get()));
 
         for (int i = 0; i < 5; i++)
             combine(std::hash<void *>{}(static_cast<void *>(textures[i].get())));
@@ -138,6 +139,9 @@ namespace pe
 
     bool Material::Equals(const Material &other) const
     {
+        if (openpbrSource != other.openpbrSource)
+            return false;
+
         if (renderType != other.renderType)
             return false;
         if (textureMask != other.textureMask)
@@ -258,6 +262,12 @@ namespace pe
     MaterialInstance::MaterialInstance(Material *parent)
         : m_parent(parent)
     {
+        if (parent && parent->openpbrSource)
+        {
+            // An absent scene OpenPBR state stays legacy; scene enrollment or explicit assignment enables the source.
+            m_openpbrSource = parent->openpbrSource;
+            MirrorOpenPBRToLegacy(*this);
+        }
     }
 
     template <typename T, typename U>

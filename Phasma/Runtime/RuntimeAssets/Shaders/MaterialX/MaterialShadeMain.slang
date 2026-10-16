@@ -26,6 +26,7 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
     pe_N = sp.N;
     pe_pixel = pixel;
     pe_ssao = cb_ssao != 0 ? Ssao.SampleLevel(sampler_Ssao, (float2(pixel) + 0.5) / float2(size), 0).x : 1.0;
+    pe_occlusion = MetRough.Load(int3(pixel, 0)).x;
 
     pe_load_material(pe_materialBytes, pe_constants[vis.x - 1u].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
     pe_fill_vertex_data(sp);

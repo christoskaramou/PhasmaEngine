@@ -164,8 +164,11 @@ namespace pe
         builder.ReadCompute(m_visibility);
 
         // WriteCompute keeps the contents (layout change from the raster attachment): only MaterialX pixels change.
-        for (Image *image : {m_normal, m_albedo, m_srm, m_emissive})
+        for (Image *image : {m_normal, m_albedo, m_emissive})
             builder.WriteCompute(image);
+
+        builder.Barrier(m_srm, PE_IMAGE_LAYOUT_GENERAL, PE_STAGE_COMPUTE_SHADER,
+                        PE_ACCESS_SHADER_STORAGE_READ | PE_ACCESS_SHADER_STORAGE_WRITE);
     }
 
     void MaterialThinPass::DeclareOutputs(RGBuilder &builder)

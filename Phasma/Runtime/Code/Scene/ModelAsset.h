@@ -73,6 +73,10 @@ namespace pe
             return false;
         }
 
+        // Cook-side import hook. References follow GetOwnedMaterials() order and are relative to the cooked model.
+        virtual bool WriteMaterialDocuments(const std::filesystem::path &file,
+                                            std::vector<std::pair<std::string, std::string>> &references) const;
+
         // Getters
         size_t GetId() const { return m_id; }
 

@@ -2,6 +2,7 @@
 #include "Scene/ClusterGeometry.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Material.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "Scene/PassInfoAsset.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -23,7 +24,8 @@ namespace pe
         constexpr uint32_t kMarkerVersion = 6;
         constexpr uint32_t kPlanarSplineVersion = 7;
         constexpr uint32_t kClusterVersion = 8;
-        constexpr uint32_t kVersion = kClusterVersion;
+        constexpr uint32_t kMaterialDocumentVersion = 9;
+        constexpr uint32_t kVersion = kMaterialDocumentVersion;
         constexpr int kTextureSlotCount = 5;
 
         bool ValidSkeletonHierarchy(const Skeleton &skeleton)
@@ -124,6 +126,8 @@ namespace pe
             std::string name;
             MaterialScalarRecord scalars{};
             std::array<std::string, kTextureSlotCount> texturePaths{};
+            std::string documentPath;
+            std::string documentMaterial;
         };
 
         // --- byte buffer writer ---
@@ -318,7 +322,7 @@ namespace pe
 
         bool IsPortableRelativePath(const std::filesystem::path &path)
         {
-            if (path.empty() || path.is_absolute())
+            if (path.empty() || path.has_root_path())
                 return false;
 
             const std::filesystem::path normalized = path.lexically_normal();
@@ -582,6 +586,14 @@ namespace pe
         return ext == kExtension;
     }
 
+    bool ModelAssetCooked::IsCurrentVersion(const std::filesystem::path &file)
+    {
+        std::ifstream stream(file, std::ios::binary);
+        Header header{};
+        return stream.read(reinterpret_cast<char *>(&header), sizeof(header)) &&
+               std::memcmp(header.magic, kMagic, sizeof(kMagic)) == 0 && header.version == kVersion;
+    }
+
     bool ModelAssetCooked::WriteToFile(const ModelAsset *model, const std::filesystem::path &file, bool buildClusters)
     {
         if (!model)
@@ -597,6 +609,10 @@ namespace pe
                     PathToUtf8String(outputDir).c_str(), ec.message().c_str());
             return false;
         }
+
+        std::vector<std::pair<std::string, std::string>> documents;
+        if (!model->WriteMaterialDocuments(outputDir / path.filename(), documents))
+            return false;
 
         const std::vector<Vertex> &vertices = model->GetVertices();
         const std::vector<PositionUvVertex> &posUvs = model->GetPositionUvs();
@@ -644,10 +660,7 @@ namespace pe
 
         Header header{};
         std::memcpy(header.magic, kMagic, 4);
-        header.version = std::any_of(clusters.begin(), clusters.end(), [](const ClusterGeometry &c)
-                                     { return !c.clusters.empty(); })
-                             ? kVersion
-                             : kPlanarSplineVersion;
+        header.version = kVersion;
         header.flags = 0;
         header.sizeofVertex = static_cast<uint32_t>(sizeof(Vertex));
         header.sizeofPositionUv = static_cast<uint32_t>(sizeof(PositionUvVertex));
@@ -719,6 +732,7 @@ namespace pe
         // Material table. MeshRecord::materialIndex points into this table.
         const std::string stem = PathToUtf8String(path.stem());
         std::unordered_map<std::string, std::string> embeddedWritten; // dedup embedded-texture writes
+        size_t materialIndexInTable = 0;
         for (const auto &materialPtr : materials)
         {
             Material defaultMaterial;
@@ -735,6 +749,10 @@ namespace pe
                     return false;
                 w.String(relPath);
             }
+
+            const auto &document = documents.at(materialIndexInTable++);
+            w.String(document.first);
+            w.String(document.second);
         }
 
         // Skeleton table (v3+): rootTransform + bones. v7 adds the planar flag and per-bone spline metadata.
@@ -1001,6 +1019,20 @@ namespace pe
                     delete model;
                     return nullptr;
                 }
+
+            if (header.version >= kMaterialDocumentVersion)
+            {
+                const bool read = r.String(record.documentPath) && r.String(record.documentMaterial);
+                const bool paired = record.documentPath.empty() == record.documentMaterial.empty();
+                const auto documentPath = PathFromUtf8String(record.documentPath);
+                const bool portable = record.documentPath.empty() || IsPortableRelativePath(documentPath);
+                if (!read || !paired || !portable)
+                {
+                    PE_WARN("[ModelAssetCooked] Invalid material document reference: %s", pathStr.c_str());
+                    delete model;
+                    return nullptr;
+                }
+            }
         }
 
         // Skeleton (v3): rebuild m_skeleton; boneNameToIndex is derived from bone names. v7 carries planar splines.
@@ -1222,6 +1254,18 @@ namespace pe
         queue->Submit(1, &cmd, nullptr, nullptr);
         cmd->Wait();
         cmd->Return();
+
+        for (size_t i = 0; i < materialRecords.size(); ++i)
+        {
+            const auto &record = materialRecords[i];
+            if (record.documentPath.empty())
+                continue;
+
+            const auto documentPath = file.parent_path() / PathFromUtf8String(record.documentPath);
+            std::string error;
+            model->m_materials[i]->openpbrSource = LoadOpenPBRMaterial(
+                PathToUtf8String(documentPath), record.documentMaterial, error);
+        }
 
         for (uint32_t i = 0; i < header.meshCount; i++)
         {

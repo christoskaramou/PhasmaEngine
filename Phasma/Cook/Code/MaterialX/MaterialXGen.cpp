@@ -28,6 +28,7 @@ namespace pe
             uint32_t offset = 0;
             std::string value; // MaterialX value string, empty when the port has none
             std::string file;
+            bool alias = false;
         };
 
         uint32_t PeTypeSize(const std::string &type)
@@ -293,6 +294,7 @@ namespace pe
                 // --- Material inputs: the public uniforms, in generator order, tightly packed. ---
                 std::vector<PeMaterialInput> inputs;
                 std::vector<std::string> dropped; // aggregate members (surfaceshader, displacementshader)
+                std::map<std::pair<std::string, std::string>, size_t> identities;
                 uint32_t offset = 0;
                 const mx::VariableBlock &pub = pixel.getUniformBlock(mx::HW::PUBLIC_UNIFORMS);
                 for (size_t i = 0; i < pub.size(); ++i)
@@ -329,8 +331,22 @@ namespace pe
                         in.input = input->getName();
                     }
 
-                    in.offset = offset;
-                    offset += size;
+                    const auto [identity, first] = identities.emplace(std::make_pair(in.node, in.input), inputs.size());
+                    if (first)
+                    {
+                        in.offset = offset;
+                        offset += size;
+                    }
+                    else
+                    {
+                        // MaterialX can publish a shared constant once per consumer; every alias reads its one value.
+                        const auto &canonical = inputs[identity->second];
+                        if (canonical.type != in.type || canonical.value != in.value || canonical.file != in.file)
+                            throw std::runtime_error(name + ": conflicting aliases for " + in.node + "." + in.input);
+
+                        in.offset = canonical.offset;
+                        in.alias = true;
+                    }
                     inputs.push_back(in);
                 }
 
@@ -450,10 +466,13 @@ namespace pe
 
                 std::string json = "{\"material\":\"" + name +
                                    "\",\"surface\":\"" + surface->getNamePath() + "\",\"inputs\":[";
-                for (size_t i = 0; i < inputs.size(); ++i)
+                bool firstInput = true;
+                for (const PeMaterialInput &in : inputs)
                 {
-                    const PeMaterialInput &in = inputs[i];
-                    json += std::string(i ? "," : "") +
+                    if (in.alias)
+                        continue;
+
+                    json += std::string(firstInput ? "" : ",") +
                             "{\"name\":\"" + in.var +
                             "\",\"input\":\"" + in.input +
                             "\",\"node\":\"" + in.node +
@@ -464,6 +483,7 @@ namespace pe
                         json += ",\"file\":" + in.file;
 
                     json += "}";
+                    firstInput = false;
                 }
                 json += "],\"vertexData\":[";
                 for (size_t i = 0; i < vertexData.size(); ++i)

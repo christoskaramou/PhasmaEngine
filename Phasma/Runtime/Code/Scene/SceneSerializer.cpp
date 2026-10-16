@@ -1612,7 +1612,14 @@ namespace pe
 
         void ApplyOpenPBR(Scene &scene, Mesh &mesh, const rapidjson::Value &meshValue, const std::string &key)
         {
-            if (!mesh.material || !meshValue.HasMember("openpbr"))
+            if (!mesh.material)
+                return;
+
+            // Saved scenes opt in explicitly, including models that now import with an OpenPBR source.
+            if (mesh.materialInstance)
+                mesh.materialInstance->SetOpenPBR(false);
+
+            if (!meshValue.HasMember("openpbr"))
                 return;
 
             const auto &state = meshValue["openpbr"];

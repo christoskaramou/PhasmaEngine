@@ -11,6 +11,7 @@ static float3 pe_P;      // world position of this lane's sample
 static float3 pe_N;      // interpolated geometric normal (shadow bias, as LightingPS's G-buffer normal)
 static uint2 pe_pixel;   // output pixel (GI screen textures)
 static float pe_ssao;    // SSAO, 1 when off
+static float pe_occlusion; // material AO, outside the graph
 
 float3 pe_view_position()
 {
@@ -138,7 +139,7 @@ float3 pe_env_irradiance(float3 N)
         result += ibl * cb_IBL_intensity * (1.0 - indirectWeight) * pe_ssao;
     }
 
-    return result;
+    return result * pe_occlusion;
 }
 
 // Reflections replace every lobe at the G-buffer roughness pass 1 wrote, as in the prefilter override.
@@ -154,7 +155,7 @@ bool pe_traced_reflection(out float3 radiance)
         const float4 reflection = gi_reflections.Load(int3(texel, 0));
         if (reflection.a > 0.0)
         {
-            radiance = reflection.rgb * pe_ssao;
+            radiance = reflection.rgb * pe_ssao * pe_occlusion;
             return true;
         }
     }
@@ -191,7 +192,8 @@ float3 pe_env_lookup(float3 dir, float lod)
     if (cb_IBL == 0)
         return float3(0.0, 0.0, 0.0);
 
-    return pe_envRadiance.SampleLevel(pe_envSampler, PeLatLongUv(dir), lod).rgb * cb_IBL_intensity * pe_ssao;
+    return pe_envRadiance.SampleLevel(pe_envSampler, PeLatLongUv(dir), lod).rgb *
+           cb_IBL_intensity * pe_ssao * pe_occlusion;
 }
 
 #endif

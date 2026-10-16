@@ -1647,6 +1647,9 @@ namespace pe
     // signal (re-edit the source and its newer mtime forces a re-cook).
     static bool CookTargetUpToDate(const std::filesystem::path &src, const std::filesystem::path &outPemesh)
     {
+        if (!ModelAssetCooked::IsCurrentVersion(outPemesh))
+            return false;
+
         std::error_code ec;
         if (!std::filesystem::exists(outPemesh, ec))
             return false;

@@ -42,6 +42,8 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
     const float3 albedo = saturate(thin.albedo);
     pe_albedoOut[pixel] = float4(LinearToSrgb(albedo), 1.0);
 
-    pe_srmOut[pixel] = float4(1.0, saturate(thin.roughness), saturate(thin.metalness), 0.0);
+    // The raster pass samples glTF occlusion and applies its strength; AO stays outside the MaterialX graph.
+    const float occlusion = pe_srmOut[pixel].x;
+    pe_srmOut[pixel] = float4(occlusion, saturate(thin.roughness), saturate(thin.metalness), 0.0);
     pe_emissiveOut[pixel] = float4(0.0, 0.0, 0.0, 1.0);
 }

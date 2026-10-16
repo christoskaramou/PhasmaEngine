@@ -27,6 +27,9 @@ namespace pe
                                      std::vector<uint8_t> &outBytes,
                                      std::string &outExtension) const override;
 
+        bool WriteMaterialDocuments(const std::filesystem::path &file,
+                                    std::vector<std::pair<std::string, std::string>> &references) const override;
+
     private:
         bool LoadFile(const std::filesystem::path &file);
 
@@ -48,5 +51,7 @@ namespace pe
 
         Assimp::Importer m_importer;
         const aiScene *m_scene = nullptr;
+        std::vector<unsigned int> m_materialIndices;
+        std::vector<std::string> m_gltfMaterialNames;
     };
 } // namespace pe

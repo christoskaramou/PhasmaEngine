@@ -69,6 +69,7 @@ if(TARGET MaterialXGenSlang)
     target_link_libraries(PhasmaCook PRIVATE MaterialXGenSlang MaterialXFormat)
     target_compile_definitions(PhasmaCook PRIVATE PE_MATERIALX)
     target_sources(PhasmaCook PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/Code/MaterialX/GltfMaterialX.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/MaterialX/MaterialXGen.cpp"
         "${CMAKE_CURRENT_SOURCE_DIR}/Code/MaterialX/PeSurfaceNodeSlang.cpp")
 

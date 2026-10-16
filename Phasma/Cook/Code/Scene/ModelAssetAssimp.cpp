@@ -9,8 +9,12 @@
 #include <assimp/GltfMaterial.h>
 #include <assimp/IOStream.hpp>
 #include <assimp/IOSystem.hpp>
+#include <assimp/MemoryIOWrapper.h>
 #include <assimp/ProgressHandler.hpp>
 #include <meshoptimizer.h>
+#ifdef PE_MATERIALX
+#include "MaterialX/GltfMaterialX.h"
+#endif
 
 #undef max
 
@@ -18,6 +22,14 @@ namespace pe
 {
     namespace
     {
+        bool IsGltf(const std::filesystem::path &file)
+        {
+            std::string extension = file.extension().string();
+            std::transform(extension.begin(), extension.end(), extension.begin(), [](unsigned char c)
+                           { return static_cast<char>(std::tolower(c)); });
+            return extension == ".gltf" || extension == ".glb";
+        }
+
         static void CountNodesRecursive(const aiNode *node, int &count)
         {
             count++;
@@ -163,6 +175,11 @@ namespace pe
         class PhasmaIOSystem : public Assimp::IOSystem
         {
         public:
+            PhasmaIOSystem(const std::filesystem::path &file, std::string bytes)
+                : m_file(std::filesystem::absolute(file).lexically_normal()), m_bytes(std::move(bytes))
+            {
+            }
+
             bool Exists(const char *pFile) const override
             {
                 std::filesystem::path path(reinterpret_cast<const char8_t *>(pFile));
@@ -181,6 +198,9 @@ namespace pe
             Assimp::IOStream *Open(const char *pFile, const char *pMode = "rb") override
             {
                 std::filesystem::path path(reinterpret_cast<const char8_t *>(pFile));
+                if (!m_bytes.empty() && std::filesystem::absolute(path).lexically_normal() == m_file)
+                    return new Assimp::MemoryIOStream(reinterpret_cast<const uint8_t *>(m_bytes.data()), m_bytes.size());
+
                 PhasmaIOStream *stream = new PhasmaIOStream(path, pMode);
                 if (!stream->IsOpen())
                 {
@@ -194,10 +214,32 @@ namespace pe
             {
                 delete pFile;
             }
+
+        private:
+            std::filesystem::path m_file;
+            std::string m_bytes;
         };
     } // namespace
 
     ModelAssetAssimp::ModelAssetAssimp() = default;
+
+    bool ModelAssetAssimp::WriteMaterialDocuments(const std::filesystem::path &file,
+                                                  std::vector<std::pair<std::string, std::string>> &references) const
+    {
+#ifdef PE_MATERIALX
+        if (IsGltf(m_filePath))
+        {
+            std::string error;
+            if (WriteGltfMaterialX(*this, m_materialIndices, file, references, error))
+                return true;
+
+            PE_WARN("[OpenPBR] glTF material conversion failed: %s", error.c_str());
+            return false;
+        }
+#endif
+
+        return ModelAsset::WriteMaterialDocuments(file, references);
+    }
 
     ModelAsset *ModelAssetAssimp::Load(const std::filesystem::path &file)
     {
@@ -272,7 +314,9 @@ namespace pe
         flags |= aiProcess_CalcTangentSpace;
         flags |= aiProcess_GenSmoothNormals;
         flags |= aiProcess_GenUVCoords;
-        flags |= aiProcess_RemoveRedundantMaterials;
+        // Assimp cannot distinguish the KHR extensions we side-parse; preserve glTF material indices.
+        if (!IsGltf(file))
+            flags |= aiProcess_RemoveRedundantMaterials;
         flags |= aiProcess_FindDegenerates;
         flags |= aiProcess_FindInvalidData;
         // flags |= aiProcess_PreTransformVertices;
@@ -285,8 +329,21 @@ namespace pe
         auto fileU8 = file.u8string();
         std::string fileStr(reinterpret_cast<const char *>(fileU8.c_str()));
 
-        // Use custom IOSystem to handle unicode paths on Windows
-        m_importer.SetIOHandler(new PhasmaIOSystem());
+        std::string importSource;
+#ifdef PE_MATERIALX
+        if (IsGltf(file))
+        {
+            std::string error;
+            if (!PrepareGltfMaterialImport(file, importSource, m_gltfMaterialNames, error))
+            {
+                PE_WARN("[OpenPBR] Cannot read glTF material identities: %s", error.c_str());
+                return false;
+            }
+        }
+#endif
+
+        // Tag only Assimp's in-memory source: lazy material ordering is independent of the glTF array indices.
+        m_importer.SetIOHandler(new PhasmaIOSystem(file, std::move(importSource)));
 
         m_scene = m_importer.ReadFile(fileStr, flags);
 
@@ -488,6 +545,20 @@ namespace pe
 
                 ComputeMaterialData(*mat, material);
 
+                unsigned int sourceMaterialIndex = mesh->mMaterialIndex;
+#ifdef PE_MATERIALX
+                if (IsGltf(m_filePath))
+                {
+                    constexpr const char *prefix = "__pe_gltf_material_";
+                    sourceMaterialIndex = mat->name.starts_with(prefix)
+                                              ? static_cast<unsigned int>(std::stoul(mat->name.substr(std::strlen(prefix))))
+                                              : static_cast<unsigned int>(m_gltfMaterialNames.size());
+                    mat->name = sourceMaterialIndex < m_gltfMaterialNames.size()
+                                    ? m_gltfMaterialNames[sourceMaterialIndex]
+                                    : "DefaultMaterial";
+                }
+#endif
+
                 if (!mat->passInfoAsset)
                     mat->passInfoAsset = ResourceManager::Get().Load<PassInfoAsset>(Path::RuntimeAssets + "PassInfo/standard_pbr.pass");
                 mat->SyncParamsFromLegacy();
@@ -495,6 +566,7 @@ namespace pe
                 mi.material = mat.get();
                 materialByIndex[mesh->mMaterialIndex] = mat.get();
                 m_materials.push_back(std::move(mat));
+                m_materialIndices.push_back(sourceMaterialIndex);
             }
 
             // geometry
@@ -1013,6 +1085,11 @@ namespace pe
 
     RenderType ModelAssetAssimp::DetermineRenderType(aiMaterial *material) const
     {
+        float transmissionFactor = 0.f;
+#ifdef AI_MATKEY_TRANSMISSION_FACTOR
+        material->Get(AI_MATKEY_TRANSMISSION_FACTOR, transmissionFactor);
+#endif
+
         aiString alphaMode;
         if (material->Get(AI_MATKEY_GLTF_ALPHAMODE, alphaMode) == AI_SUCCESS)
         {
@@ -1025,12 +1102,10 @@ namespace pe
                 return RenderType::AlphaBlend;
             if (mode == "MASK")
                 return RenderType::AlphaCut;
+            if (mode == "OPAQUE")
+                return transmissionFactor > 0.f ? RenderType::Transmission : RenderType::Opaque;
         }
 
-        float transmissionFactor = 0.f;
-#ifdef AI_MATKEY_TRANSMISSION_FACTOR
-        material->Get(AI_MATKEY_TRANSMISSION_FACTOR, transmissionFactor);
-#endif
         if (transmissionFactor > 0.f)
             return RenderType::Transmission;
 

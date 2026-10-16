@@ -382,6 +382,11 @@ namespace pe
         ResourceHandle<Image> LoadOpenPBRImage(CommandBuffer *cmd, const std::string &path)
         {
             ResourceHandle<Image> handle = ResourceManager::Get().Find<Image>(path);
+            const auto preferred = PathFromUtf8(path).make_preferred().u8string();
+            const std::string nativePath(reinterpret_cast<const char *>(preferred.data()), preferred.size());
+            if (!handle)
+                handle = ResourceManager::Get().Find<Image>(nativePath);
+
             if (handle)
                 return handle;
 
@@ -401,6 +406,7 @@ namespace pe
                     Image *retired = resident;
                     Image::Destroy(retired); }); });
             ResourceManager::Get().Register<Image>(path, shared);
+            ResourceManager::Get().Register<Image>(nativePath, shared);
             return ResourceHandle<Image>(shared);
         }
 

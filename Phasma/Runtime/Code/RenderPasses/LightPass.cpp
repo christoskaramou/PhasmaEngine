@@ -967,6 +967,7 @@ namespace pe
         Image *ssao = renderer.GetRenderTarget("ssao");
         Descriptor *set = info.GetDescriptors(frame)[0];
 
+        BindMaterialImage(set, 3, renderer.GetRenderTarget("srm"));
         BindMaterialBuffer(set, 4, scene->GetLightUniform(frame));
         BindMaterialImage(set, 5, ssao ? ssao : m_albedoRT);
         BindMaterialBuffer(set, 7, opaque->m_uniforms[frame]); // PassUBO: the opaque pass's per-frame LightPassUBO
@@ -1091,6 +1092,7 @@ namespace pe
             return;
 
         builder.ReadCompute(m_visibility);
+        builder.ReadCompute(RequireActiveSceneRendererHost().GetRenderTarget("srm"));
 
         Image *ssao = RequireActiveSceneRendererHost().GetRenderTarget("ssao");
         if (ssao && ActivePostProcessProfile().ssao)

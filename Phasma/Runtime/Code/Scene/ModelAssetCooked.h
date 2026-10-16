@@ -41,6 +41,8 @@ namespace pe
 
         static bool IsCookedPath(const std::filesystem::path &file);
 
+        static bool IsCurrentVersion(const std::filesystem::path &file);
+
     private:
         // cpuOnly stops after the tables: streams, skeleton and clips parsed, no materials or buffers uploaded.
         static ModelAsset *Load(const std::filesystem::path &file, bool cpuOnly);

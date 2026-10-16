@@ -107,6 +107,9 @@ namespace pe
         std::string name;
         std::filesystem::path filePath; // .mat file path if saved
 
+        // Imported document shared by instances; per-instance edits stay on MaterialInstance.
+        std::shared_ptr<const OpenPBRMaterialSource> openpbrSource;
+
         // --- Legacy serialization bridge ---
         // Pack parameters into the materialFactors[2] mat4 layout for scene file persistence.
         void PackLegacyFactors(mat4 factors[2]) const;
