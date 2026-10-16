@@ -1,6 +1,7 @@
 #include "Scene/Scene.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "Scene/Primitives.h"
 #include "Scene/SceneHost.h"
 #include "Scene/SceneRuntimeHooks.h"
@@ -1523,6 +1524,144 @@ namespace pe
             material.textures[static_cast<int>(TextureType::Emissive)] = ResourceHandle<Image>::FromRaw(defaults.black);
         }
 
+        bool ReadOpenPBRValue(const OpenPBRInput &input,
+                              const rapidjson::Value &json,
+                              MaterialParamValue &value)
+        {
+            if (input.type == "float" && json.IsNumber())
+                value = json.GetFloat();
+            else if (input.type == "bool" && json.IsBool())
+                value = json.GetBool() ? 1u : 0u;
+            else if ((input.type == "int" || input.type == "uint") && json.IsNumber())
+            {
+                const double integer = json.GetDouble();
+                const double minimum = input.type == "int" ? double(INT32_MIN) : 0.0;
+                const double maximum = input.type == "int" ? double(INT32_MAX) : double(UINT32_MAX);
+                const bool exact = std::isfinite(integer) && std::floor(integer) == integer;
+                const bool inRange = integer >= minimum && integer <= maximum;
+                if (!exact || !inRange)
+                    return false;
+
+                if (input.type == "int")
+                    value = static_cast<int32_t>(integer);
+                else
+                    value = static_cast<uint32_t>(integer);
+            }
+            else if (input.type == "float2" || input.type == "float3" || input.type == "float4")
+            {
+                const auto count = static_cast<rapidjson::SizeType>(input.type.back() - '0');
+                if (!json.IsArray() || json.Size() != count)
+                    return false;
+
+                vec4 vector(0.0f);
+                for (rapidjson::SizeType i = 0; i < count; ++i)
+                {
+                    if (!json[i].IsNumber())
+                        return false;
+
+                    vector[i] = json[i].GetFloat();
+                }
+
+                if (count == 2)
+                    value = vec2(vector);
+                else if (count == 3)
+                    value = vec3(vector);
+                else
+                    value = vector;
+            }
+            else
+                return false;
+
+            return true;
+        }
+
+        void ApplyOpenPBRInputs(MaterialInstance &instance, const rapidjson::Value &state, const std::string &key)
+        {
+            if (!state.HasMember("inputs"))
+                return;
+
+            const auto &inputs = state["inputs"];
+            if (!inputs.IsObject())
+            {
+                PE_WARN("[OpenPBR] %s.inputs: expected an object", key.c_str());
+                return;
+            }
+
+            const OpenPBRLayout &layout = GetOpenPBRSource(instance).module->layout;
+            for (auto it = inputs.MemberBegin(); it != inputs.MemberEnd(); ++it)
+            {
+                const std::string identity(it->name.GetString(), it->name.GetStringLength());
+                const OpenPBRInput *input = layout.Find(identity);
+                MaterialParamValue value;
+                if (!input || input->identity != identity)
+                {
+                    PE_WARN("[OpenPBR] %s.inputs.%s: unknown input", key.c_str(), identity.c_str());
+                    continue;
+                }
+
+                if (!ReadOpenPBRValue(*input, it->value, value))
+                {
+                    PE_WARN("[OpenPBR] %s.inputs.%s: expected %s",
+                            key.c_str(), identity.c_str(), input->type.c_str());
+                    continue;
+                }
+
+                instance.SetParam(input->identity, value);
+            }
+        }
+
+        void ApplyOpenPBR(Scene &scene, Mesh &mesh, const rapidjson::Value &meshValue, const std::string &key)
+        {
+            if (!mesh.material || !meshValue.HasMember("openpbr"))
+                return;
+
+            const auto &state = meshValue["openpbr"];
+            if (!state.IsObject())
+            {
+                PE_WARN("[OpenPBR] %s: expected an object", key.c_str());
+                return;
+            }
+
+            std::string error;
+            auto source = GetOpenPBRDefaultSource();
+            if (state.HasMember("mtlx"))
+            {
+                const bool validMaterial = state.HasMember("material") && state["material"].IsString();
+                if (!state["mtlx"].IsString() || !validMaterial)
+                {
+                    PE_WARN("[OpenPBR] %s: expected mtlx and material strings", key.c_str());
+                    return;
+                }
+
+                source = LoadOpenPBRMaterial(state["mtlx"].GetString(), state["material"].GetString(), error);
+                if (!source)
+                    return;
+            }
+
+            if (!OpenPBREligible(*mesh.material, *source->module))
+            {
+                PE_WARN("[OpenPBR] %s: material cannot use this module", key.c_str());
+                return;
+            }
+
+            if (!scene.CanUseOpenPBRImages(*source, error))
+            {
+                PE_WARN("[OpenPBR] %s: %s", key.c_str(), error.c_str());
+                return;
+            }
+
+            MaterialInstance *instance = scene.CreateMaterialInstance(mesh);
+            if (state.HasMember("mtlx"))
+                instance->SetOpenPBRMaterialSource(source);
+            else
+                instance->SetOpenPBR(true);
+
+            ApplyOpenPBRInputs(*instance, state, key);
+            MirrorOpenPBRToLegacy(*instance);
+            scene.SetTexturesDirty();
+            scene.SetMaterialDirty();
+        }
+
         void RestoreMaterialTexturesFromJson(CommandBuffer *cmd,
                                              Material &material,
                                              const rapidjson::Value &meshValue,
@@ -1645,6 +1784,104 @@ namespace pe
                 return SerializePath(texturePath, relativeToDir);
 
             return NormalizeSeparators(path);
+        }
+
+        rapidjson::Value OpenPBRValue(const OpenPBRInput &input, const MaterialParamValue &value) const
+        {
+            if (input.type == "bool")
+                return rapidjson::Value(std::get<uint32_t>(value) != 0u);
+
+            rapidjson::Value json;
+            std::visit(
+                [&](const auto &v)
+                {
+                    using T = std::decay_t<decltype(v)>;
+                    if constexpr (std::is_same_v<T, float>)
+                        json.SetFloat(SafeFloat(v));
+                    else if constexpr (std::is_same_v<T, int32_t>)
+                        json.SetInt(v);
+                    else if constexpr (std::is_same_v<T, uint32_t>)
+                        json.SetUint(v);
+                    else
+                    {
+                        json.SetArray();
+                        for (int i = 0; i < v.length(); ++i)
+                            json.PushBack(SafeFloat(v[i]), allocator);
+                    }
+                },
+                value);
+
+            return json;
+        }
+
+        void WriteOpenPBR(const Mesh &mesh, rapidjson::Value &meshValue) const
+        {
+            if (!mesh.materialInstance || !mesh.materialInstance->GetOpenPBR())
+                return;
+
+            const MaterialInstance &instance = *mesh.materialInstance;
+            const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
+            rapidjson::Value state(rapidjson::kObjectType);
+            if (&source != GetOpenPBRDefaultSource().get())
+            {
+                const auto documentPath = std::filesystem::path(
+                    std::u8string(source.path.begin(), source.path.end()));
+                const auto assetsPath = std::filesystem::path(std::u8string(Path::Assets.begin(), Path::Assets.end()));
+                const auto relative = documentPath.lexically_relative(
+                    std::filesystem::absolute(assetsPath).lexically_normal());
+                const bool underAssets = !relative.empty() && *relative.begin() != "..";
+                const std::string path = SerializePath(underAssets ? relative : documentPath, nullptr);
+                state.AddMember("mtlx", MakeStringValue(path), allocator);
+                state.AddMember("material", MakeStringValue(source.material), allocator);
+            }
+
+            rapidjson::Value inputs(rapidjson::kObjectType);
+            for (const OpenPBRInput &input : source.module->layout.inputs)
+            {
+                if (input.type == "SamplerTexture2D" || !instance.HasParamOverride(input.identity))
+                    continue;
+
+                const MaterialParamValue value = instance.GetParam(input.identity);
+                if (value == source.defaults.at(input.identity))
+                    continue;
+
+                inputs.AddMember(MakeStringValue(input.identity), OpenPBRValue(input, value), allocator);
+            }
+
+            state.AddMember("inputs", inputs.Move(), allocator);
+            meshValue.AddMember("openpbr", state.Move(), allocator);
+        }
+
+        static int ClaimMesh(Scene &scene, int meshIndex,
+                             std::unordered_set<int> &claimed, const rapidjson::Value &meshValue)
+        {
+            if (claimed.insert(meshIndex).second)
+                return meshIndex;
+
+            const Scene::MeshSourceInfo source = scene.m_meshSourceInfos[meshIndex];
+            Mesh mesh = scene.m_meshes[meshIndex];
+            mesh.materialInstance = nullptr;
+            mesh.refCount = 0;
+            mesh.lodEnabled = !mesh.skinned;
+            mesh.lodShift = 0;
+            mesh.lodBias = 1.0f;
+            if (meshValue.HasMember("render_type"))
+                mesh.renderType = static_cast<RenderType>(meshValue["render_type"].GetInt());
+
+            if (mesh.material)
+            {
+                auto material = std::make_unique<Material>(*mesh.material);
+                mesh.material = material.get();
+                scene.m_ownedMaterials.push_back(std::move(material));
+            }
+
+            const int copyIndex = scene.AddMesh(std::move(mesh));
+            if (static_cast<int>(scene.m_meshSourceInfos.size()) <= copyIndex)
+                scene.m_meshSourceInfos.resize(copyIndex + 1);
+
+            scene.m_meshSourceInfos[copyIndex] = source;
+            scene.AliasOrDirtyBlas(copyIndex, meshIndex);
+            return copyIndex;
         }
 
         void BuildLiveGeometryRemap()
@@ -1893,6 +2130,8 @@ namespace pe
                     }
                 }
                 meshObj.AddMember("textures", texturesObj.Move(), allocator);
+
+                WriteOpenPBR(mesh, meshObj);
                 meshesArr.PushBack(meshObj.Move(), allocator);
             }
 
@@ -3081,6 +3320,7 @@ namespace pe
                 const auto &meshesVal = d["meshes"];
                 savedMeshToSceneMesh.assign(meshesVal.Size(), -1);
                 std::unordered_set<Material *> loadedSharedMaterials;
+                std::unordered_set<int> claimedMeshes;
 
                 for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
                 {
@@ -3101,6 +3341,7 @@ namespace pe
                     if (sceneMeshIdx < 0 || sceneMeshIdx >= static_cast<int>(m_meshes.size()))
                         continue;
 
+                    sceneMeshIdx = SceneSerializationHelper::ClaimMesh(*this, sceneMeshIdx, claimedMeshes, mVal);
                     savedMeshToSceneMesh[mi] = sceneMeshIdx;
 
                     Mesh &mesh = m_meshes[sceneMeshIdx];
@@ -3184,6 +3425,8 @@ namespace pe
                         if (inst)
                             inst->ApplyDiffFromResolved(tempMat);
                     }
+
+                    ApplyOpenPBR(*this, mesh, mVal, "meshes[" + std::to_string(mi) + "].openpbr");
                 }
             }
 
@@ -3534,6 +3777,7 @@ namespace pe
                         }
                     }
 
+                    // Legacy models[] scenes predate OpenPBR: every writer uses the meshes[] format, so no openpbr key here.
                     EventSystem::PushEvent(EventType::ModelLoaded, model);
                 }
             }
@@ -3884,6 +4128,7 @@ namespace pe
             const auto &meshesVal = d["meshes"];
             savedMeshToSceneMesh.assign(meshesVal.Size(), -1);
             std::unordered_set<Material *> loadedSharedMaterials;
+            std::unordered_set<int> claimedMeshes;
 
             for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
             {
@@ -3902,6 +4147,7 @@ namespace pe
                 if (sceneMeshIdx < 0 || sceneMeshIdx >= static_cast<int>(m_meshes.size()))
                     continue;
 
+                sceneMeshIdx = SceneSerializationHelper::ClaimMesh(*this, sceneMeshIdx, claimedMeshes, mVal);
                 savedMeshToSceneMesh[mi] = sceneMeshIdx;
                 Mesh &mesh = m_meshes[sceneMeshIdx];
                 if (mVal.HasMember("render_type"))
@@ -3950,6 +4196,10 @@ namespace pe
                     if (inst)
                         inst->ApplyDiffFromResolved(tempMat);
                 }
+
+                ApplyOpenPBR(*this, mesh, mVal, "meshes[" + std::to_string(mi) + "].openpbr");
+                if (mesh.materialInstance && mesh.materialInstance->GetOpenPBR())
+                    needsTextureUpload = true;
             }
         }
 
@@ -4546,6 +4796,8 @@ namespace pe
                             if (inst)
                                 inst->ApplyDiffFromResolved(tempMat);
                         }
+
+                        ApplyOpenPBR(*this, mesh, mVal, "meshes[" + std::to_string(mi) + "].openpbr");
                     }
 
                     if (cmd)
@@ -4866,6 +5118,7 @@ namespace pe
                     const auto &meshesVal = d["meshes"];
                     savedMeshToSceneMesh.assign(meshesVal.Size(), -1);
                     std::unordered_set<Material *> loadedSharedMaterials;
+                    std::unordered_set<int> claimedMeshes;
 
                     for (rapidjson::SizeType mi = 0; mi < meshesVal.Size(); mi++)
                     {
@@ -4882,6 +5135,7 @@ namespace pe
                         if (sceneMeshIdx < 0 || sceneMeshIdx >= static_cast<int>(m_meshes.size()))
                             continue;
 
+                        sceneMeshIdx = SceneSerializationHelper::ClaimMesh(*this, sceneMeshIdx, claimedMeshes, mVal);
                         savedMeshToSceneMesh[mi] = sceneMeshIdx;
 
                         Mesh &mesh = m_meshes[sceneMeshIdx];
@@ -4930,6 +5184,8 @@ namespace pe
                             if (inst)
                                 inst->ApplyDiffFromResolved(tempMat);
                         }
+
+                        ApplyOpenPBR(*this, mesh, mVal, "meshes[" + std::to_string(mi) + "].openpbr");
                     }
                 }
 

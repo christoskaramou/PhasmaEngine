@@ -11,6 +11,9 @@
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/MaterialReflection.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
+#include "RenderPasses/MaterialThinPass.h"
+#include "RenderPasses/LightPass.h"
 
 namespace pe
 {
@@ -203,6 +206,17 @@ namespace pe
         // toggles caused device loss). Setting toggles pass no command buffer; lazily initable
         // passes must tolerate nullptr here.
         InitEnabledRenderPassComponents(cmd);
+
+        // Pipelines follow the modules the scene's material bytes hold (rebuilt by the byte packing, not per frame).
+        static const std::vector<uint32_t> noModules;
+        const Scene *scene = GetActiveScene();
+        const std::vector<uint32_t> &modules = SceneUsesOpenPBR() && scene ? scene->GetOpenPBRModules() : noModules;
+
+        if (m_renderGraphPassInitialized[static_cast<size_t>(SceneRenderGraphPassId::MaterialThin)])
+            static_cast<MaterialThinPass *>(m_scenePasses.materialThin)->SyncModules(modules);
+
+        if (m_renderGraphPassInitialized[static_cast<size_t>(SceneRenderGraphPassId::MaterialShade)])
+            static_cast<MaterialShadePass *>(m_scenePasses.materialShade)->SyncModules(modules);
     }
 
     bool SceneRendererCore::IsPassEnabled(SceneRenderGraphPassId passId) const

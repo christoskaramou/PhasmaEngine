@@ -11,6 +11,7 @@
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
+#include "API/Sampler.h"
 #include "API/Vertex.h"
 #include "Render/SceneRenderTargets.h"
 
@@ -25,6 +26,45 @@ namespace pe
     static bool IsRasterIndirectMesh(const Mesh &mesh)
     {
         return mesh.renderType != RenderType::Lines && mesh.renderType != RenderType::SpriteOutline;
+    }
+
+    static bool OpenPBRRecordsChanged(const Scene &scene)
+    {
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            const NodeId *node = scene.GetNodeId(i);
+            if (!scene.IsNodeHierarchyEnabled(node) || scene.GetNodeRuntime(node).gpuPending)
+                continue;
+
+            for (int meshIndex : scene.GetMeshRefs(node))
+            {
+                if (!scene.IsValidMeshIndex(meshIndex))
+                    continue;
+
+                const Mesh &mesh = scene.GetMesh(meshIndex);
+                const MaterialInstance *instance = mesh.materialInstance;
+                if (!instance || mesh.indexCount == 0)
+                    continue;
+
+                if (!MeshUsesOpenPBR(mesh))
+                {
+                    if (instance->gpuOpenPBRModule != UINT32_MAX)
+                        return true;
+
+                    continue;
+                }
+
+                const OpenPBRModule &module = *GetOpenPBRSource(*instance).module;
+                if (instance->gpuOpenPBRModule != module.index ||
+                    instance->gpuByteSize != kOpenPBRInputsOffset + module.layout.byteSize ||
+                    instance->gpuByteOffset == UINT32_MAX)
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     // Keep a GPU buffer across instance rebuilds while it still fits; otherwise retire it through the
@@ -701,9 +741,129 @@ namespace pe
         m_pendingIndirectCommands.clear();
     }
 
+    static void AddOpenPBRViews(std::unordered_set<ImageView *> &views, Image *image)
+    {
+        views.insert(image->GetSRV());
+        if (SceneUsesLinearColor() && image->CanSampleAsSrgb())
+            views.insert(image->GetSrgbSRV());
+    }
+
+    bool Scene::CanUseOpenPBRImages(const OpenPBRMaterialSource &source, std::string &error) const
+    {
+        if (source.textures.empty())
+            return true;
+
+        std::unordered_set<ImageView *> views(m_imageViews.begin(), m_imageViews.end());
+        for (const auto &image : m_imageStore)
+            AddOpenPBRViews(views, image.get());
+
+        auto addSource = [&](const OpenPBRMaterialSource &material)
+        {
+            for (const auto &[identity, texture] : material.textures)
+                AddOpenPBRViews(views, texture.image.get());
+        };
+
+        for (uint32_t ni = 0; ni < GetNodeCount(); ++ni)
+        {
+            for (int meshIndex : GetMeshRefs(GetNodeId(ni)))
+            {
+                if (IsValidMeshIndex(meshIndex) && MeshUsesOpenPBR(GetMesh(meshIndex)))
+                    addSource(GetOpenPBRSource(*GetMesh(meshIndex).materialInstance));
+            }
+        }
+
+        addSource(source);
+        if (views.size() <= PE_MAX_DESCRIPTORS_PER_BINDING)
+            return true;
+
+        error = "[OpenPBR] " + source.path + ": image-view table would exceed PE_MAX_DESCRIPTORS_PER_BINDING (" +
+                std::to_string(PE_MAX_DESCRIPTORS_PER_BINDING) + ")";
+        return false;
+    }
+
+    void Scene::CreateOpenPBRSamplers()
+    {
+        if (!m_openpbrSamplers.empty())
+            return;
+
+        const PeSamplerAddressMode modes[] = {
+            PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            PE_SAMPLER_ADDRESS_MODE_REPEAT,
+            PE_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT};
+        for (PeSamplerAddressMode u : modes)
+        {
+            for (PeSamplerAddressMode v : modes)
+            {
+                for (uint32_t filter = 0; filter < 2; ++filter)
+                {
+                    SamplerDesc desc = GetDefaultSampler()->GetDesc();
+                    desc.addressModeU = u;
+                    desc.addressModeV = v;
+                    if (filter == 0)
+                    {
+                        desc.magFilter = PE_FILTER_NEAREST;
+                        desc.minFilter = PE_FILTER_NEAREST;
+                        desc.mipmapMode = PE_SAMPLER_MIPMAP_MODE_NEAREST;
+                        desc.anisotropyEnable = false;
+                    }
+
+                    Sampler *sampler = Sampler::Create(desc, "OpenPBR_sampler_" + std::to_string(m_openpbrSamplers.size()));
+                    m_ownedOpenpbrSamplers.emplace_back(sampler, [](Sampler *resident)
+                                                        { RHII.AddToDeletionQueue([resident]
+                                                                                  {
+                            Sampler *retired = resident;
+                            Sampler::Destroy(retired); }); });
+                    m_openpbrSamplers.push_back(sampler);
+                }
+            }
+        }
+    }
+
+    void Scene::CollectOpenPBRImages()
+    {
+        std::unordered_map<const OpenPBRMaterialSource *, bool> checked;
+        for (uint32_t ni = 0; ni < GetNodeCount(); ++ni)
+        {
+            for (int meshIndex : GetMeshRefs(GetNodeId(ni)))
+            {
+                if (!IsValidMeshIndex(meshIndex) || !MeshUsesOpenPBR(GetMesh(meshIndex)))
+                    continue;
+
+                MaterialInstance &instance = *GetMesh(meshIndex).materialInstance;
+                const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
+                auto [it, inserted] = checked.try_emplace(&source, true);
+                if (inserted)
+                {
+                    std::string error;
+                    it->second = CanUseOpenPBRImages(source, error);
+                    if (!it->second)
+                        PE_WARN("%s", error.c_str());
+                }
+
+                if (!it->second)
+                {
+                    instance.SetOpenPBR(false);
+                    continue;
+                }
+
+                for (const auto &[identity, texture] : source.textures)
+                {
+                    const auto resident = std::find_if(m_imageStore.begin(), m_imageStore.end(), [&](const auto &image)
+                                                       { return image.get() == texture.image.get(); });
+                    if (resident == m_imageStore.end())
+                        m_imageStore.push_back(texture.image);
+                }
+
+                if (!source.textures.empty())
+                    CreateOpenPBRSamplers();
+            }
+        }
+    }
+
     void Scene::UpdateImageViews()
     {
         PE_PROFILE_SCOPE("Scene Image Views");
+        CollectOpenPBRImages();
         m_imageViews.clear();
         m_imageViews.reserve(m_imageStore.size());
 
@@ -909,12 +1069,15 @@ namespace pe
         std::unordered_map<const PassInfoAsset *, MaterialLayout> layoutCache;
         {
             PE_PROFILE_SCOPE("Scene Material Byte Packing");
+            m_openpbrModules.clear();
+
             for (uint32_t i = 0; i < GetNodeCount(); i++)
                 for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
                     if (IsValidMeshIndex(meshIdx) && m_meshes[meshIdx].materialInstance)
                     {
                         m_meshes[meshIdx].materialInstance->gpuByteOffset = 0xFFFFFFFF;
                         m_meshes[meshIdx].materialInstance->gpuByteSize = 0;
+                        m_meshes[meshIdx].materialInstance->gpuOpenPBRModule = UINT32_MAX;
                     }
 
             for (uint32_t i = 0; i < GetNodeCount(); i++)
@@ -937,6 +1100,14 @@ namespace pe
                             continue;
 
                         inst->gpuByteOffset = 0; // gathered; final offsets follow byte packing
+                        inst->gpuOpenPBRModule = GetOpenPBRSource(*inst).module->index;
+
+                        const auto known = std::find(m_openpbrModules.begin(),
+                                                     m_openpbrModules.end(),
+                                                     inst->gpuOpenPBRModule);
+                        if (known == m_openpbrModules.end())
+                            m_openpbrModules.push_back(inst->gpuOpenPBRModule);
+
                         byteEntries.push_back({&inst->gpuByteOffset, &inst->gpuByteSize, {}, mesh.material, inst, nullptr});
                         continue;
                     }
@@ -983,7 +1154,7 @@ namespace pe
             }
             // Parameter and texture-index reads are immutable here. Workers produce
             // private byte arrays; offsets and GPU buffers are published only after joining.
-            auto pack = [&byteEntries](size_t begin, size_t end)
+            auto pack = [&byteEntries, &imageViews = m_imageViews](size_t begin, size_t end)
             {
                 for (size_t i = begin; i < end; ++i)
                 {
@@ -991,7 +1162,7 @@ namespace pe
 
                     if (!entry.layout) // MaterialX instance
                     {
-                        entry.data = BuildOpenPBRBytes(*entry.instance);
+                        entry.data = BuildOpenPBRBytes(*entry.instance, imageViews);
                         continue;
                     }
 
@@ -1029,7 +1200,10 @@ namespace pe
             {
                 *entry.sizeDst = static_cast<uint32_t>(entry.data.size());
                 *entry.offsetDst = entry.data.empty() ? 0xFFFFFFFF : totalBytes;
-                totalBytes += (*entry.sizeDst + 3u) & ~3u;
+                const uint64_t next = uint64_t(totalBytes) + ((uint64_t(*entry.sizeDst) + 3u) & ~uint64_t(3u));
+                PE_ERROR_IF(next > UINT32_MAX, "[OpenPBR] material byte buffer exceeds uint32 offsets");
+
+                totalBytes = static_cast<uint32_t>(next);
             }
         }
         PE_PROFILE_SCOPE("Scene Material Byte Upload");
@@ -1075,6 +1249,9 @@ namespace pe
             m_materialDirty = true;
             return true;
         }
+
+        if (OpenPBRRecordsChanged(*this))
+            UpdateTextures();
 
         bool anyDirty = false;
         bool pendingDirty = false;
@@ -1216,7 +1393,7 @@ namespace pe
                     continue;
                 }
 
-                if (inst->GetOpenPBR() && OpenPBREligible(*parent)) // same predicate as MeshUsesOpenPBR
+                if (MeshUsesOpenPBR(mesh))
                 {
                     if (inst->gpuByteOffset == 0xFFFFFFFF)
                     {
@@ -1224,7 +1401,19 @@ namespace pe
                         continue;
                     }
 
-                    byteDirtyEntries.push_back({inst->gpuByteOffset, &inst->dirty, BuildOpenPBRBytes(*inst)});
+                    std::vector<uint8_t> byteData = BuildOpenPBRBytes(*inst, m_imageViews);
+                    const bool sameLayout = inst->gpuOpenPBRModule == GetOpenPBRSource(*inst).module->index &&
+                                            byteData.size() == inst->gpuByteSize;
+                    const bool inBounds = inst->gpuByteOffset <= m_materialByteBufferUsed &&
+                                          byteData.size() <= m_materialByteBufferUsed - inst->gpuByteOffset;
+                    if (!sameLayout || !inBounds)
+                    {
+                        m_texturesDirty = true;
+                        pendingDirty = true;
+                        continue;
+                    }
+
+                    byteDirtyEntries.push_back({inst->gpuByteOffset, &inst->dirty, std::move(byteData)});
                     continue;
                 }
 

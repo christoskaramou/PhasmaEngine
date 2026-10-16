@@ -1,4 +1,5 @@
 #include "Material.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "API/Reflection.h"
 #include "Scene/PassInfoAsset.h"
 
@@ -411,7 +412,20 @@ namespace pe
 
     void MaterialInstance::SetOpenPBR(bool enabled)
     {
+        if (enabled && m_openpbrSource && m_openpbrSource != GetOpenPBRDefaultSource())
+            SetOpenPBRMaterialSource(GetOpenPBRDefaultSource());
+
         m_openpbr = enabled;
+        dirty = true;
+    }
+
+    void MaterialInstance::SetOpenPBRMaterialSource(std::shared_ptr<const OpenPBRMaterialSource> source)
+    {
+        for (const OpenPBRInput &input : GetOpenPBRSource(*this).module->layout.inputs)
+            m_paramOverrides.erase(input.identity);
+
+        m_openpbrSource = std::move(source);
+        m_openpbr = true;
         dirty = true;
     }
 

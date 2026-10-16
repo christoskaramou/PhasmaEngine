@@ -13,15 +13,21 @@ namespace pe
         void Init() override;
         void UpdatePassInfo() override;
         void CreateUniforms(CommandBuffer *cmd) override {}
-        void UpdateDescriptorSets() override {}
+        void UpdateDescriptorSets() override { Update(); }
         void Update() override;
         void DeclareInputs(RGBuilder &builder) override;
         void DeclareOutputs(RGBuilder &builder) override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
+        void SyncModules(const std::vector<uint32_t> &modules);
+        std::vector<PassInfo *> GetPassInfos() noexcept override;
 
     private:
+        void BuildPipeline(PassInfo &info, uint32_t module);
+        void BindFrame(PassInfo &info, uint32_t frame);
+
+        std::map<uint32_t, std::shared_ptr<PassInfo>> m_modulePassInfos;
         Image *m_visibility = nullptr;
         Image *m_normal = nullptr;
         Image *m_albedo = nullptr;

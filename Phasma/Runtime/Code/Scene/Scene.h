@@ -23,6 +23,7 @@ namespace pe
     class Sampler;
     struct Mesh_Constants;
     struct SceneSerializationHelper;
+    struct OpenPBRMaterialSource;
 
     // --- Light POD structs (GPU layout) ---
     struct DirectionalLight
@@ -541,6 +542,8 @@ namespace pe
         bool HasLinesMeshes() const { return m_hasLinesMeshes; }
 
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
+        bool CanUseOpenPBRImages(const OpenPBRMaterialSource &source, std::string &error) const;
+        const std::vector<Sampler *> &GetOpenPBRSamplers() const { return m_openpbrSamplers; }
         void SetVoxelAtlasView(ImageView *v) { m_voxelAtlasView = v; }
         ImageView *GetVoxelAtlasView() const { return m_voxelAtlasView; }
         // Dedicated terrain triplanar-splat descriptor: the splat map + 4 layer albedos, bound by
@@ -570,6 +573,7 @@ namespace pe
         Buffer *GetMeshConstants();
         Buffer *GetMaterialTable() { return m_materialTable; }
         Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
+        const std::vector<uint32_t> &GetOpenPBRModules() const { return m_openpbrModules; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
@@ -759,6 +763,8 @@ namespace pe
         void MarkUniformsDirty();
         void CreateIndirectBuffers(CommandBuffer *cmd);
         void UpdateImageViews();
+        void CollectOpenPBRImages();
+        void CreateOpenPBRSamplers();
         void CreateMaterialTable();
         void CreateDrawInstanceBuffers();
         void CreateMeshConstants(CommandBuffer *cmd);
@@ -931,6 +937,7 @@ namespace pe
         Buffer *m_materialTable = nullptr;
         Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials
         uint32_t m_materialByteBufferUsed = 0;  // current byte offset (append-only)
+        std::vector<uint32_t> m_openpbrModules; // OpenPBR modules with a record in m_materialByteBuffer (byte packing)
         Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;
@@ -1000,6 +1007,8 @@ namespace pe
         bool m_clustersEnabled = false;
         Buffer *m_clusterBuffer = nullptr;
         std::vector<ResourceHandle<Image>> m_imageStore;
+        std::vector<std::shared_ptr<Sampler>> m_ownedOpenpbrSamplers;
+        std::vector<Sampler *> m_openpbrSamplers;
         std::vector<Sampler *> m_samplerStore;
 
         bool m_nodesDirty = false;

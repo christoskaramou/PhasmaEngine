@@ -39,6 +39,7 @@
 #include "RenderPasses/VisibilityDebugPass.h"
 #include "RenderPasses/MaterialThinPass.h"
 #include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
 #include "Scene/OpenPBRMaterial.h"
 
 namespace pe
@@ -472,6 +473,8 @@ namespace pe
         // (culling, Forward+, grid, AABBs) are independent of it and keep reading gs.
         const bool settingsActive = SceneSettingsActive();
 
+        const Scene *activeScene = GetActiveScene();
+        const bool materialModules = SceneUsesOpenPBR() && activeScene && !activeScene->GetOpenPBRModules().empty();
         const auto &gs = Settings::Get<SceneSettings>();
         const auto &pp = ActivePostProcessProfile();
 
@@ -544,9 +547,9 @@ namespace pe
 
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::VisibilityDebug, SceneUsesOpenPBRDebug() && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialThin,
-                           SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && dx12RenderRaster);
+                           materialModules && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialShade,
-                           SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && dx12RenderRaster);
+                           materialModules && dx12RenderRaster);
 
             return;
         }
@@ -599,9 +602,9 @@ namespace pe
 
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::VisibilityDebug, SceneUsesOpenPBRDebug() && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialThin,
-                       SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && renderRaster);
+                       materialModules && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialShade,
-                       SceneUsesOpenPBR() && GetOpenPBRDefaultLayout().valid && renderRaster);
+                       materialModules && renderRaster);
     }
 
     void UpdateSceneRenderGraphPassComponents(const OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,

@@ -95,6 +95,7 @@ struct PushConstants_Lighting
 #ifdef PE_OPENPBR_SHADE
     uint vertices_offset; // material pass 2 only: Scene::GetVerticesOffset()
     uint env_samples;     // dword 22: OpenPBR filtered importance samples
+    uint module_index;    // dword 23: the runtime OpenPBR module this dispatch shades
 #endif
 };
 #endif
@@ -150,8 +151,8 @@ struct MaterialGpuData
     float4 baseColorFactor;
     float4 emissiveTransmission; // .xyz = emissive, .w = transmissionFactor
     float4 pbrParams;            // .x = metallic, .y = roughness, .z = alphaCutoff, .w = occlusionStrength
-    float4 transmissionVolume;   // .x = thicknessFactor, .y = attenuationDistance, .z = ior, .w = unused
-    float4 attenuationColor;     // .xyz = attenuationColor, .w = unused
+    float4 transmissionVolume;   // .x = thicknessFactor, .y = attenuationDistance, .z = ior, .w = raw uint OpenPBR module index (runtime byte record only)
+    float4 attenuationColor;     // .xyz = attenuationColor, .w = nightEmissive
 };
 
 // -----------------------------------------

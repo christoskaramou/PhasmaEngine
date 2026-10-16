@@ -1,11 +1,14 @@
 #include "Agent/PlayerMcp.h"
 
 #include "Agent/AgentToolRegistry.h"
+#include "Agent/ImageCapture.h"
+#include "API/RHI.h"
 #include "Phasma/MCP/HttpTransport.h"
 #include "Phasma/MCP/Server.h"
 #include "Phasma/MCP/Tool.h"
 
 #include "ECS/Context.h"
+#include "Render/SceneRendererHost.h"
 #include "Script/ScriptSystem.h"
 
 namespace pe
@@ -134,6 +137,51 @@ namespace pe
             return tool;
         }
 
+        ToolDefinition MakeCaptureImageTool(const PlayerMcp::QueueActionFn &queue)
+        {
+            ToolDefinition tool;
+            tool.name = "capture_image_resource";
+            tool.description = "Read a render target to a PNG; returns its path and image metadata.";
+            tool.inputSchema = schema::Object({
+                {"id", "Render target id: rt:<name>", schema::String(), true},
+                {"visualize", "linear or auto (default: auto)", schema::String()},
+                {"max_width", "Maximum image dimension (default: 1024; <=0 keeps full size)", schema::Integer()},
+            });
+            tool.handler = [queue](const nlohmann::json &args, Context &) -> CallToolResult
+            {
+                const std::string id = args.value("id", "");
+                const std::string visualize = ToLower(args.value("visualize", "auto"));
+                if (id.rfind("rt:", 0) != 0 || id.size() == 3)
+                    return CallToolResult::Error("id must be rt:<name>");
+                if (visualize != "linear" && visualize != "auto")
+                    return CallToolResult::Error("visualize must be linear or auto");
+
+                const nlohmann::json captureArgs = {
+                    {"id", id}, {"visualize", visualize}, {"max_width", args.value("max_width", 1024)}};
+                auto result = std::make_shared<nlohmann::json>();
+                const bool done = RunOnMain(queue, [result, captureArgs, id]()
+                                            {
+                    try
+                    {
+                        auto *renderer = GetActiveSceneRendererHost();
+                        RHII.WaitDeviceIdle();
+                        Image *image = renderer ? renderer->GetRenderTarget(id.substr(3)) : nullptr;
+                        *result = imagecapture::CaptureGpuImage(image, captureArgs);
+                    }
+                    catch (const std::exception &error)
+                    {
+                        *result = {{"error", error.what()}};
+                    } }, 30);
+                if (!done)
+                    return CallToolResult::Error("timeout waiting for image capture");
+                if (result->contains("error"))
+                    return CallToolResult::Error((*result)["error"].get<std::string>());
+
+                return CallToolResult::Json(*result);
+            };
+            return tool;
+        }
+
         ToolDefinition MakeGetStateTool(const PlayerMcp::QueueActionFn &queue)
         {
             ToolDefinition tool;
@@ -204,7 +252,7 @@ namespace pe
         serverCfg.name = "phasmaplayer-tools";
         serverCfg.title = "Phasma Player Tools";
         serverCfg.version = "0.1.0";
-        serverCfg.instructions = "Drive and inspect the running PhasmaPlayer: execute_lua, take_screenshot, "
+        serverCfg.instructions = "Drive and inspect the running PhasmaPlayer: execute_lua, take_screenshot, capture_image_resource, "
                                  "get_state, plus any tools the game registered via mcp.register_tool.";
         serverCfg.log = &RouteLog;
         m_server = std::make_unique<pmcp::Server>(std::move(serverCfg));
@@ -216,6 +264,7 @@ namespace pe
             std::vector<ToolDefinition> tools;
             tools.push_back(MakeExecuteLuaTool(queue));
             tools.push_back(MakeScreenshotTool());
+            tools.push_back(MakeCaptureImageTool(queue));
             tools.push_back(MakeGetStateTool(queue));
             for (const AgentToolRegistry::Meta &meta : AgentToolRegistry::Instance().SnapshotMeta())
                 tools.push_back(MakeScriptTool(queue, meta));

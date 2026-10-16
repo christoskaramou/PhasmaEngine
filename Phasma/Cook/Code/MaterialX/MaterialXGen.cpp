@@ -5,9 +5,12 @@
 #include <MaterialXGenHw/HwConstants.h>
 #include <MaterialXGenShader/DefaultColorManagementSystem.h>
 #include <MaterialXGenShader/Shader.h>
+#include <MaterialXGenShader/ShaderGraph.h>
 #include <MaterialXGenShader/UnitSystem.h>
 #include <MaterialXGenShader/Util.h>
 #include <MaterialXGenSlang/SlangShaderGenerator.h>
+#include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 
 namespace pe
 {
@@ -24,6 +27,7 @@ namespace pe
             std::string type;  // Slang type name from the generator's syntax
             uint32_t offset = 0;
             std::string value; // MaterialX value string, empty when the port has none
+            std::string file;
         };
 
         uint32_t PeTypeSize(const std::string &type)
@@ -109,6 +113,9 @@ namespace pe
         // "0.8, 0.8, 0.8" -> [0.8,0.8,0.8]; booleans -> [1]/[0]; textures -> [].
         std::string JsonDefault(const PeMaterialInput &in)
         {
+            if (in.type == "int" && in.value.empty())
+                return "[0]";
+
             if (in.type == "SamplerTexture2D" || in.value.empty())
                 return "[]";
             if (in.type == "bool")
@@ -129,9 +136,66 @@ namespace pe
             return out + "]";
         }
 
-        bool Connected(const mx::InputPtr &in)
+        void CaptureThinInputs(std::string &text, const mx::ShaderNode &surface, mx::GenContext &context)
         {
-            return in && (in->hasNodeName() || in->hasNodeGraphString() || in->hasInterfaceName() || in->hasOutputString());
+            const auto [start, end] = FindBlock(text, "float4 pe_material_fragment(");
+            const size_t call = text.find("NG_open_pbr_surface_surfaceshader(", start);
+            if (start == std::string::npos || call == std::string::npos || call > end)
+                throw std::runtime_error("open_pbr_surface call not found in pe_material_fragment");
+
+            const std::pair<const char *, const char *> captures[] = {
+                {"base_color", "float3"},
+                {"base_weight", "float"},
+                {"specular_roughness", "float"},
+                {"base_metalness", "float"},
+                {"geometry_normal", "float3"},
+            };
+
+            std::string statics;
+            std::string assignments;
+            for (const auto &[input, type] : captures)
+            {
+                const mx::ShaderInput *port = surface.getInput(input);
+                if (!port)
+                    throw std::runtime_error("open_pbr_surface has no input '" + std::string(input) + "'");
+
+                const std::string var = "pe_thin_" + std::string(input);
+                statics += "static " + std::string(type) + " " + var + ";\n";
+                assignments += "    " + var + " = " +
+                               context.getShaderGenerator().getUpstreamResult(port, context) + ";\n";
+            }
+
+            // Pass 1 (PE_MATERIAL_THIN) stops at the captures: MaterialX emits nodes in topological order, so everything the
+            // captured inputs need precedes the surface call, and the closures after it never compile into pass 1.
+            const std::string cut = "#ifdef PE_MATERIAL_THIN\n"
+                                    "    return float4(0.0, 0.0, 0.0, 0.0);\n"
+                                    "#else\n";
+
+            text.insert(text.rfind('\n', end) + 1, "#endif\n");
+            text.insert(text.rfind('\n', call) + 1, assignments + cut);
+            text.insert(start, statics + "\n");
+        }
+
+        // An image's filename as MaterialX resolves it (fileprefix included), made absolute next to its document.
+        std::string JsonFile(const mx::DocumentPtr &doc,
+                             const std::string &inputPath,
+                             const std::filesystem::path &document)
+        {
+            const mx::ElementPtr element = doc->getDescendant(inputPath);
+            const mx::ValueElementPtr input = element ? element->asA<mx::ValueElement>() : nullptr;
+            if (!input)
+                throw std::runtime_error("no filename input '" + inputPath + "'");
+
+            // Narrow paths, as everywhere in this generator (MaterialX's own FilePath is narrow).
+            const mx::FilePath resolved(input->getResolvedValueString());
+            const std::filesystem::path path(resolved.asString(mx::FilePath::FormatPosix));
+            const std::filesystem::path absolute = std::filesystem::absolute(document.parent_path() / path);
+            const std::string filename = absolute.lexically_normal().generic_string();
+
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            writer.String(filename.c_str(), static_cast<rapidjson::SizeType>(filename.size()));
+            return buffer.GetString();
         }
     } // namespace
 
@@ -213,6 +277,19 @@ namespace pe
                 std::string text = shader->getSourceCode(mx::Stage::PIXEL);
                 const mx::ShaderStage &pixel = shader->getStage(mx::Stage::PIXEL);
 
+                mx::NodePtr material = elem->asA<mx::Node>();
+                mx::NodePtr surface = material ? material->getConnectedNode("surfaceshader") : nullptr;
+                if (!surface || surface->getCategory() != "open_pbr_surface")
+                    throw std::runtime_error(name + ": expected an open_pbr_surface material");
+
+                const mx::ShaderGraph &graph = shader->getGraph();
+                const mx::ShaderNode *surfaceNode = graph.getNode(surface->getNamePath());
+                if (!surfaceNode)
+                    throw std::runtime_error(name + ": open_pbr_surface not found in ShaderGraph");
+
+                if (References(text, "discard"))
+                    throw std::runtime_error(name + ": discard cannot be dropped by pass 1 (opacity requires Phase 4)");
+
                 // --- Material inputs: the public uniforms, in generator order, tightly packed. ---
                 std::vector<PeMaterialInput> inputs;
                 std::vector<std::string> dropped; // aggregate members (surfaceshader, displacementshader)
@@ -231,12 +308,25 @@ namespace pe
                     in.input = slash == std::string::npos ? path : path.substr(slash + 1);
                     in.node = slash == std::string::npos ? std::string() : path.substr(0, slash);
                     in.value = port->getValue() ? port->getValue()->getValueString() : std::string();
+                    if (in.type == "SamplerTexture2D")
+                        in.file = JsonFile(doc, path, mtlx);
 
                     const uint32_t size = PeTypeSize(in.type);
                     if (size == 0)
                     {
                         dropped.push_back(in.var);
                         continue;
+                    }
+
+                    if (in.node.empty())
+                    {
+                        const mx::ShaderOutput *socket = graph.getInputSocket(port->getName());
+                        if (!socket || socket->getConnections().empty())
+                            throw std::runtime_error(name + ": no node identity for uniform '" + in.var + "'");
+
+                        const mx::ShaderInput *input = socket->getConnections().front();
+                        in.node = input->getNode()->getName();
+                        in.input = input->getName();
                     }
 
                     in.offset = offset;
@@ -291,6 +381,7 @@ namespace pe
                 }
 
                 text = std::regex_replace(text, entry, "float4 pe_material_fragment(VertexData _vd)");
+                CaptureThinInputs(text, *surfaceNode, ctx);
 
                 // --- Loader, vertex data, shade, thin values. ---
                 std::string tail = "\nvoid pe_load_material(ByteAddressBuffer b, uint o)\n{\n";
@@ -310,6 +401,9 @@ namespace pe
                 {
                     const std::string var = vdBlock[i]->getVariable();
                     const std::string type = gen->getSyntax().getTypeName(vdBlock[i]->getType());
+
+                    if (var.starts_with("texcoord_") && var != "texcoord_0")
+                        throw std::runtime_error(name + ": UV-set index other than 0 is unsupported ('" + var + "')");
 
                     static const std::map<std::string, std::string> kSource = {
                         {"positionWorld", "sp.P"},
@@ -332,58 +426,30 @@ namespace pe
                 }
                 tail += "}\n\nfloat4 pe_material_shade()\n{\n    return pe_material_fragment(vd);\n}\n";
 
-                // Pass 1 (thin G-buffer) values: only from unconnected inputs until Phase 3 evaluates subgraphs.
-                bool thin = false;
-                mx::NodePtr material = elem->asA<mx::Node>();
-                mx::NodePtr surface = material ? material->getConnectedNode("surfaceshader") : nullptr;
-                if (surface && surface->getCategory() == "open_pbr_surface")
-                {
-                    auto var = [&](const std::string &input) -> std::string
-                    {
-                        for (const PeMaterialInput &in : inputs)
-                        {
-                            if (in.node == surface->getNamePath() && in.input == input)
-                                return in.var;
-                        }
-
-                        return {};
-                    };
-
-                    const std::string baseColor = var("base_color");
-                    const std::string baseWeight = var("base_weight");
-                    const std::string roughness = var("specular_roughness");
-                    const std::string metalness = var("base_metalness");
-
-                    thin = !baseColor.empty() &&
-                           !baseWeight.empty() &&
-                           !roughness.empty() &&
-                           !metalness.empty() &&
-                           !Connected(surface->getInput("geometry_normal"));
-
-                    if (thin)
-                    {
-                        tail += "\nstruct PeThin\n"
-                                "{\n"
-                                "    float3 normal;\n"
-                                "    float3 albedo;\n"
-                                "    float roughness;\n"
-                                "    float metalness;\n"
-                                "};\n"
-                                "\n"
-                                "PeThin pe_material_thin(PeSurfacePoint sp)\n"
-                                "{\n"
-                                "    PeThin t;\n"
-                                "    t.normal = normalize(sp.N);\n";
-                        tail += "    t.albedo = " + baseColor + " * " + baseWeight + ";\n";
-                        tail += "    t.roughness = " + roughness + ";\n";
-                        tail += "    t.metalness = " + metalness + ";\n";
-                        tail += "    return t;\n"
-                                "}\n";
-                    }
-                }
+                tail += "\nstruct PeThin\n"
+                        "{\n"
+                        "    float3 normal;\n"
+                        "    float3 albedo;\n"
+                        "    float roughness;\n"
+                        "    float metalness;\n"
+                        "};\n"
+                        "\n"
+                        "PeThin pe_material_thin(PeSurfacePoint sp)\n"
+                        "{\n"
+                        "    pe_fill_vertex_data(sp);\n"
+                        "    pe_material_fragment(vd);\n"
+                        "\n"
+                        "    PeThin t;\n"
+                        "    t.normal = normalize(pe_thin_geometry_normal);\n"
+                        "    t.albedo = pe_thin_base_color * pe_thin_base_weight;\n"
+                        "    t.roughness = pe_thin_specular_roughness;\n"
+                        "    t.metalness = pe_thin_base_metalness;\n"
+                        "    return t;\n"
+                        "}\n";
                 text += tail;
 
-                std::string json = "{\"material\":\"" + name + "\",\"inputs\":[";
+                std::string json = "{\"material\":\"" + name +
+                                   "\",\"surface\":\"" + surface->getNamePath() + "\",\"inputs\":[";
                 for (size_t i = 0; i < inputs.size(); ++i)
                 {
                     const PeMaterialInput &in = inputs[i];
@@ -393,12 +459,16 @@ namespace pe
                             "\",\"node\":\"" + in.node +
                             "\",\"type\":\"" + in.type +
                             "\",\"offset\":" + std::to_string(in.offset) +
-                            ",\"default\":" + JsonDefault(in) + "}";
+                            ",\"default\":" + JsonDefault(in);
+                    if (in.type == "SamplerTexture2D")
+                        json += ",\"file\":" + in.file;
+
+                    json += "}";
                 }
                 json += "],\"vertexData\":[";
                 for (size_t i = 0; i < vertexData.size(); ++i)
                     json += std::string(i ? "," : "") + "\"" + vertexData[i] + "\"";
-                json += "],\"byteSize\":" + std::to_string(offset) + ",\"thin\":" + (thin ? "true" : "false") + "}\n";
+                json += "],\"byteSize\":" + std::to_string(offset) + ",\"thin\":true}\n";
 
                 // --- Write both files. ---
                 const std::filesystem::path outputs[] = {outDir / (name + ".json"), outDir / (name + ".slang")};

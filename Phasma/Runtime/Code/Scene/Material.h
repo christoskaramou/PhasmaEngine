@@ -8,6 +8,7 @@ namespace pe
     class Sampler;
     class PassInfoAsset;
     struct StructMemberInfo;
+    struct OpenPBRMaterialSource;
 
     // GPU-side material data — uploaded to a StructuredBuffer for shader access.
     // Must match the HLSL MaterialGpuData struct in Structures.hlsl exactly.
@@ -16,7 +17,7 @@ namespace pe
         vec4 baseColorFactor;      // rgba
         vec4 emissiveTransmission; // xyz = emissive, w = transmissionFactor
         vec4 pbrParams;            // x = metallic, y = roughness, z = alphaCutoff, w = occlusionStrength
-        vec4 transmissionVolume;   // x = thicknessFactor, y = attenuationDistance, z = ior, w = unused
+        vec4 transmissionVolume;   // x = thicknessFactor, y = attenuationDistance, z = ior, w = raw uint OpenPBR module index (runtime byte record only)
         vec4 attenuationColor;     // xyz = attenuationColor, w = nightEmissive
     };
 
@@ -197,10 +198,11 @@ namespace pe
         void SetTexture(TextureType slot, ResourceHandle<Image> img);
         void SetTextureMask(uint32_t mask);
 
-        // OpenPBR via MaterialX (desktop, setting openpbr): this mesh is shaded by the default OpenPBR module from the
-        // params keyed by OpenPBR input name (see OpenPBRMaterial.h). Not persisted until Phase 3.
+        // Enabling selects the build-time default module; scenes save it (SceneSerializer WriteOpenPBR/ApplyOpenPBR).
         void SetOpenPBR(bool enabled);
         bool GetOpenPBR() const { return m_openpbr; }
+        void SetOpenPBRMaterialSource(std::shared_ptr<const OpenPBRMaterialSource> source);
+        const std::shared_ptr<const OpenPBRMaterialSource> &GetOpenPBRMaterialSource() const { return m_openpbrSource; }
 
         // Clear a specific override so it falls through to parent
         void ClearBaseColorOverride();
@@ -266,6 +268,8 @@ namespace pe
         uint32_t gpuByteOffset = 0xFFFFFFFF;
         uint32_t gpuByteSize = 0;
 
+        uint32_t gpuOpenPBRModule = UINT32_MAX; // module whose immutable layout owns the uploaded record
+
         // Dirty flag for incremental GPU updates
         bool dirty = false;
 
@@ -304,6 +308,7 @@ namespace pe
         std::optional<RenderType> m_renderTypeOverride;
         std::optional<uint32_t> m_textureMaskOverride;
         bool m_openpbr = false;
+        std::shared_ptr<const OpenPBRMaterialSource> m_openpbrSource;
 
         ResourceHandle<Image> m_textureOverrides[5];
         bool m_hasTextureOverride[5] = {};

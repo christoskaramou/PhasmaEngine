@@ -11,9 +11,51 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
+#include <cmath>
 
 namespace pe
 {
+    static MaterialParamValue OpenPBRLuaValue(const OpenPBRInput &input,
+                                              const sol::object &value,
+                                              sol::state_view lua)
+    {
+        const bool number = value.get_type() == sol::type::number;
+        if (input.type == "float" && number)
+            return value.as<float>();
+        if (input.type == "float2" && value.is<vec2>())
+            return value.as<vec2>();
+        if (input.type == "float3" && value.is<vec3>())
+            return value.as<vec3>();
+        if (input.type == "float4" && value.is<vec4>())
+            return value.as<vec4>();
+        if (input.type == "bool" && value.get_type() == sol::type::boolean)
+            return value.as<bool>() ? 1u : 0u;
+
+        if ((input.type == "int" || input.type == "uint") && number)
+        {
+            const double integer = value.as<double>();
+            const double minimum = input.type == "int" ? double(INT32_MIN) : 0.0;
+            const double maximum = input.type == "int" ? double(INT32_MAX) : double(UINT32_MAX);
+            const bool exact = std::isfinite(integer) && std::floor(integer) == integer;
+            const bool inRange = integer >= minimum && integer <= maximum;
+            if (exact && inRange)
+            {
+                if (input.type == "int")
+                    return static_cast<int32_t>(integer);
+
+                return static_cast<uint32_t>(integer);
+            }
+        }
+
+        const std::string expected = input.type.starts_with("float") && input.type.size() == 6
+                                         ? "vec" + input.type.substr(5)
+                                     : input.type == "bool"  ? "boolean"
+                                     : input.type == "float" ? "number"
+                                                             : "integer";
+        luaL_error(lua, "material.set_openpbr: '%s' expects %s", input.identity.c_str(), expected.c_str());
+        return 0.0f;
+    }
+
     static const std::unordered_map<std::string_view, TextureType> s_texSlots = {
         {"base_color", TextureType::BaseColor},
         {"basecolor", TextureType::BaseColor},
@@ -501,9 +543,10 @@ namespace pe
                         setFloat(s, h.nodeId, ResolveMeshIdx(s, h, slot), prop, value);
                     }));
 
-                // OpenPBR via MaterialX (desktop, setting openpbr): a per-mesh switch and the default module's constant
-                // inputs by OpenPBR input name. Not saved with the scene until Phase 3.
-                auto useOpenPBR = [ensureInstance](Scene *s, int meshIdx, bool enabled, sol::state_view lua) {
+                // OpenPBR via MaterialX (desktop, setting openpbr): a per-mesh switch to the default module, use_mtlx for a
+                // .mtlx material, and inputs by qualified or bare OpenPBR name.
+                auto useOpenPBR = [ensureInstance](Scene *s, int meshIdx, bool enabled, sol::state_view lua)
+                {
                     if (meshIdx < 0)
                         return;
 
@@ -511,15 +554,19 @@ namespace pe
                     if (!mesh.material)
                         return;
 
-                    if (enabled && !OpenPBREligible(*mesh.material)) // before any state change
+                    if (enabled && !OpenPBREligible(*mesh.material, *GetOpenPBRDefaultSource()->module))
                     {
-                        luaL_error(lua, "material.use_openpbr: this mesh's material cannot use OpenPBR (custom shader material, or "
-                                        "the generated OpenPBR module is unavailable: see the log)");
+                        luaL_error(lua, "material.use_openpbr: this mesh's material cannot use OpenPBR "
+                                        "(custom shader material, or the generated default module is unavailable: see the log)");
                         return;
                     }
 
                     MaterialInstance *inst = ensureInstance(s, mesh);
-                    if (!inst || inst->GetOpenPBR() == enabled)
+                    if (!inst)
+                        return;
+
+                    const bool defaultModule = GetOpenPBRSource(*inst).module->index == 0u;
+                    if (inst->GetOpenPBR() == enabled && (!enabled || defaultModule))
                         return;
 
                     inst->SetOpenPBR(enabled);
@@ -530,40 +577,74 @@ namespace pe
                     s->SetMaterialDirty();
                 };
 
-                // LuaJIT propagates C++ exceptions as a generic error; raise Lua errors to preserve the diagnostics.
-                auto openpbrInput = [](sol::state_view lua, const char *fn, const std::string &name) -> const OpenPBRInput & {
-                    const OpenPBRLayout &layout = GetOpenPBRDefaultLayout();
-                    if (!layout.valid)
-                        luaL_error(lua, "material.%s: the OpenPBR layout is unavailable (see the log)", fn);
+                mat.set_function("use_mtlx", [ensureInstance](SceneNodeHandle &h,
+                                                             const std::string &path,
+                                                             const std::string &material,
+                                                             sol::this_state ts)
+                {
+                    Scene *s = GetScene();
+                    const int meshIdx = ResolveMeshIdx(s, h);
+                    if (meshIdx < 0)
+                        return;
 
-                    const OpenPBRInput *in = layout.Find(name);
-                    if (!in)
-                        luaL_error(lua, "material.%s: unknown OpenPBR input '%s'", fn, name.c_str());
+                    Mesh &mesh = s->GetMesh(meshIdx);
+                    if (!mesh.material)
+                        return;
 
-                    return *in;
-                };
-
-                auto setOpenPBR = [ensureInstance, openpbrInput](Scene *s,
-                                                                 int meshIdx,
-                                                                 const std::string &name,
-                                                                 const sol::object &value,
-                                                                 sol::state_view lua) {
-                    const OpenPBRInput &in = openpbrInput(lua, "set_openpbr", name);
-
-                    MaterialParamValue v;
-                    if (in.type == "float" && value.get_type() == sol::type::number)
-                        v = value.as<float>();
-                    else if (in.type == "float3" && value.is<vec3>())
-                        v = value.as<vec3>();
-                    else if (in.type == "bool" && value.get_type() == sol::type::boolean)
-                        v = value.as<bool>() ? 1u : 0u;
-                    else
+                    std::string error;
+                    const auto source = LoadOpenPBRMaterial(path, material, error);
+                    if (!source)
                     {
-                        luaL_error(lua, "material.set_openpbr: '%s' expects %s", name.c_str(),
-                                   in.type == "float3" ? "vec3" : in.type == "bool" ? "boolean" : "number");
+                        luaL_error(ts, "%s", error.c_str());
                         return;
                     }
 
+                    if (!OpenPBREligible(*mesh.material, *source->module))
+                    {
+                        luaL_error(ts, "[OpenPBR] %s: cannot assign to a custom shader material", path.c_str());
+                        return;
+                    }
+
+                    if (!s->CanUseOpenPBRImages(*source, error))
+                    {
+                        PE_WARN("%s", error.c_str());
+                        luaL_error(ts, "%s", error.c_str());
+                        return;
+                    }
+
+                    MaterialInstance *inst = ensureInstance(s, mesh);
+                    if (!inst)
+                        return;
+
+                    inst->SetOpenPBRMaterialSource(source);
+                    MirrorOpenPBRToLegacy(*inst);
+                    s->SetTexturesDirty(); // byte layout and editorFlags change: full material-table + mesh-constant rebuild
+                    s->SetMaterialDirty();
+                });
+
+                // LuaJIT propagates C++ exceptions as a generic error; preserve diagnostics with Lua errors.
+                auto openpbrInput = [](const MaterialInstance &instance,
+                                       sol::state_view lua,
+                                       const char *fn,
+                                       const std::string &name) -> const OpenPBRInput &
+                {
+                    const OpenPBRLayout &layout = GetOpenPBRSource(instance).module->layout;
+                    if (!layout.valid)
+                        luaL_error(lua, "material.%s: the OpenPBR layout is unavailable (see the log)", fn);
+
+                    const OpenPBRInput *input = layout.Find(name);
+                    if (!input)
+                        luaL_error(lua, "material.%s: unknown OpenPBR input '%s'", fn, name.c_str());
+
+                    return *input;
+                };
+
+                auto setOpenPBR = [ensureInstance, openpbrInput](Scene *s,
+                                                               int meshIdx,
+                                                               const std::string &name,
+                                                               const sol::object &value,
+                                                               sol::state_view lua)
+                {
                     if (meshIdx < 0)
                         return;
 
@@ -575,16 +656,24 @@ namespace pe
                     if (!inst)
                         return;
 
-                    inst->SetParam(name, v);
+                    const OpenPBRInput &input = openpbrInput(*inst, lua, "set_openpbr", name);
+                    if (input.type == "SamplerTexture2D")
+                    {
+                        luaL_error(lua, "material.set_openpbr: '%s' is a texture; assigning textures from Lua is not supported yet",
+                                   name.c_str());
+                        return;
+                    }
+
+                    inst->SetParam(input.identity, OpenPBRLuaValue(input, value, lua));
                     MirrorOpenPBRToLegacy(*inst);
                     s->SetMaterialDirty();
                 };
 
                 auto getOpenPBR = [openpbrInput](Scene *s,
-                                                 int meshIdx,
-                                                 const std::string &name,
-                                                 sol::state_view lua) -> sol::object {
-                    const OpenPBRInput &in = openpbrInput(lua, "get_openpbr", name);
+                                               int meshIdx,
+                                               const std::string &name,
+                                               sol::state_view lua) -> sol::object
+                {
                     if (meshIdx < 0)
                         return sol::make_object(lua, sol::nil);
 
@@ -592,43 +681,54 @@ namespace pe
                     if (!mesh.materialInstance)
                         return sol::make_object(lua, sol::nil);
 
-                    float v[3];
-                    ResolveOpenPBRInput(*mesh.materialInstance, in, v);
+                    const OpenPBRInput &input = openpbrInput(*mesh.materialInstance, lua, "get_openpbr", name);
+                    if (input.type == "SamplerTexture2D")
+                    {
+                        const auto &source = GetOpenPBRSource(*mesh.materialInstance);
+                        return sol::make_object(lua, source.textures.at(input.identity).file);
+                    }
 
-                    if (in.type == "float3")
-                        return sol::make_object(lua, vec3(v[0], v[1], v[2]));
-                    if (in.type == "bool")
-                        return sol::make_object(lua, v[0] != 0.0f);
+                    const MaterialParamValue value = ResolveOpenPBRInput(*mesh.materialInstance, input);
+                    if (input.type == "bool")
+                        return sol::make_object(lua, std::get<uint32_t>(value) != 0u);
 
-                    return sol::make_object(lua, v[0]);
+                    return std::visit([&](const auto &v) { return sol::make_object(lua, v); }, value);
                 };
 
                 mat.set_function("use_openpbr", sol::overload(
-                    [useOpenPBR](SceneNodeHandle &h, bool enabled, sol::this_state ts) {
+                    [useOpenPBR](SceneNodeHandle &h, bool enabled, sol::this_state ts)
+                    {
                         Scene *s = GetScene();
                         useOpenPBR(s, ResolveMeshIdx(s, h), enabled, sol::state_view(ts));
                     },
-                    [useOpenPBR](SceneNodeHandle &h, int slot, bool enabled, sol::this_state ts) {
+                    [useOpenPBR](SceneNodeHandle &h, int slot, bool enabled, sol::this_state ts)
+                    {
                         Scene *s = GetScene();
                         useOpenPBR(s, ResolveMeshIdx(s, h, slot), enabled, sol::state_view(ts));
                     }));
+
                 mat.set_function("set_openpbr", sol::overload(
-                    [setOpenPBR](SceneNodeHandle &h, const std::string &name, sol::object value, sol::this_state ts) {
+                    [setOpenPBR](SceneNodeHandle &h, const std::string &name, sol::object value, sol::this_state ts)
+                    {
                         Scene *s = GetScene();
                         setOpenPBR(s, ResolveMeshIdx(s, h), name, value, sol::state_view(ts));
                     },
                     [setOpenPBR](SceneNodeHandle &h, int slot, const std::string &name,
-                                 sol::object value, sol::this_state ts) {
+                                 sol::object value, sol::this_state ts)
+                    {
                         Scene *s = GetScene();
                         setOpenPBR(s, ResolveMeshIdx(s, h, slot), name, value, sol::state_view(ts));
                     }));
+
                 mat.set_function("get_openpbr", sol::overload(
-                    [getOpenPBR](SceneNodeHandle &h, const std::string &name, sol::this_state ts) -> sol::object {
+                    [getOpenPBR](SceneNodeHandle &h, const std::string &name, sol::this_state ts) -> sol::object
+                    {
                         Scene *s = GetScene();
                         return getOpenPBR(s, ResolveMeshIdx(s, h), name, sol::state_view(ts));
                     },
                     [getOpenPBR](SceneNodeHandle &h, int slot, const std::string &name,
-                                 sol::this_state ts) -> sol::object {
+                                 sol::this_state ts) -> sol::object
+                    {
                         Scene *s = GetScene();
                         return getOpenPBR(s, ResolveMeshIdx(s, h, slot), name, sol::state_view(ts));
                     }));

@@ -8,6 +8,16 @@ static const uint PE_EDITOR_FLAG_MATERIALX = 32u; // Mesh_Constants.editorFlags:
 // A MaterialX material's byte range: the legacy MaterialGpuData record (80 bytes: raster G-buffer, RT hits and the
 // off path read it), then the generated module's inputs (pe_load_material).
 static const uint PE_OPENPBR_INPUTS_OFFSET = 80u;
+static const uint PE_OPENPBR_MODULE_OFFSET = 60u; // MaterialGpuData.transmissionVolume.w: the record's module index
+
+// One dispatch per module: this pixel's draw is a MaterialX record of the module the dispatch shades.
+bool PeMatchesModule(ByteAddressBuffer materials, Mesh_Constants mesh, uint moduleIndex)
+{
+    if ((mesh.editorFlags & PE_EDITOR_FLAG_MATERIALX) == 0u || mesh.materialByteOffset == 0xffffffffu)
+        return false;
+
+    return materials.Load(mesh.materialByteOffset + PE_OPENPBR_MODULE_OFFSET) == moduleIndex;
+}
 
 struct PeSurfacePoint
 {

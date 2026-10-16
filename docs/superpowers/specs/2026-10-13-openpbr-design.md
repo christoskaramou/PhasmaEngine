@@ -56,7 +56,7 @@ Frame order with `openpbr` on (desktop, capable GPU):
 **Dependency.**
 - MaterialX **1.39.5** (2026-05-22, Apache-2.0) is pulled in via `FetchContent` with a generator-only build: Core, Format, GenShader, GenHw, GenSlang.
 - Measured: the build takes 18 s, and a test executable linking it is 1.68 MB.
-- It links into **PhasmaCook** (and the editor in Phase 3, for live import).
+- It links into **PhasmaCook** only. *Amended 2026-10-16 (Phase 3 plan, Decision 2):* live import runs the installed `PhasmaCook --mtlx` as a subprocess instead of linking MaterialX into the editor.
 - The 2 MB `libraries/` folder is copied next to the tools.
 - The Player links nothing new; it loads cooked shaders and parameters.
 
