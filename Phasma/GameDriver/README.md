@@ -11,16 +11,16 @@ Python installed. The Player builder reuses this workspace's cached engine depen
 
 ```powershell
 ./Phasma/GameDriver/build.ps1
-./Phasma/GameDriver/build-player.ps1
-./Phasma/GameDriver/run-tetris.ps1 -Policy local -Steps 50
+../PhasmaProjects/Arcade/PrismTetris/run-race.ps1 -Policy local -Steps 50
 ```
 
-The launcher copies PRISM Tetris from the PhasmaProjects checkout beside the engine
-(`../PhasmaProjects/PrismTetris`) into a private Player runtime and project under
-`build-game-driver/tetris`, using port 8876. It leaves the window open after play.
-It reuses that Player on subsequent runs; close its window before rebuilding or
-refreshing copied game assets. Another occupied port causes a clear error; select
-`-Port 8877` for a different port. Editor settings and human saved scores stay separate.
+The driver takes no project path: it attaches to a running Player's MCP server (`--url`,
+default `http://127.0.0.1:8876/mcp`; `--seed` resets the game, omitting it attaches). The PRISM
+launcher, `run-race.ps1`, lives with the game in PhasmaProjects (it replaced this folder's
+`run-tetris.ps1` on 2026-10-17): it starts or reuses PRISM with the game's `run.ps1` (Release Player from
+`build-ninja-physics`, MCP port 8876), then runs `build-game-driver/Release/PhasmaGameDriver.exe`.
+Both find this engine by searching upward for a `PhasmaEngine` folder (or `PHASMA_ENGINE`). The window
+stays open after play; an occupied port causes a clear error; `-Port 8877` selects another. Editor settings and human saved scores stay separate.
 
 `local` is an offline numeric baseline, **not Jev**. It requires adapter-provided
 numeric action scores. The live native Tetris smoke completed 50 placements,
@@ -32,7 +32,7 @@ that launches it. In PowerShell 7, enter it with masked input:
 ```powershell
 $env:JEV_API_KEY = Read-Host 'Jev API key' -MaskInput
 try {
-    ./Phasma/GameDriver/run-tetris.ps1 -Policy jev -Steps 20 -Seed 42
+    ../PhasmaProjects/Arcade/PrismTetris/run-race.ps1 -Policy jev -Steps 20 -Seed 42
 } finally {
     Remove-Item Env:JEV_API_KEY -ErrorAction SilentlyContinue
 }
@@ -49,7 +49,7 @@ It is opt-in. Bitdefender left it alone in the 2026-10-15 PRISM races (quarantin
 count unchanged); its reaction to `--save-key-from-clipboard` and `--remove-key` is unverified.
 
 ```powershell
-./Phasma/GameDriver/run-tetris.ps1 -Policy jev -UseVault -Steps 20 -Seed 42
+../PhasmaProjects/Arcade/PrismTetris/run-race.ps1 -Policy jev -UseVault -Steps 20 -Seed 42
 ```
 
 Missing/invalid credentials fail before connecting to or resetting the game.
@@ -234,7 +234,7 @@ deterministic game checks:
 
 ```powershell
 python tools/tests/test_game_driver.py
-./build-ninja-physics/Release/luajit.exe ../PhasmaProjects/PrismTetris/tests/agent_test.lua
+./build-ninja-physics/Release/luajit.exe ../PhasmaProjects/Arcade/PrismTetris/tests/agent_test.lua
 ```
 
 The GameKit check requires the existing Python `lupa` package and exercises the

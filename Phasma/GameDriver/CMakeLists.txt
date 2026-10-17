@@ -35,11 +35,6 @@ if(BUILD_TESTING)
     add_test(NAME game-driver-protocol COMMAND PhasmaGameDriverTests)
 
     find_program(PHASMA_POWERSHELL NAMES powershell.exe pwsh.exe REQUIRED)
-    add_test(NAME game-driver-launcher
-        COMMAND "${PHASMA_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
-        -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/LauncherTests.ps1")
-    set_tests_properties(game-driver-launcher PROPERTIES TIMEOUT 15)
-
     add_test(NAME game-driver-realtime
         COMMAND "${PHASMA_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
         -File "${CMAKE_CURRENT_SOURCE_DIR}/tests/RealtimeLoopTests.ps1")

@@ -9,9 +9,10 @@ art and PCM sounds are included; regeneration does not affect engine rendering.
 See `PrismTetris/README.md` and `tests/{rules_test,entry_test}.lua`.
 
 Moved 2026-10-16 from the engine's `Games/PrismTetris` to the sibling PhasmaProjects repo
-(`../PhasmaProjects/PrismTetris`): its `run.ps1` finds the engine as `../../PhasmaEngine` and
-`Phasma/GameDriver/run-tetris.ps1` finds PRISM as `../PhasmaProjects/PrismTetris`, the same
-sibling layout CMake uses for `PhasmaProjects/Sample`. Paths to it below are relative to PhasmaProjects.
+(now `../PhasmaProjects/Arcade/PrismTetris`). Its `run.ps1` and race launcher `run-race.ps1` (which
+replaced the engine's `Phasma/GameDriver/run-tetris.ps1` on 2026-10-17) find the engine by searching
+upward for a `PhasmaEngine` folder (or `PHASMA_ENGINE`); `run-race.ps1` starts PRISM with `run.ps1`,
+then attaches the engine's `build-game-driver/Release/PhasmaGameDriver.exe` over MCP on port 8876. Paths to it below are relative to PhasmaProjects.
 
 Since 2026-10-15 the launcher copies the Release Player (not the editor) from
 `build-ninja-physics/Release` into `build-prism-tetris/player` with a private
@@ -141,7 +142,7 @@ choice not the highest probability); the error now prints the numbers, cause not
 seen. Same seed, three different Jev outcomes (80, 96+ aborted, 211): the local
 policy (argmax of the hint score) never lost, 6,809+ placements before being stopped.
 The prompt Jev gets is generic (no height/strategy advice) and stateless per move.
-`run-tetris.ps1 -PaceMs N` (`--pace-ms`) holds each placement to at least N ms from
+`run-race.ps1 -PaceMs N` (`--pace-ms`) holds each placement to at least N ms from
 the start of its decision and `-ShowWindow` shows the Player; a paced 800 ms Jev
 run measured 810 ms median between placements (1.23/s), game over at 143, 43 lines.
 Jev cost is input-only, $0.042 per million tokens (docs.typesafe.ai/models,
@@ -159,7 +160,7 @@ Credential in-process through WinRT `PasswordVault` (`Vault.cpp`, no child
 process, nothing printed). That read ran once on 2026-10-15 with no new
 Bitdefender quarantine entry (62 files before and after). Credential preflight
 runs before MCP connection/reset; newly launched Players do not inherit model
-keys. Use `Phasma/GameDriver/run-tetris.ps1` directly. It writes completed-run
+keys. Use `Arcade/PrismTetris/run-race.ps1` directly. It writes completed-run
 speed/latency/token summaries beside the JSONL trace. Launcher regressions cover
 missing/invalid keys, Player credential isolation and incomplete traces. No
 antivirus exclusions or PowerShell/Python credential-store reads belong in this play path.
@@ -180,7 +181,7 @@ and `~/.claude/skills/jev-browser/jev.mjs`; set `JEV_API_KEY` there too.
 
 `PlayerHost.cpp` reads optional integer `mcp_port` from the project's
 `Assets/Agent/agent_config.json` when `mcp` is enabled. It defaults to 8765;
-invalid ports disable the listener with a warning. `run-tetris.ps1` uses 8876 in
+invalid ports disable the listener with a warning. `run-race.ps1` uses 8876 in
 its own copied runtime/assets, leaving other editor instances alone. It starts the
 Player with `--display 1` (`RuntimeHost.cpp` parses `--display`). Pitfall (2026-10-15):
 every session using that port drives the same Player, so one session's `execute_lua`
@@ -231,7 +232,7 @@ Player that day:
   emitter fills both sides of the board in the PRISM Player.
 - On display 1 (59 Hz secondary) the Player sometimes ran at 30 fps, even after `rhi.change_present_mode("immediate")`;
   a later run there held 61 fps, and the same scene rendered at 150-214 fps on the 170 Hz primary. Cause not found.
-- `run-tetris.ps1` connected the driver as soon as the port opened; once, after the load grew, MCP
+- `run-tetris.ps1` (since replaced by `run-race.ps1`) connected the driver as soon as the port opened; once, after the load grew, MCP
   rejected that first request and a retry worked.
 
 Universal accelerated simulation remains absent. `FrameTimer::Tick` uses wall
