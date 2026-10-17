@@ -5,6 +5,7 @@
 namespace pe
 {
     struct Mesh;
+    class Scene;
     class ImageView;
 
     // One uniform input of a generated MaterialX module (PhasmaCook --mtlx), identified by node path + input name.
@@ -76,6 +77,13 @@ namespace pe
 
     // Also requires an opaque or alpha-cut mesh: blended meshes stay legacy until the transparency phase.
     bool MeshUsesOpenPBR(const Mesh &mesh);
+
+    // Production mutations shared by scripts and the inspector; failed validation preserves the instance.
+    bool AssignOpenPBRMaterial(Scene &scene, Mesh &mesh,
+                               std::shared_ptr<const OpenPBRMaterialSource> source, std::string &error);
+    bool SetOpenPBREnabled(Scene &scene, Mesh &mesh, bool enabled, std::string &error);
+    bool SetOpenPBRInput(Scene &scene, MaterialInstance &instance, const std::string &name,
+                         const MaterialParamValue &value, std::string &error);
 
     // The value an input resolves to: the instance's param override, then its material's params, then the source's own.
     MaterialParamValue ResolveOpenPBRInput(const MaterialInstance &instance, const OpenPBRInput &input);

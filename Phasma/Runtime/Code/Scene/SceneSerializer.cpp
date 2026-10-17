@@ -1629,6 +1629,12 @@ namespace pe
                 return;
             }
 
+            if (state.HasMember("enabled") && !state["enabled"].IsBool())
+            {
+                PE_WARN("[OpenPBR] %s.enabled: expected a boolean", key.c_str());
+                return;
+            }
+
             std::string error;
             auto source = GetOpenPBRDefaultSource();
             if (state.HasMember("mtlx"))
@@ -1658,13 +1664,14 @@ namespace pe
             }
 
             MaterialInstance *instance = scene.CreateMaterialInstance(mesh);
-            if (state.HasMember("mtlx"))
-                instance->SetOpenPBRMaterialSource(source);
-            else
-                instance->SetOpenPBR(true);
+            instance->SetOpenPBRMaterialSource(source);
 
             ApplyOpenPBRInputs(*instance, state, key);
-            MirrorOpenPBRToLegacy(*instance);
+            const bool enabled = !state.HasMember("enabled") || state["enabled"].GetBool();
+            instance->SetOpenPBR(enabled);
+            if (enabled)
+                MirrorOpenPBRToLegacy(*instance);
+
             scene.SetTexturesDirty();
             scene.SetMaterialDirty();
         }
@@ -1823,12 +1830,21 @@ namespace pe
 
         void WriteOpenPBR(const Mesh &mesh, rapidjson::Value &meshValue) const
         {
-            if (!mesh.materialInstance || !mesh.materialInstance->GetOpenPBR())
+            if (!mesh.materialInstance)
                 return;
 
             const MaterialInstance &instance = *mesh.materialInstance;
             const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
+            const bool hasInputs = std::any_of(source.module->layout.inputs.begin(), source.module->layout.inputs.end(),
+                                               [&](const OpenPBRInput &input)
+                                               {
+                                                   return instance.HasParamOverride(input.identity);
+                                               });
+            if (!instance.GetOpenPBR() && !instance.GetOpenPBRMaterialSource() && !hasInputs)
+                return;
+
             rapidjson::Value state(rapidjson::kObjectType);
+            state.AddMember("enabled", instance.GetOpenPBR(), allocator);
             if (&source != GetOpenPBRDefaultSource().get())
             {
                 const auto documentPath = std::filesystem::path(

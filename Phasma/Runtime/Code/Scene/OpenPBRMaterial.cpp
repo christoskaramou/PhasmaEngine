@@ -5,6 +5,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Scene/PassInfoAsset.h"
+#include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "gtc/color_space.hpp"
 #include "rapidjson/document.h"
@@ -664,6 +665,101 @@ namespace pe
         const RenderType type = mesh.renderType;
         const bool opaque = type == RenderType::Opaque || type == RenderType::AlphaCut;
         return opaque && OpenPBREligible(*mesh.material, *GetOpenPBRSource(*mesh.materialInstance).module);
+    }
+
+    static bool ValidateOpenPBRAssignment(Scene &scene, const Mesh &mesh,
+                                          const OpenPBRMaterialSource &source, std::string &error)
+    {
+        if (!mesh.material || !OpenPBREligible(*mesh.material, *source.module))
+        {
+            error = "[OpenPBR] Cannot assign to a custom shader material or use an unavailable module (see the log)";
+            return false;
+        }
+
+        if (!scene.CanUseOpenPBRImages(source, error))
+        {
+            PE_WARN("%s", error.c_str());
+            return false;
+        }
+
+        return true;
+    }
+
+    bool AssignOpenPBRMaterial(Scene &scene, Mesh &mesh,
+                               std::shared_ptr<const OpenPBRMaterialSource> source, std::string &error)
+    {
+        if (!ValidateOpenPBRAssignment(scene, mesh, *source, error))
+            return false;
+
+        MaterialInstance &instance = *scene.CreateMaterialInstance(mesh);
+        instance.SetOpenPBRMaterialSource(std::move(source));
+        MirrorOpenPBRToLegacy(instance);
+        scene.SetTexturesDirty(); // layout and editorFlags need a full material-table + mesh-constant rebuild
+        scene.SetMaterialDirty();
+        return true;
+    }
+
+    bool SetOpenPBREnabled(Scene &scene, Mesh &mesh, bool enabled, std::string &error)
+    {
+        if (!mesh.material)
+        {
+            error = "[OpenPBR] This mesh has no material";
+            return false;
+        }
+
+        const auto source = mesh.materialInstance
+                                ? mesh.materialInstance->GetOpenPBRMaterialSource()
+                                : mesh.material->openpbrSource;
+        const auto activeSource = source ? source : GetOpenPBRDefaultSource();
+        if (enabled && !ValidateOpenPBRAssignment(scene, mesh, *activeSource, error))
+            return false;
+
+        if (!enabled && !mesh.materialInstance)
+            return true;
+
+        MaterialInstance &instance = *scene.CreateMaterialInstance(mesh);
+        if (instance.GetOpenPBR() == enabled)
+            return true;
+
+        instance.SetOpenPBR(enabled);
+        if (enabled)
+            MirrorOpenPBRToLegacy(instance);
+
+        scene.SetTexturesDirty(); // enabled state changes the byte layout and editorFlags
+        scene.SetMaterialDirty();
+        return true;
+    }
+
+    bool SetOpenPBRInput(Scene &scene, MaterialInstance &instance, const std::string &name,
+                         const MaterialParamValue &value, std::string &error)
+    {
+        const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
+        const OpenPBRInput *input = source.module->layout.Find(name);
+        if (!source.module->layout.valid || !input)
+        {
+            error = "[OpenPBR] Unknown input or unavailable layout: " + name;
+            return false;
+        }
+
+        if (input->type == "SamplerTexture2D")
+        {
+            error = "[OpenPBR] Texture filenames are read-only: " + name;
+            return false;
+        }
+
+        const bool matchingType = value.index() == source.defaults.at(input->identity).index();
+        const bool validBool = input->type != "bool" ||
+                               (std::holds_alternative<uint32_t>(value) && std::get<uint32_t>(value) <= 1u);
+        if (!matchingType || !validBool)
+        {
+            error = "[OpenPBR] " + name + " expects " + input->type;
+            return false;
+        }
+
+        instance.SetParam(input->identity, value);
+        MirrorOpenPBRToLegacy(instance);
+        scene.SetMaterialDirty();
+        return true;
     }
 
     MaterialParamValue ResolveOpenPBRInput(const MaterialInstance &instance, const OpenPBRInput &input)

@@ -545,7 +545,7 @@ namespace pe
 
                 // OpenPBR via MaterialX (desktop, setting openpbr): a per-mesh switch to the default module, use_mtlx for a
                 // .mtlx material, and inputs by qualified or bare OpenPBR name.
-                auto useOpenPBR = [ensureInstance](Scene *s, int meshIdx, bool enabled, sol::state_view lua)
+                auto useOpenPBR = [](Scene *s, int meshIdx, bool enabled, sol::state_view lua)
                 {
                     if (meshIdx < 0)
                         return;
@@ -554,33 +554,21 @@ namespace pe
                     if (!mesh.material)
                         return;
 
-                    if (enabled && !OpenPBREligible(*mesh.material, *GetOpenPBRDefaultSource()->module))
-                    {
-                        luaL_error(lua, "material.use_openpbr: this mesh's material cannot use OpenPBR "
-                                        "(custom shader material, or the generated default module is unavailable: see the log)");
-                        return;
-                    }
-
-                    MaterialInstance *inst = ensureInstance(s, mesh);
-                    if (!inst)
-                        return;
-
-                    const bool defaultModule = GetOpenPBRSource(*inst).module->index == 0u;
-                    if (inst->GetOpenPBR() == enabled && (!enabled || defaultModule))
-                        return;
-
-                    inst->SetOpenPBR(enabled);
-                    if (enabled)
-                        MirrorOpenPBRToLegacy(*inst);
-
-                    s->SetTexturesDirty(); // byte layout and editorFlags change: full material-table + mesh-constant rebuild
-                    s->SetMaterialDirty();
+                    const auto source = GetOpenPBRDefaultSource();
+                    const bool assignedDefault = mesh.materialInstance &&
+                                                 &GetOpenPBRSource(*mesh.materialInstance) == source.get();
+                    std::string error;
+                    const bool success = enabled && !assignedDefault
+                                             ? AssignOpenPBRMaterial(*s, mesh, source, error)
+                                             : SetOpenPBREnabled(*s, mesh, enabled, error);
+                    if (!success)
+                        luaL_error(lua, "material.use_openpbr: %s", error.c_str());
                 };
 
-                mat.set_function("use_mtlx", [ensureInstance](SceneNodeHandle &h,
-                                                             const std::string &path,
-                                                             const std::string &material,
-                                                             sol::this_state ts)
+                mat.set_function("use_mtlx", [](SceneNodeHandle &h,
+                                                 const std::string &path,
+                                                 const std::string &material,
+                                                 sol::this_state ts)
                 {
                     Scene *s = GetScene();
                     const int meshIdx = ResolveMeshIdx(s, h);
@@ -593,33 +581,8 @@ namespace pe
 
                     std::string error;
                     const auto source = LoadOpenPBRMaterial(path, material, error);
-                    if (!source)
-                    {
+                    if (!source || !AssignOpenPBRMaterial(*s, mesh, source, error))
                         luaL_error(ts, "%s", error.c_str());
-                        return;
-                    }
-
-                    if (!OpenPBREligible(*mesh.material, *source->module))
-                    {
-                        luaL_error(ts, "[OpenPBR] %s: cannot assign to a custom shader material", path.c_str());
-                        return;
-                    }
-
-                    if (!s->CanUseOpenPBRImages(*source, error))
-                    {
-                        PE_WARN("%s", error.c_str());
-                        luaL_error(ts, "%s", error.c_str());
-                        return;
-                    }
-
-                    MaterialInstance *inst = ensureInstance(s, mesh);
-                    if (!inst)
-                        return;
-
-                    inst->SetOpenPBRMaterialSource(source);
-                    MirrorOpenPBRToLegacy(*inst);
-                    s->SetTexturesDirty(); // byte layout and editorFlags change: full material-table + mesh-constant rebuild
-                    s->SetMaterialDirty();
                 });
 
                 // LuaJIT propagates C++ exceptions as a generic error; preserve diagnostics with Lua errors.
@@ -664,9 +627,9 @@ namespace pe
                         return;
                     }
 
-                    inst->SetParam(input.identity, OpenPBRLuaValue(input, value, lua));
-                    MirrorOpenPBRToLegacy(*inst);
-                    s->SetMaterialDirty();
+                    std::string error;
+                    if (!SetOpenPBRInput(*s, *inst, input.identity, OpenPBRLuaValue(input, value, lua), error))
+                        luaL_error(lua, "material.set_openpbr: %s", error.c_str());
                 };
 
                 auto getOpenPBR = [openpbrInput](Scene *s,

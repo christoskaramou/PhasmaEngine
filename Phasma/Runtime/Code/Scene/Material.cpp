@@ -422,9 +422,6 @@ namespace pe
 
     void MaterialInstance::SetOpenPBR(bool enabled)
     {
-        if (enabled && m_openpbrSource && m_openpbrSource != GetOpenPBRDefaultSource())
-            SetOpenPBRMaterialSource(GetOpenPBRDefaultSource());
-
         m_openpbr = enabled;
         dirty = true;
     }
@@ -553,38 +550,39 @@ namespace pe
 
     void MaterialInstance::ApplyDiffFromResolved(const Material &resolved)
     {
-        if (resolved.baseColorFactor != m_parent->baseColorFactor)
+        // Imported instances may already hold OpenPBR mirrors before saved legacy fields are restored.
+        if (resolved.baseColorFactor != GetBaseColorFactor())
             SetBaseColorFactor(resolved.baseColorFactor);
-        if (resolved.metallic != m_parent->metallic)
+        if (resolved.metallic != GetMetallic())
             SetMetallic(resolved.metallic);
-        if (resolved.roughness != m_parent->roughness)
+        if (resolved.roughness != GetRoughness())
             SetRoughness(resolved.roughness);
-        if (resolved.alphaCutoff != m_parent->alphaCutoff)
+        if (resolved.alphaCutoff != GetAlphaCutoff())
             SetAlphaCutoff(resolved.alphaCutoff);
-        if (resolved.emissiveFactor != m_parent->emissiveFactor)
+        if (resolved.emissiveFactor != GetEmissiveFactor())
             SetEmissiveFactor(resolved.emissiveFactor);
-        if (resolved.occlusionStrength != m_parent->occlusionStrength)
+        if (resolved.occlusionStrength != GetOcclusionStrength())
             SetOcclusionStrength(resolved.occlusionStrength);
-        if (resolved.normalScale != m_parent->normalScale)
+        if (resolved.normalScale != GetNormalScale())
             SetNormalScale(resolved.normalScale);
-        if (resolved.transmissionFactor != m_parent->transmissionFactor)
+        if (resolved.transmissionFactor != GetTransmissionFactor())
             SetTransmissionFactor(resolved.transmissionFactor);
-        if (resolved.thicknessFactor != m_parent->thicknessFactor)
+        if (resolved.thicknessFactor != GetThicknessFactor())
             SetThicknessFactor(resolved.thicknessFactor);
-        if (resolved.attenuationDistance != m_parent->attenuationDistance)
+        if (resolved.attenuationDistance != GetAttenuationDistance())
             SetAttenuationDistance(resolved.attenuationDistance);
-        if (resolved.ior != m_parent->ior)
+        if (resolved.ior != GetIor())
             SetIor(resolved.ior);
-        if (resolved.attenuationColor != m_parent->attenuationColor)
+        if (resolved.attenuationColor != GetAttenuationColor())
             SetAttenuationColor(resolved.attenuationColor);
-        if (resolved.renderType != m_parent->renderType)
+        if (resolved.renderType != GetRenderType())
             SetRenderType(resolved.renderType);
-        if (resolved.textureMask != m_parent->textureMask)
+        if (resolved.textureMask != GetTextureMask())
             SetTextureMask(resolved.textureMask);
 
         for (int i = 0; i < 5; i++)
         {
-            if (resolved.textures[i].get() != m_parent->textures[i].get())
+            if (resolved.textures[i].get() != GetTexture(i))
                 SetTexture(static_cast<TextureType>(i), resolved.textures[i]);
         }
     }

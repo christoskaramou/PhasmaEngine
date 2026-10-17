@@ -8,6 +8,7 @@
 #include "GUI/Helpers.h"
 #include "Scene/Material.h"
 #include "Scene/MaterialAsset.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
@@ -38,6 +39,13 @@ namespace pe
     {
         if (!mesh || !node)
             return;
+
+        const SceneNodeHandle editNode = GetActiveScene()->MakeHandle(node);
+        if (m_openpbrEditNode != editNode)
+        {
+            m_openpbrEditNode = editNode;
+            m_openpbrEdits.clear();
+        }
 
         ImGui::Text("Mesh Data & Offsets");
         if (ImGui::BeginTable("MeshOffsets", 2, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
@@ -170,6 +178,9 @@ namespace pe
         ui::ItemTooltip("Edit the mesh material, shader parameters, and texture bindings.");
         if (materialOpen)
         {
+            if (mesh->material && DrawOpenPBRMaterial(*mesh))
+                return;
+
             // If material has a PassInfoAsset, use the reflection-driven editor
             if (mesh->material && mesh->material->passInfoAsset)
             {
@@ -432,6 +443,183 @@ namespace pe
 
             DrawTextureInfo(mesh, node);
         }
+    }
+
+    static bool DrawOpenPBRValue(const OpenPBRInput &input, MaterialParamValue &value)
+    {
+        if (input.type == "bool")
+        {
+            bool enabled = std::get<uint32_t>(value) != 0u;
+            if (!ImGui::Checkbox("##value", &enabled))
+                return false;
+
+            value = enabled ? 1u : 0u;
+            return true;
+        }
+
+        if (input.type == "int")
+            return ImGui::InputScalar("##value", ImGuiDataType_S32, &std::get<int32_t>(value));
+
+        if (input.type == "uint")
+            return ImGui::InputScalar("##value", ImGuiDataType_U32, &std::get<uint32_t>(value));
+
+        if (input.type == "float")
+            return ImGui::DragFloat("##value", &std::get<float>(value), 0.01f);
+
+        if (input.type == "float2")
+            return ImGui::DragFloat2("##value", &std::get<vec2>(value).x, 0.01f);
+
+        if (input.type == "float3")
+            return ImGui::DragFloat3("##value", &std::get<vec3>(value).x, 0.01f);
+
+        if (input.type == "float4")
+            return ImGui::DragFloat4("##value", &std::get<vec4>(value).x, 0.01f);
+
+        return false;
+    }
+
+    bool MeshWidget::DrawOpenPBRMaterial(Mesh &mesh)
+    {
+        auto [it, inserted] = m_openpbrEdits.try_emplace(&mesh);
+        OpenPBREditState &state = it->second;
+        const auto source = mesh.materialInstance ? mesh.materialInstance->GetOpenPBRMaterialSource() : nullptr;
+        if (inserted || source != state.source)
+        {
+            state.source = source;
+            state.error.clear();
+            const bool assignedDocument = source && source != GetOpenPBRDefaultSource();
+            std::snprintf(state.document, sizeof(state.document), "%s", assignedDocument ? source->path.c_str() : "");
+            std::snprintf(state.material, sizeof(state.material), "%s",
+                          assignedDocument ? source->material.c_str() : "Material");
+        }
+
+        bool enabled = mesh.materialInstance && mesh.materialInstance->GetOpenPBR();
+        if (ImGui::Checkbox("OpenPBR", &enabled))
+        {
+            if (auto *renderer = GetGlobalSystem<RendererSystem>())
+                renderer->WaitAllFramesCommands();
+
+            state.error.clear();
+            if (SetOpenPBREnabled(*GetActiveScene(), mesh, enabled, state.error))
+                m_gui->NotifyChange();
+        }
+        ui::ItemTooltip("Use the assigned MaterialX graph. Turning this off preserves its source and input overrides.");
+
+        DrawOpenPBRAssignment(mesh, state);
+        if (!state.error.empty())
+            ImGui::TextWrapped("%s", state.error.c_str());
+
+        if (!mesh.materialInstance || !mesh.materialInstance->GetOpenPBR())
+            return false;
+
+        const OpenPBRMaterialSource &activeSource = GetOpenPBRSource(*mesh.materialInstance);
+        const bool defaultSource = &activeSource == GetOpenPBRDefaultSource().get();
+        ImGui::TextWrapped("Document: %s", defaultSource ? "Built-in OpenPBR" : activeSource.path.c_str());
+        ImGui::TextWrapped("Material: %s", activeSource.material.c_str());
+        if (!MeshUsesOpenPBR(mesh))
+            ImGui::TextWrapped("OpenPBR shading requires a standard opaque or alpha-cut material.");
+
+        DrawOpenPBRInputs(*mesh.materialInstance, state.error);
+        return true;
+    }
+
+    void MeshWidget::DrawOpenPBRAssignment(Mesh &mesh, OpenPBREditState &state)
+    {
+        ImGui::InputText(ui::LabelAbove("MaterialX document"), state.document, sizeof(state.document));
+        if (ImGui::Button("Browse...##MaterialX"))
+        {
+            if (auto *selector = m_gui->GetWidget<FileSelector>())
+            {
+                auto selectDocument = [this, target = &mesh, node = m_openpbrEditNode](const std::string &path)
+                {
+                    if (m_openpbrEditNode != node)
+                        return true;
+
+                    const auto it = m_openpbrEdits.find(target);
+                    if (it != m_openpbrEdits.end())
+                        std::snprintf(it->second.document, sizeof(it->second.document), "%s", path.c_str());
+
+                    return true;
+                };
+                selector->OpenSelection(selectDocument, {".mtlx"});
+            }
+        }
+
+        if (ImGui::BeginDragDropTarget())
+        {
+            if (const auto *payload = ImGui::AcceptDragDropPayload("CONTENT_BROWSER_ITEM"))
+            {
+                const std::filesystem::path path(static_cast<const char *>(payload->Data));
+                if (path.extension() == ".mtlx")
+                {
+                    std::snprintf(state.document, sizeof(state.document), "%s",
+                                  static_cast<const char *>(payload->Data));
+                }
+            }
+            ImGui::EndDragDropTarget();
+        }
+        ui::ItemTooltip("Choose or drop a .mtlx document, enter its material name, then assign it.");
+
+        ImGui::InputText(ui::LabelAbove("MaterialX material"), state.material, sizeof(state.material));
+        if (!ImGui::Button("Assign MaterialX"))
+            return;
+
+        if (auto *renderer = GetGlobalSystem<RendererSystem>())
+            renderer->WaitAllFramesCommands();
+
+        state.error.clear();
+        const auto source = LoadOpenPBRMaterial(state.document, state.material, state.error);
+        if (source && AssignOpenPBRMaterial(*GetActiveScene(), mesh, source, state.error))
+            m_gui->NotifyChange();
+    }
+
+    void MeshWidget::DrawOpenPBRInputs(MaterialInstance &instance, std::string &error)
+    {
+        const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
+        if (!ImGui::BeginTable("MaterialXInputs", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg))
+            return;
+
+        ImGui::TableSetupColumn("Input", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableSetupColumn("Type", ImGuiTableColumnFlags_WidthFixed, 70.0f);
+        ImGui::TableSetupColumn("Value", ImGuiTableColumnFlags_WidthStretch);
+        ImGui::TableHeadersRow();
+
+        std::string node;
+        for (const OpenPBRInput &input : source.module->layout.inputs)
+        {
+            if (node != input.node)
+            {
+                node = input.node;
+                ImGui::TableNextRow();
+                ImGui::TableSetColumnIndex(0);
+                ImGui::TextDisabled("%s", node.c_str());
+            }
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::TextWrapped("%s", input.identity.c_str());
+            ImGui::TableSetColumnIndex(1);
+            ImGui::TextWrapped("%s", input.type.c_str());
+            ImGui::TableSetColumnIndex(2);
+            if (input.type == "SamplerTexture2D")
+            {
+                ImGui::TextWrapped("%s", source.textures.at(input.identity).file.c_str());
+                continue;
+            }
+
+            ImGui::PushID(input.identity.c_str());
+            ImGui::SetNextItemWidth(-FLT_MIN);
+            MaterialParamValue value = ResolveOpenPBRInput(instance, input);
+            if (DrawOpenPBRValue(input, value))
+            {
+                error.clear();
+                if (SetOpenPBRInput(*GetActiveScene(), instance, input.identity, value, error))
+                    m_gui->NotifyChange();
+            }
+            ImGui::PopID();
+        }
+
+        ImGui::EndTable();
     }
 
     void MeshWidget::DrawTextureInfo(Mesh *mesh, NodeId *node)

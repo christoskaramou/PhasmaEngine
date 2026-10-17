@@ -201,7 +201,7 @@ namespace pe
         void SetTexture(TextureType slot, ResourceHandle<Image> img);
         void SetTextureMask(uint32_t mask);
 
-        // Enabling selects the build-time default module; scenes save it (SceneSerializer WriteOpenPBR/ApplyOpenPBR).
+        // Toggle shading without replacing the assigned source or its overrides.
         void SetOpenPBR(bool enabled);
         bool GetOpenPBR() const { return m_openpbr; }
         void SetOpenPBRMaterialSource(std::shared_ptr<const OpenPBRMaterialSource> source);
@@ -238,8 +238,7 @@ namespace pe
         // Check if any overrides exist
         bool HasOverrides() const;
 
-        // Set overrides by comparing resolved material against the parent.
-        // Any field that differs from parent becomes an override.
+        // Restore resolved values against the current instance, including pre-existing overrides.
         void ApplyDiffFromResolved(const Material &resolved);
 
         // Resolve: build a complete Material by merging parent + overrides.

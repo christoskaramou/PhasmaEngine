@@ -5508,24 +5508,49 @@ namespace pe
         // Parse coordinates — u/v conversion is deferred to the main thread (QueueAction).
         // Store as float u/v or int x/y.
         bool useUV = false;
-        float u = 0.0f, v = 0.0f;
-        int x = -1, y = -1;
+        bool hasCoordinates = false;
+        float u = 0.0f;
+        float v = 0.0f;
+        int x = 0;
+        int y = 0;
         {
             auto parsedArgs = ParseArgs(args);
             if (parsedArgs.contains("u") || parsedArgs.contains("v"))
             {
-                u = ExtractArgNum(args, "u");
-                v = ExtractArgNum(args, "v");
                 useUV = true;
+                hasCoordinates = parsedArgs.contains("u") && parsedArgs.contains("v");
+                if (hasCoordinates)
+                    hasCoordinates = parsedArgs["u"].is_number() && parsedArgs["v"].is_number();
+
+                if (hasCoordinates)
+                {
+                    u = ExtractArgNum(args, "u");
+                    v = ExtractArgNum(args, "v");
+                    const bool validU = std::isfinite(u) && u >= 0.0f && u <= 1.0f;
+                    const bool validV = std::isfinite(v) && v >= 0.0f && v <= 1.0f;
+                    hasCoordinates = validU && validV;
+                }
             }
             else
             {
-                x = static_cast<int>(ExtractArgInt(args, "x", -1));
-                y = static_cast<int>(ExtractArgInt(args, "y", -1));
+                hasCoordinates = parsedArgs.contains("x") && parsedArgs.contains("y");
+                if (hasCoordinates)
+                {
+                    const auto &pixelX = parsedArgs["x"];
+                    const auto &pixelY = parsedArgs["y"];
+                    const bool validX = pixelX.is_number_integer() && pixelX >= INT32_MIN && pixelX <= INT32_MAX;
+                    const bool validY = pixelY.is_number_integer() && pixelY >= INT32_MIN && pixelY <= INT32_MAX;
+                    hasCoordinates = validX && validY;
+                    if (hasCoordinates)
+                    {
+                        x = pixelX.get<int>();
+                        y = pixelY.get<int>();
+                    }
+                }
             }
         }
 
-        if (!useUV && (x < 0 || y < 0))
+        if (!hasCoordinates)
             return "{\"error\":\"provide u/v (normalized) or x/y (real pixels)\"}";
 
         // Heap-allocate shared state so the lambda is safe even if wait_for times out first.
@@ -5546,37 +5571,38 @@ namespace pe
 
         QueueAction([this, state, useUV, u, v, x, y, action, scrollX, scrollY]()
                     {
-            // Resolve coordinates using the stored SDL_Window* (safe on any thread).
-            int rx = x, ry = y;
-            {
-                auto *sdlWin = static_cast<SDL_Window *>(m_sdlWindow);
-                int winW = 0, winH = 0;
-                if (sdlWin)
-                    SDL_GetWindowSize(sdlWin, &winW, &winH);
-                if (useUV)
-                {
-                    rx = static_cast<int>(u * winW);
-                    ry = static_cast<int>(v * winH);
-                    state->resolvedX = rx;
-                    state->resolvedY = ry;
-                    state->resolvedU = (winW > 0) ? static_cast<float>(rx) / winW : u;
-                    state->resolvedV = (winH > 0) ? static_cast<float>(ry) / winH : v;
-                }
-                else
-                {
-                    state->resolvedU = (winW > 0) ? static_cast<float>(rx) / winW : 0.0f;
-                    state->resolvedV = (winH > 0) ? static_cast<float>(ry) / winH : 0.0f;
-                }
-            }
-
             ImGuiContext *ctx = ImGui::GetCurrentContext();
             ImGuiIO &io = ImGui::GetIO();
+            const bool screenCoordinates = (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable) != 0;
+            auto *mainWin = static_cast<SDL_Window *>(m_sdlWindow);
+            int winW = 0;
+            int winH = 0;
+            int originX = 0;
+            int originY = 0;
+            if (mainWin)
+            {
+                SDL_GetWindowSize(mainWin, &winW, &winH);
+                if (screenCoordinates)
+                    SDL_GetWindowPosition(mainWin, &originX, &originY);
+            }
+
+            // Screenshots use client space; ImGui uses desktop space when platform windows are enabled.
+            const int clientX = useUV ? static_cast<int>(u * winW)
+                                     : static_cast<int>(std::clamp<int64_t>(
+                                           static_cast<int64_t>(x) - originX, INT32_MIN, INT32_MAX));
+            const int clientY = useUV ? static_cast<int>(v * winH)
+                                     : static_cast<int>(std::clamp<int64_t>(
+                                           static_cast<int64_t>(y) - originY, INT32_MIN, INT32_MAX));
+            const int rx = useUV ? clientX + originX : x;
+            const int ry = useUV ? clientY + originY : y;
+            state->resolvedX = rx;
+            state->resolvedY = ry;
+            state->resolvedU = winW > 0 ? static_cast<float>(clientX) / winW : u;
+            state->resolvedV = winH > 0 ? static_cast<float>(clientY) / winH : v;
             ImVec2 pos{static_cast<float>(rx), static_cast<float>(ry)};
 
-            SDL_Window *focusWin = SDL_GetMouseFocus();
-            SDL_Window *mainWin = static_cast<SDL_Window *>(m_sdlWindow);
-            if (SDL_Window *win = focusWin ? focusWin : mainWin)
-                SDL_WarpMouseInWindow(win, rx, ry);
+            if (mainWin)
+                SDL_WarpMouseInWindow(mainWin, clientX, clientY);
 
             bool handledByTabBar = false;
             if ((action == "click" || action == "double_click") && ctx)
