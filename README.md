@@ -4,6 +4,14 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 
 ![Screenshot](Phasma/Editor/EditorAssets/Images/ABeautifulGame.png)
 
+> **Get the projects.** PhasmaEngine is the engine. The games and demos live in **[PhasmaProjects](https://github.com/christoskaramou/PhasmaProjects)** — a solar system, an RTS, a voxel world, a physics lab, and a shelf of arcade remakes, ready to open.
+>
+> ```bash
+> git clone https://github.com/christoskaramou/PhasmaProjects.git
+> ```
+>
+> Put that folder beside this one, then pick a project in the launcher. [How a project is laid out](#optional-sample-projects). [How to use every program](docs/manual/README.md).
+
 ## Features
 
 ### Rendering
@@ -60,7 +68,7 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * Script editor with live function browser ("Show Functions")
 * CPU/GPU metrics
 * Debug console
-* Lua scripting (incl. `tween.to` helpers for smooth animation/camera focus)
+* Lua scripting (incl. `tween.to` helpers for smooth animation/camera focus). [How scripts run, and the tables they can call](docs/manual/scripting.md)
 * Event system
 * Editor module C++ hot reload (PhasmaEditorModule.dll)
 * Named editor actions invokable without mouse input (agents/automation)

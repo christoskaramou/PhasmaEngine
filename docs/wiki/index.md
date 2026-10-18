@@ -9,6 +9,7 @@
 
 ## Pages
 
+- `../manual/README.md` — user manual for the launcher, editor, player, animator, profiler, cook, export, game driver, and Lua scripting
 - `README.md` — purpose and maintenance rules
 - `log.md` — wiki maintenance log
 - `architecture/agent-tooling.md` — MCP, editor agent tools, and ADK sidecar boundary

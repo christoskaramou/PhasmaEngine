@@ -129,6 +129,15 @@ The performance path loads `Scenes/sponza.pescene`,
 reapplies immediate present mode, captures 10 snapshots 1 second apart, then
 calls `tools/compare_snapshots.py`.
 
+Frozen renderer baselines must include runtime shader files, not just DLLs and
+executables (verified 2026-10-18). The `PhasmaRuntimeAssets` ALL target in
+[CMakeLists.txt](../../../CMakeLists.txt) copies the current source assets into
+the build output, so another build can change a baseline without relinking it.
+Use an isolated runtime copy and verify its hashes between jobs. Include
+`EditorAssets`, `MaterialX` and `Lib` when copying a desktop runtime; missing
+editor icons or MaterialX nodedefs are incomplete-copy failures. Inspect copied
+`NativeScripts.json` paths too: they can still point at the original build tree.
+
 Scene paths have two conventions in this flow, captured by paired constants in
 `tools/precommit_validate.py`: editor startup config stores the asset-prefixed
 path, such as `Assets/Scenes/sponza.pescene`, while Lua executes from the asset
