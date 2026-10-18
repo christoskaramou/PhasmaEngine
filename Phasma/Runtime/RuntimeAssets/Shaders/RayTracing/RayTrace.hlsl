@@ -63,7 +63,7 @@ struct Vertex
 [[vk::binding(9, 0)]] Texture2D LutIBL;
 [[vk::binding(10, 0)]] Texture2D<float> depthBuffer;
 [[vk::binding(11, 0)]] StructuredBuffer<MaterialGpuData> materialTable;
-[[vk::binding(12, 0)]] Texture2D textures[];
+[[vk::binding(12, 0)]] Texture2D pe_textures[] : register(t0, space100);
 
 // Set 1
 [[vk::binding(0, 1)]] cbuffer LightSystemUBO
@@ -193,7 +193,7 @@ float4 SampleArray(float2 uv, uint index)
     if (index == 0xFFFFFFFF)
         return float4(1.0, 1.0, 1.0, 1.0);
 
-    return textures[NonUniformResourceIndex(index)].SampleLevel(material_sampler, uv, 0);
+    return pe_textures[NonUniformResourceIndex(index)].SampleLevel(material_sampler, uv, 0);
 }
 
 // Matrices

@@ -1,5 +1,6 @@
 #include "API/DX12/Dx12ShaderImpl.h"
 #include "API/SlangCompiler.h"
+#include "API/RHI.h"
 
 #if defined(PE_WIN32)
 
@@ -705,9 +706,16 @@ namespace pe
             return AddSourcePrivateDataToDxil(utils.Get(), object.Get(), shaderCode, outDxil);
         }
 
-        uint32_t GetBindingCount(UINT bindCount)
+        // Only texture arrays may be unbounded (BindCount 0); they grow at runtime up to the device limit.
+        uint32_t GetBindingCount(const D3D12_SHADER_INPUT_BIND_DESC &binding)
         {
-            return bindCount == 0 ? PE_MAX_DESCRIPTORS_PER_BINDING : bindCount;
+            if (binding.BindCount != 0)
+                return binding.BindCount;
+
+            PE_ERROR_IF(binding.Type != D3D_SIT_TEXTURE,
+                        "DX12 reflection: unbounded array '%s' must be a texture array",
+                        binding.Name ? binding.Name : "");
+            return std::max(1u, RHII.GetCaps().maxBindlessTextures);
         }
 
         bool IsPushConstantBinding(const D3D12_SHADER_INPUT_BIND_DESC &binding, const SourceBindings &sourceBindings)
@@ -937,13 +945,19 @@ namespace pe
         void FillBindingMetadata(T &desc, const SourceBinding &sourceBinding, const D3D12_SHADER_INPUT_BIND_DESC &dxBinding)
         {
             const std::string name = dxBinding.Name ? dxBinding.Name : "";
-            PE_ERROR_IF(static_cast<int>(dxBinding.Space) != sourceBinding.set,
+            // The scene texture array lives at t0 in its own space, whatever its Vulkan set and binding.
+            const bool textureSpace = dxBinding.Space == PE_TEXTURE_TABLE_DX_SPACE;
+            PE_ERROR_IF(textureSpace && dxBinding.BindPoint != 0,
+                        "DX12 reflection: resource '%s' in space %u must be at register 0",
+                        name.c_str(),
+                        PE_TEXTURE_TABLE_DX_SPACE);
+            PE_ERROR_IF(!textureSpace && static_cast<int>(dxBinding.Space) != sourceBinding.set,
                         "DX12 reflection: resource '%s' DXIL space %u disagrees with source set %d "
                         "(per-space root signature requires Space == set)",
                         name.c_str(),
                         dxBinding.Space,
                         sourceBinding.set);
-            PE_ERROR_IF(static_cast<int>(dxBinding.BindPoint) != sourceBinding.binding,
+            PE_ERROR_IF(!textureSpace && static_cast<int>(dxBinding.BindPoint) != sourceBinding.binding,
                         "DX12 reflection: resource '%s' DXIL BindPoint %u disagrees with source binding %d "
                         "(table-offset invariant requires BindPoint == binding)",
                         name.c_str(),
@@ -974,7 +988,7 @@ namespace pe
                     continue;
 
                 const std::string name = binding.Name ? binding.Name : "";
-                const uint32_t count = GetBindingCount(binding.BindCount);
+                const uint32_t count = GetBindingCount(binding);
 
                 if (IsPushConstantBinding(binding, sourceBindings))
                 {
@@ -1020,6 +1034,7 @@ namespace pe
                     ImageReflection desc{};
                     desc.name = name;
                     desc.count = count;
+                    desc.bindless = binding.BindCount == 0;
                     FillBindingMetadata(desc, sourceBinding, binding);
                     images.push_back(desc);
                     break;

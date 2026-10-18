@@ -34,7 +34,7 @@ struct PushConstants_MaterialThin
 [[vk::image_format("rgba16f")]][[vk::binding(8, 0)]] RWTexture2D<float4> pe_emissiveOut;
 #endif
 
-[[vk::binding(0, 1)]] Texture2D pe_textures[];
+[[vk::binding(0, 1)]] Texture2D pe_textures[] : register(t0, space100);
 [[vk::binding(9, 0)]] SamplerState pe_samplers[18];
 
 // Pass 1 evaluates graph inputs with lighting disabled.

@@ -163,6 +163,11 @@ namespace pe
             DescriptorBindingInfo info{};
             info.binding = desc.binding;
             info.count = desc.count;
+            info.bindless = desc.bindless;
+            PE_ERROR_IF(desc.bindless && desc.name != PE_TEXTURE_TABLE_NAME,
+                        "Reflection: unbounded texture array '%s' must be the scene table '%s'",
+                        desc.name.c_str(),
+                        PE_TEXTURE_TABLE_NAME);
             info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
             info.name = desc.name;

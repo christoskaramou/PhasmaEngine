@@ -21,6 +21,8 @@ namespace pe
 
         ImageView *m_owner{};
         vk::ImageView m_imageView{};
+        vk::ImageViewCreateInfo m_createInfo{};
+        vk::ImageViewUsageCreateInfo m_usageInfo{};
     };
 
     inline vk::ImageView GetVulkanImageView(ImageView *view)

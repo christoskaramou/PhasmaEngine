@@ -8,6 +8,7 @@
 #include "Scene/SceneRuntimeHooks.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
+#include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
@@ -773,11 +774,13 @@ namespace pe
         }
 
         addSource(source);
-        if (views.size() <= PE_MAX_DESCRIPTORS_PER_BINDING)
+        const uint32_t maximum = RHII.GetCaps().maxBindlessTextures;
+        if (views.size() <= maximum)
             return true;
 
-        error = "[OpenPBR] " + source.path + ": image-view table would exceed PE_MAX_DESCRIPTORS_PER_BINDING (" +
-                std::to_string(PE_MAX_DESCRIPTORS_PER_BINDING) + ")";
+        error = "[OpenPBR] " + source.path + ": image-view table would exceed the device limit of " +
+                std::to_string(maximum) +
+                " bindless textures";
         return false;
     }
 
@@ -864,20 +867,57 @@ namespace pe
     {
         PE_PROFILE_SCOPE("Scene Image Views");
         CollectOpenPBRImages();
+        BuildImageViewTable(UINT32_MAX);
+
+        // Bindless arrays grow with the scene; past the device or heap limit, the extra textures sample white.
+        const uint32_t count = static_cast<uint32_t>(m_imageViews.size());
+        if (!RHII.ReserveBindlessTextures(count))
+        {
+            const uint32_t capacity = RHII.GetBindlessTextureCapacity();
+            PE_WARN("[Scene] %u textures exceed the %u-entry texture table; the rest sample the default white texture",
+                    count,
+                    capacity);
+            BuildImageViewTable(capacity);
+        }
+
+        for (uint32_t frame = 0; frame < RHII.GetSwapchainImageCount(); ++frame)
+        {
+            Descriptor *table = RHII.GetTextureTable(frame);
+            table->SetImageViews(0, m_imageViews);
+            table->Update();
+        }
+
+        m_geometryVersion++;
+    }
+
+    void Scene::BuildImageViewTable(uint32_t limit)
+    {
         m_imageViews.clear();
         m_imageViews.reserve(m_imageStore.size());
+        m_imageViewIndices.clear();
 
         const auto &defaults = ModelAsset::GetDefaultResources();
-        // Keyed by view: an image sampled both as colour and as data gets one table entry per view.
-        OrderedMap<ImageView *, uint32_t> viewsMap{};
+        // Keyed by view: an image sampled both as colour and as data gets one table entry per view. Past the limit,
+        // new views share entry 0, the white view a limited table inserts first.
         auto indexOf = [&](ImageView *view)
         {
             if (!view)
                 view = defaults.white->GetSRV();
-            if (viewsMap.insert(view, static_cast<uint32_t>(m_imageViews.size())).first)
+
+            auto [it, inserted] = m_imageViewIndices.try_emplace(view, static_cast<uint32_t>(m_imageViews.size()));
+            if (!inserted)
+                return it->second;
+
+            if (m_imageViews.size() < limit)
                 m_imageViews.push_back(view);
-            return viewsMap[view];
+            else
+                it->second = 0;
+
+            return it->second;
         };
+
+        if (limit != UINT32_MAX)
+            indexOf(nullptr);
 
         for (const ResourceHandle<Image> &image : m_imageStore)
         {
@@ -957,8 +997,6 @@ namespace pe
                 }
             }
         }
-
-        m_geometryVersion++;
     }
 
     void Scene::CreateMaterialTable()
@@ -1154,7 +1192,7 @@ namespace pe
             }
             // Parameter and texture-index reads are immutable here. Workers produce
             // private byte arrays; offsets and GPU buffers are published only after joining.
-            auto pack = [&byteEntries, &imageViews = m_imageViews](size_t begin, size_t end)
+            auto pack = [&byteEntries, &imageViewIndices = m_imageViewIndices](size_t begin, size_t end)
             {
                 for (size_t i = begin; i < end; ++i)
                 {
@@ -1162,7 +1200,7 @@ namespace pe
 
                     if (!entry.layout) // MaterialX instance
                     {
-                        entry.data = BuildOpenPBRBytes(*entry.instance, imageViews);
+                        entry.data = BuildOpenPBRBytes(*entry.instance, imageViewIndices);
                         continue;
                     }
 
@@ -1401,7 +1439,7 @@ namespace pe
                         continue;
                     }
 
-                    std::vector<uint8_t> byteData = BuildOpenPBRBytes(*inst, m_imageViews);
+                    std::vector<uint8_t> byteData = BuildOpenPBRBytes(*inst, m_imageViewIndices);
                     const bool sameLayout = inst->gpuOpenPBRModule == GetOpenPBRSource(*inst).module->index &&
                                             byteData.size() == inst->gpuByteSize;
                     const bool inBounds = inst->gpuByteOffset <= m_materialByteBufferUsed &&
@@ -2595,10 +2633,10 @@ namespace pe
                              { return resident.get() == image; }) == m_imageStore.end())
                 m_imageStore.push_back(imageHandle);
 
-            const auto it = std::find(m_imageViews.begin(), m_imageViews.end(), MaterialSlotView(image, textureSlot));
-            if (it == m_imageViews.end())
+            const auto it = m_imageViewIndices.find(MaterialSlotView(image, textureSlot));
+            if (it == m_imageViewIndices.end())
                 return false;
-            imageViewIndex = static_cast<uint32_t>(std::distance(m_imageViews.begin(), it));
+            imageViewIndex = it->second;
         }
 
         MeshRuntime &runtime = m_meshRuntimes[meshIndex];

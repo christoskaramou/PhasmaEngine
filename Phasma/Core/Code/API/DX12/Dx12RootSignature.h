@@ -9,12 +9,12 @@ namespace pe
 {
     constexpr uint32_t DX12_DESCRIPTOR_SPACE_COUNT = 4;
     constexpr uint32_t DX12_DESCRIPTORS_PER_TYPE = 512;
-    static_assert(DX12_DESCRIPTORS_PER_TYPE >= PE_MAX_DESCRIPTORS_PER_BINDING,
-                  "DX12 descriptor ranges must cover the unbounded-array reflection fallback");
     constexpr uint32_t DX12_CBV_TABLE_OFFSET = 0;
     constexpr uint32_t DX12_SRV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE;
     constexpr uint32_t DX12_UAV_TABLE_OFFSET = DX12_DESCRIPTORS_PER_TYPE * 2;
     constexpr uint32_t DX12_ROOT_CONSTANTS_INDEX = 0;
+    // After the per-space CBV/SRV/UAV and sampler tables: the unbounded scene texture SRVs in space 100.
+    constexpr uint32_t DX12_TEXTURE_TABLE_ROOT_INDEX = 1 + DX12_DESCRIPTOR_SPACE_COUNT * 2;
 
     inline uint32_t Dx12CbvBaseRegister(uint32_t space)
     {

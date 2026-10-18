@@ -4,6 +4,7 @@
 #include "API/DX12/Dx12RhiImpl.h"
 #endif
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorHeap.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRhiImpl.h"
@@ -528,6 +529,39 @@ namespace pe
         return version;
     }
 
+    // A bindless texture array declares the device's own sampled-image limit, less room for a pipeline's other textures.
+    // Update-after-bind layouts count against the update-after-bind limits only.
+    static uint32_t QueryVulkanBindlessTextureLimit(vk::PhysicalDevice gpu,
+                                                    bool vulkan12,
+                                                    bool updateAfterBind,
+                                                    uint32_t &budget)
+    {
+        vk::PhysicalDeviceDescriptorIndexingProperties indexing{};
+        vk::PhysicalDeviceProperties2 properties{};
+        if (vulkan12)
+            properties.pNext = &indexing;
+        gpu.getProperties2(&properties);
+
+        const auto &limits = properties.properties.limits;
+        uint32_t limit = std::min({limits.maxPerStageDescriptorSampledImages,
+                                   limits.maxDescriptorSetSampledImages,
+                                   limits.maxPerStageResources});
+        budget = UINT32_MAX;
+        if (vulkan12 && updateAfterBind)
+        {
+            limit = std::min({indexing.maxPerStageDescriptorUpdateAfterBindSampledImages,
+                              indexing.maxDescriptorSetUpdateAfterBindSampledImages,
+                              indexing.maxPerStageUpdateAfterBindResources});
+            // Update-after-bind pools share one device-wide count; a quarter stays for every other descriptor.
+            budget = indexing.maxUpdateAfterBindDescriptorsInAllPools / 4 * 3;
+        }
+
+        // A quarter of a small limit, at most 256, stays for the other images a pipeline samples. Past 2^20 entries a
+        // declared count only costs driver bookkeeping (drivers report up to UINT32_MAX); D3D12 stops at that order too.
+        const uint32_t reserve = std::min(256u, limit / 4);
+        return std::clamp(limit - reserve, 1u, 1u << 20);
+    }
+
     static void LogVulkanApiVersion(const char *label, uint32_t version)
     {
         PE_INFO("[Vulkan] %s: %u.%u.%u (%u)",
@@ -1023,6 +1057,10 @@ namespace pe
         CreateDevice();
         SyncRayTracingSettingsToCaps(m_caps);
         CreateAllocator();
+        vk->CreateDescriptorHeaps();
+        if (vk->m_descriptorHeaps)
+            m_caps.bindlessBudget = std::min(m_caps.bindlessBudget, VulkanHeapTextureBudget());
+
         CreateDescriptorPool(150); // General purpose descriptor pool
 
         m_stagingManager = new StagingManager();
@@ -1048,6 +1086,71 @@ namespace pe
 #endif
     }
 
+    Descriptor *RHI::GetTextureTable(uint32_t frame)
+    {
+        std::lock_guard<std::mutex> lock(m_textureTableMutex);
+        while (m_textureTables.size() <= frame)
+        {
+            DescriptorBindingInfo info{};
+            info.binding = 0;
+            info.count = std::max(1u, m_caps.maxBindlessTextures);
+            info.dxRegister = 0;
+            info.dxSpace = PE_TEXTURE_TABLE_DX_SPACE;
+            info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            info.bindless = true;
+            info.name = PE_TEXTURE_TABLE_NAME;
+
+            const std::string name = "Scene_textures_" + std::to_string(m_textureTables.size());
+            Descriptor *table = Descriptor::Create({info}, PE_SHADER_STAGE_ALL, false, name);
+            table->m_shared = true;
+            m_textureTables.push_back(table);
+        }
+
+        return m_textureTables[frame];
+    }
+
+    bool RHI::ReserveBindlessTextures(uint32_t count)
+    {
+        const uint32_t maximum = std::max(1u, m_caps.maxBindlessTextures);
+        const uint32_t wanted = std::min(count, maximum);
+        if (wanted > Descriptor::GetBindlessCapacity())
+        {
+            // Every bindless array grows together and a resize keeps the old copies until their frames retire, so grow
+            // only while twice the new size of all of them fits the budget; the rest of the heap stays for others.
+            const uint64_t arrays = std::max<size_t>(1, Descriptor::GetBindlessArrayCount());
+            auto fits = [&](uint32_t capacity)
+            {
+                return capacity * arrays * 2 <= m_caps.bindlessBudget;
+            };
+
+            // Powers of two keep resizes rare while a scene streams textures in; the exact count may still fit.
+            const uint32_t target = std::min(std::bit_ceil(wanted), maximum);
+            const bool grown = fits(target) && Descriptor::ResizeBindless(target);
+            if (!grown && fits(wanted))
+                Descriptor::ResizeBindless(wanted);
+        }
+
+        return count <= GetBindlessTextureCapacity();
+    }
+
+    uint32_t RHI::GetBindlessTextureCapacity()
+    {
+        return std::min(Descriptor::GetBindlessCapacity(), std::max(1u, m_caps.maxBindlessTextures));
+    }
+
+    void RHI::DestroyTextureTables()
+    {
+        std::lock_guard<std::mutex> lock(m_textureTableMutex);
+        for (Descriptor *&table : m_textureTables)
+        {
+            table->m_shared = false;
+            Descriptor::Destroy(table);
+        }
+
+        m_textureTables.clear();
+    }
+
     void RHI::Destroy()
     {
         WaitDeviceIdle();
@@ -1063,6 +1166,8 @@ namespace pe
                 }
             }
             m_deletionQueues.clear();
+            // After the flush: retired PassInfos still name the shared tables.
+            DestroyTextureTables();
 
             Downsampler::Destroy();
             DescriptorLayout::ClearCache();
@@ -1107,6 +1212,7 @@ namespace pe
             delete queue;
         }
         m_deletionQueues.clear();
+        DestroyTextureTables();
 
         Downsampler::Destroy();
         DescriptorLayout::ClearCache();
@@ -1116,6 +1222,7 @@ namespace pe
         CommandBuffer::ClearCache();
         delete m_stagingManager;
         DescriptorPool::Destroy(m_descriptorPool);
+        vk->DestroyDescriptorHeaps();
 
 #if defined(PE_TRACK_RESOURCES)
         auto buffers = Buffer::GetHandles();
@@ -1509,16 +1616,7 @@ namespace pe
         m_maxDrawIndirectCount = gpuPropertiesVK.properties.limits.maxDrawIndirectCount;
 
         const auto &limits = gpuPropertiesVK.properties.limits;
-        uint32_t maxBindlessTextures = PE_MAX_DESCRIPTORS_PER_BINDING;
-        if (limits.maxPerStageDescriptorSampledImages > 0)
-            maxBindlessTextures = std::min(maxBindlessTextures, limits.maxPerStageDescriptorSampledImages);
-        if (limits.maxPerStageResources > 32)
-            maxBindlessTextures = std::min(maxBindlessTextures, limits.maxPerStageResources - 32);
-        else if (limits.maxPerStageResources > 0)
-            maxBindlessTextures = std::min(maxBindlessTextures, limits.maxPerStageResources);
-
         m_caps.maxPushConstantsBytes = m_maxPushConstantsSize;
-        m_caps.maxBindlessTextures = std::max(1u, maxBindlessTextures);
 
         m_gpuLimits.maxTextureDimension1D = limits.maxImageDimension1D;
         m_gpuLimits.maxTextureDimension2D = limits.maxImageDimension2D;
@@ -1792,6 +1890,10 @@ namespace pe
 
         m_caps.bufferDeviceAddress = static_cast<bool>(deviceFeatures12.bufferDeviceAddress);
 
+        vk->QueryDescriptorHeapSupport();
+        if (vk->m_descriptorHeapFeatures.descriptorHeap)
+            deviceExtensions.push_back(VK_EXT_DESCRIPTOR_HEAP_EXTENSION_NAME);
+
         if (rayTracingExtensionsAvailable &&
             m_caps.bufferDeviceAddress &&
             accelerationStructureFeatures.accelerationStructure &&
@@ -1855,6 +1957,11 @@ namespace pe
             static_cast<bool>(deviceFeatures12.descriptorBindingStorageBufferUpdateAfterBind) &&
             static_cast<bool>(deviceFeatures12.descriptorBindingUniformTexelBufferUpdateAfterBind) &&
             static_cast<bool>(deviceFeatures12.descriptorBindingStorageTexelBufferUpdateAfterBind);
+        m_caps.maxBindlessTextures = QueryVulkanBindlessTextureLimit(vk->m_gpu,
+                                                                     vulkan12Available,
+                                                                     m_caps.descriptorUpdateAfterBind,
+                                                                     m_caps.bindlessBudget);
+        PE_INFO("[Vulkan] Bindless texture arrays: up to %u textures", m_caps.maxBindlessTextures);
         Settings::Get<SceneSettings>().dynamic_rendering &= m_caps.dynamicRendering;
 
         // --- Device feature contract (portable across all Vulkan-1.2 Android GPUs, not Mali-specific) ---
@@ -1977,6 +2084,11 @@ namespace pe
             presentId2Features.pNext = deviceFeatureChain;
             presentWait2Features.pNext = &presentId2Features;
             deviceFeatureChain = &presentWait2Features;
+        }
+        if (vk->m_descriptorHeapFeatures.descriptorHeap)
+        {
+            vk->m_descriptorHeapFeatures.pNext = deviceFeatureChain;
+            deviceFeatureChain = &vk->m_descriptorHeapFeatures;
         }
         deviceFeatures2.pNext = deviceFeatureChain;
 

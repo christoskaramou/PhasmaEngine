@@ -18,6 +18,7 @@ namespace pe
 
         Sampler *m_owner{};
         vk::Sampler m_sampler{};
+        uint32_t m_heapOffset = UINT32_MAX;
     };
 
     inline vk::Sampler GetVulkanSampler(Sampler *sampler)

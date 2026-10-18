@@ -763,6 +763,7 @@ namespace pe
         void MarkUniformsDirty();
         void CreateIndirectBuffers(CommandBuffer *cmd);
         void UpdateImageViews();
+        void BuildImageViewTable(uint32_t limit);
         void CollectOpenPBRImages();
         void CreateOpenPBRSamplers();
         void CreateMaterialTable();
@@ -907,6 +908,7 @@ namespace pe
         std::vector<uint32_t> m_arenaFreeSlots; // tombstoned slots awaiting reuse (refilled after retire delay)
 
         std::vector<ImageView *> m_imageViews;
+        std::unordered_map<ImageView *, uint32_t> m_imageViewIndices; // table index per view, overflow included
         std::vector<int> m_pendingTextureMeshUploads;
         ImageView *m_voxelAtlasView = nullptr;
         ImageView *m_terrainSplatView = nullptr;

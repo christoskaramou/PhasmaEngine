@@ -13,6 +13,8 @@ namespace tracy
 
 namespace pe
 {
+    struct VulkanDescriptorHeaps;
+
     struct VulkanRhiImpl final : public RHI::Impl
     {
         bool Init(SDL_Window *window) override;
@@ -20,6 +22,14 @@ namespace pe
         void WaitDeviceIdle() override;
         void NextFrame() override;
         GpuMemorySnapshot GetGpuMemorySnapshot() override;
+
+        void QueryDescriptorHeapSupport();
+        void CreateDescriptorHeaps();
+        void DestroyDescriptorHeaps();
+
+        VkPhysicalDeviceDescriptorHeapFeaturesEXT m_descriptorHeapFeatures{};
+        VkPhysicalDeviceDescriptorHeapPropertiesEXT m_descriptorHeapProperties{};
+        VulkanDescriptorHeaps *m_descriptorHeaps{};
 
         vk::Instance m_instance{};
         vk::PhysicalDevice m_gpu{};

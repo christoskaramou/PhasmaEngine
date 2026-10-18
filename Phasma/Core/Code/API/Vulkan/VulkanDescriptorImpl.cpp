@@ -180,6 +180,9 @@ namespace pe
     VulkanDescriptorLayoutImpl::VulkanDescriptorLayoutImpl(DescriptorLayout *owner)
         : m_owner{owner}
     {
+        if (UsesVulkanDescriptorHeap())
+            m_heapLayout = std::make_unique<VulkanHeapLayout>(*owner);
+
         std::vector<vk::DescriptorSetLayoutBinding> bindings{};
         for (auto const &bindingInfo : owner->m_bindingInfos)
         {
@@ -240,26 +243,67 @@ namespace pe
     VulkanDescriptorImpl::VulkanDescriptorImpl(Descriptor *owner)
         : m_owner{owner}
     {
-        uint32_t variableDescCounts[] = {owner->m_layout->GetVariableCount()};
+        const auto *layout = VulkanDescriptorLayoutImpl::From(owner->GetLayout());
+        if (layout->m_heapLayout && layout->m_heapLayout->supported)
+        {
+            InitializeHeap();
+            return;
+        }
+
+        GetSet();
+    }
+
+    VulkanDescriptorImpl::~VulkanDescriptorImpl()
+    {
+        if (m_heapOffset != UINT32_MAX)
+        {
+            VulkanRhi::Impl()->m_descriptorHeaps->resources.Free(m_heapOffset, m_heapSize);
+        }
+    }
+
+    vk::DescriptorSet VulkanDescriptorImpl::GetSet() const
+    {
+        std::call_once(m_setOnce, [this]()
+                       { AllocateSet(); });
+        return m_set;
+    }
+
+    void VulkanDescriptorImpl::AllocateSet() const
+    {
+        uint32_t variableDescCounts[] = {m_owner->GetVariableCount()};
+        const auto &bindingInfos = m_owner->GetBindingInfos();
+        const bool bindless = !bindingInfos.empty() && bindingInfos.back().bindless;
 
         vk::DescriptorSetVariableDescriptorCountAllocateInfo variableDescriptorCountAllocInfo = {};
         variableDescriptorCountAllocInfo.descriptorSetCount = 1;
         variableDescriptorCountAllocInfo.pDescriptorCounts = variableDescCounts;
 
-        vk::DescriptorSetLayout dsetLayout = GetVulkanDescriptorLayout(owner->m_layout);
+        vk::DescriptorSetLayout dsetLayout = GetVulkanDescriptorLayout(m_owner->m_layout);
         vk::DescriptorSetAllocateInfo allocateInfo{};
-        allocateInfo.descriptorPool = GetVulkanDescriptorPool(owner->m_pool);
+        allocateInfo.descriptorPool = GetVulkanDescriptorPool(m_owner->m_pool);
         allocateInfo.descriptorSetCount = 1;
         allocateInfo.pSetLayouts = &dsetLayout;
-        allocateInfo.pNext = owner->m_layout->GetVariableCount() > 1 ? &variableDescriptorCountAllocInfo : nullptr;
+        // Without the count a variable binding gets zero descriptors.
+        allocateInfo.pNext = bindless ? &variableDescriptorCountAllocInfo : nullptr;
 
         m_set = VulkanRhi::Device().allocateDescriptorSets(allocateInfo)[0];
 
-        Debug::SetObjectName(m_set, owner->m_name);
+        Debug::SetObjectName(m_set, m_owner->m_name);
+        UpdateSet(m_owner->GetBindingInfos(), m_owner->GetBoundResources());
     }
 
     void VulkanDescriptorImpl::Update(const std::vector<DescriptorBindingInfo> &bindingInfos,
                                       const std::vector<DescriptorUpdateInfo> &updateInfos)
+    {
+        if (m_heapOffset != UINT32_MAX)
+            UpdateHeap(updateInfos);
+
+        if (m_set)
+            UpdateSet(bindingInfos, updateInfos);
+    }
+
+    void VulkanDescriptorImpl::UpdateSet(const std::vector<DescriptorBindingInfo> &bindingInfos,
+                                         const std::vector<DescriptorUpdateInfo> &updateInfos) const
     {
         std::vector<vk::WriteDescriptorSet> writes{};
         std::vector<std::vector<vk::DescriptorImageInfo>> imageInfos{};

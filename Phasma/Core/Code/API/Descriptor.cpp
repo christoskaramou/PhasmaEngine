@@ -84,6 +84,18 @@ namespace pe
         }
 
         template <class T>
+        void MergeDescriptorValues(std::vector<T> &bound, const std::vector<T> &update, size_t count)
+        {
+            if (bound.size() < count)
+                bound.resize(count);
+
+            // Offsets and ranges may be shorter than the buffers they describe (Lua passes them as given).
+            const size_t copied = std::min(update.size(), count);
+            std::copy_n(update.begin(), copied, bound.begin());
+            std::fill(bound.begin() + copied, bound.begin() + count, T{});
+        }
+
+        template <class T>
         std::vector<T> LimitDescriptorValues(const std::vector<T> &values,
                                              uint32_t maxCount,
                                              const char *kind,
@@ -310,6 +322,12 @@ namespace pe
 
     void Descriptor::Destroy(Descriptor *&descriptor)
     {
+        if (descriptor && descriptor->m_shared)
+        {
+            descriptor = nullptr;
+            return;
+        }
+
         if (descriptor)
         {
 #if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)
@@ -335,6 +353,149 @@ namespace pe
 #else
         return {};
 #endif
+    }
+
+    namespace
+    {
+        // Bindless arrays start small and grow together when a scene needs more textures.
+        struct BindlessRegistry
+        {
+            std::mutex mutex;
+            std::unordered_set<Descriptor *> descriptors;
+            uint32_t capacity = 256;
+        };
+
+        // Never destroyed, so descriptors released during static destruction still find it.
+        BindlessRegistry &Bindless()
+        {
+            static auto *registry = new BindlessRegistry();
+            return *registry;
+        }
+
+        // Only the scene texture array (any set that ends with pe_textures) grows; other bindless arrays keep their size.
+        bool HasSceneTextureArray(const std::vector<DescriptorBindingInfo> &bindingInfos)
+        {
+            return !bindingInfos.empty() &&
+                   bindingInfos.back().bindless &&
+                   bindingInfos.back().name == PE_TEXTURE_TABLE_NAME;
+        }
+    } // namespace
+
+    uint32_t Descriptor::GetBindlessCapacity()
+    {
+        BindlessRegistry &registry = Bindless();
+        std::lock_guard<std::mutex> lock(registry.mutex);
+        return registry.capacity;
+    }
+
+    size_t Descriptor::GetBindlessArrayCount()
+    {
+        BindlessRegistry &registry = Bindless();
+        std::lock_guard<std::mutex> lock(registry.mutex);
+        return registry.descriptors.size();
+    }
+
+    bool Descriptor::ResizeBindless(uint32_t capacity)
+    {
+        BindlessRegistry &registry = Bindless();
+        std::lock_guard<std::mutex> lock(registry.mutex);
+        // Grow only: bound resources were truncated to the current capacity, so a smaller one has nothing to drop.
+        if (capacity <= registry.capacity)
+            return true;
+
+        // No rollback: arrays that grew before a failure keep their size, and every array still holds the old capacity.
+        for (Descriptor *descriptor : registry.descriptors)
+        {
+            const uint32_t target = std::min(capacity, descriptor->m_bindingInfos.back().count);
+            if (!descriptor->SetVariableCount(target))
+                return false;
+        }
+
+        registry.capacity = capacity;
+        return true;
+    }
+
+    bool Descriptor::IsTextureTable() const
+    {
+        return m_bindingInfos.size() == 1 &&
+               m_bindingInfos[0].bindless &&
+               m_bindingInfos[0].type == PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE &&
+               m_bindingInfos[0].name == PE_TEXTURE_TABLE_NAME;
+    }
+
+    uint32_t Descriptor::GetBindingCapacity(size_t bindingIndex) const
+    {
+        const DescriptorBindingInfo &info = m_bindingInfos[bindingIndex];
+        return info.bindless ? m_variableCount : info.count;
+    }
+
+    DescriptorPool *Descriptor::CreatePool() const
+    {
+        // Get the count per descriptor type
+        std::unordered_map<PeBindingType, uint32_t> typeCounts{};
+        for (size_t i = 0; i < m_bindingInfos.size(); i++)
+            typeCounts[m_bindingInfos[i].type] += GetBindingCapacity(i);
+
+        std::vector<DescriptorPoolSize> poolSizes;
+        poolSizes.reserve(typeCounts.size());
+        for (auto const &[type, count] : typeCounts)
+            poolSizes.push_back({type, count});
+
+        bool allowUpdateAfterBindPool = true;
+        for (const auto &binding : m_bindingInfos)
+        {
+            if (!IsUpdateAfterBindCompatible(binding.type))
+            {
+                allowUpdateAfterBindPool = false;
+                break;
+            }
+        }
+
+        return DescriptorPool::Create(poolSizes, m_name + "_pool", 1, allowUpdateAfterBindPool);
+    }
+
+    bool Descriptor::SetVariableCount(uint32_t count)
+    {
+        if (count == m_variableCount)
+            return true;
+
+        const uint32_t previousCount = m_variableCount;
+        DescriptorPool *previousPool = m_pool;
+        Impl *previousImpl = m_impl;
+        // The new descriptor starts empty: its records may name resources freed since they were written (a scene
+        // switch, a disabled pass), and the native set path replays records as it allocates. Every owner rewrites
+        // after a resize, which only Scene::UpdateImageViews requests before it bumps the geometry version.
+        std::vector<DescriptorUpdateInfo> previousResources = m_boundResources;
+        for (size_t i = 0; i < m_boundResources.size(); ++i)
+            m_boundResources[i] = DescriptorUpdateInfo{.binding = m_bindingInfos[i].binding};
+
+        m_variableCount = count;
+        try
+        {
+            m_pool = CreatePool();
+            m_impl = CreateDescriptorImpl(this);
+        }
+        catch (const std::exception &error)
+        {
+            PE_WARN("[Descriptor] '%s' cannot hold %u bindless entries: %s", m_name.c_str(), count, error.what());
+            if (m_pool != previousPool)
+                DescriptorPool::Destroy(m_pool);
+
+            m_pool = previousPool;
+            m_impl = previousImpl;
+            m_variableCount = previousCount;
+            m_boundResources = std::move(previousResources);
+            return false;
+        }
+
+        // In-flight frames may still read the previous descriptors.
+        auto retire = [previousImpl, previousPool]() mutable
+        {
+            delete previousImpl;
+            DescriptorPool::Destroy(previousPool);
+        };
+        RHII.AddToDeletionQueue(std::move(retire));
+        return true;
     }
 
     bool Descriptor::HasBinding(uint32_t binding) const
@@ -367,45 +528,48 @@ namespace pe
                 bindingInfo.dxRegister = bindingInfo.binding;
         }
 
-        // Get the count per descriptor type
-        std::unordered_map<PeBindingType, uint32_t> typeCounts{};
-        for (auto i = 0; i < m_bindingInfos.size(); i++)
-        {
-            auto it = typeCounts.find(m_bindingInfos[i].type);
-            if (it == typeCounts.end())
-                typeCounts[m_bindingInfos[i].type] = m_bindingInfos[i].count;
-            else
-                it->second += m_bindingInfos[i].count;
-        }
-
-        // Create pool sizes from typeCounts above
-        std::vector<DescriptorPoolSize> poolSizes(typeCounts.size());
-        uint32_t i = 0;
-        for (auto const &[type, count] : typeCounts)
-        {
-            poolSizes[i].type = type;
-            poolSizes[i].descriptorCount = count;
-            i++;
-        }
-
-        bool allowUpdateAfterBindPool = true;
-        for (const auto &binding : m_bindingInfos)
-        {
-            if (!IsUpdateAfterBindCompatible(binding.type))
-            {
-                allowUpdateAfterBindPool = false;
-                break;
-            }
-        }
-
-        // Create DescriptorPool and DescriptorLayout for this descriptor set
-        m_pool = DescriptorPool::Create(poolSizes, name + "_pool", 1, allowUpdateAfterBindPool);
         m_layout = DescriptorLayout::GetOrCreate(m_bindingInfos, m_stage, m_pushDescriptor);
-        m_impl = CreateDescriptorImpl(this);
+        if (!HasSceneTextureArray(m_bindingInfos))
+        {
+            if (!m_bindingInfos.empty() && m_bindingInfos.back().bindless)
+                m_variableCount = m_bindingInfos.back().count;
+
+            CreateBackend();
+            return;
+        }
+
+        // Registered under the same lock that reads the capacity, so a concurrent resize cannot miss it.
+        BindlessRegistry &registry = Bindless();
+        std::lock_guard<std::mutex> lock(registry.mutex);
+        m_variableCount = std::min(m_bindingInfos.back().count, registry.capacity);
+        CreateBackend();
+        registry.descriptors.insert(this);
+    }
+
+    void Descriptor::CreateBackend()
+    {
+        try
+        {
+            m_pool = CreatePool();
+            m_impl = CreateDescriptorImpl(this);
+        }
+        catch (const std::exception &error)
+        {
+            // Backends throw without logging so a failed resize can fall back quietly; a new descriptor cannot.
+            DescriptorPool::Destroy(m_pool);
+            PE_ERROR("[Descriptor] '%s': %s", m_name.c_str(), error.what());
+        }
     }
 
     Descriptor::~Descriptor()
     {
+        if (HasSceneTextureArray(m_bindingInfos))
+        {
+            BindlessRegistry &registry = Bindless();
+            std::lock_guard<std::mutex> lock(registry.mutex);
+            registry.descriptors.erase(this);
+        }
+
         delete m_impl;
         DescriptorPool::Destroy(m_pool);
     }
@@ -430,8 +594,9 @@ namespace pe
 
         DescriptorUpdateInfo info{};
         info.binding = binding;
-        info.views = LimitDescriptorValues(views, m_bindingInfos[bindingIndex].count, "image views", m_name, binding);
-        info.samplers = LimitDescriptorValues(samplers, m_bindingInfos[bindingIndex].count, "samplers", m_name, binding);
+        const uint32_t capacity = GetBindingCapacity(bindingIndex);
+        info.views = LimitDescriptorValues(views, capacity, "image views", m_name, binding);
+        info.samplers = LimitDescriptorValues(samplers, capacity, "samplers", m_name, binding);
         m_updateInfos[bindingIndex] = info;
     }
 
@@ -531,8 +696,27 @@ namespace pe
             PE_PROFILE_SCOPE("Descriptor Store Bound Resources");
             for (uint32_t i = 0; i < m_updateInfos.size(); i++)
             {
-                if (HasDescriptorUpdate(m_updateInfos[i]))
-                    m_boundResources[i] = m_updateInfos[i];
+                const auto &update = m_updateInfos[i];
+                auto &bound = m_boundResources[i];
+                // A bindless array is always written whole, even empty, so entries past the new list must not linger.
+                if (m_bindingInfos[i].bindless && update.binding == m_bindingInfos[i].binding)
+                {
+                    bound = update;
+                    continue;
+                }
+
+                if (!HasDescriptorUpdate(update))
+                    continue;
+
+                bound.binding = update.binding;
+
+                MergeDescriptorValues(bound.views, update.views, update.views.size());
+                MergeDescriptorValues(bound.samplers, update.samplers, update.samplers.size());
+                MergeDescriptorValues(bound.buffers, update.buffers, update.buffers.size());
+                MergeDescriptorValues(bound.offsets, update.offsets, update.buffers.size());
+                MergeDescriptorValues(bound.ranges, update.ranges, update.buffers.size());
+                MergeDescriptorValues(bound.accelerationStructures, update.accelerationStructures,
+                                      update.accelerationStructures.size());
             }
         }
 

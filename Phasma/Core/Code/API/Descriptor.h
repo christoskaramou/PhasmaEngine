@@ -220,7 +220,21 @@ namespace pe
         const std::vector<DescriptorUpdateInfo> &GetBoundResources() const { return m_boundResources; }
         const std::vector<DescriptorBindingInfo> &GetBindingInfos() const { return m_bindingInfos; }
 
+        // A bindless (last) binding holds GetVariableCount() descriptors, up to its declared count.
+        uint32_t GetVariableCount() const { return m_variableCount; }
+        uint32_t GetBindingCapacity(size_t bindingIndex) const;
+        // Owned by the RHI and shared by every pass that binds it; Destroy leaves it alone.
+        bool IsShared() const { return m_shared; }
+        // A set whose only binding is the scene texture array (PE_TEXTURE_TABLE_NAME).
+        bool IsTextureTable() const;
+
+        static uint32_t GetBindlessCapacity();
+        static size_t GetBindlessArrayCount();
+        // Resizes every live bindless array to the given capacity; false keeps the previous one.
+        static bool ResizeBindless(uint32_t capacity);
+
     private:
+        friend class RHI;
         friend struct VulkanDescriptorImpl;
         friend struct Dx12DescriptorImpl;
 
@@ -230,9 +244,15 @@ namespace pe
                    const std::string &name);
         ~Descriptor();
 
+        DescriptorPool *CreatePool() const;
+        void CreateBackend();
+        bool SetVariableCount(uint32_t count);
+
         Impl *m_impl{};
         DescriptorPool *m_pool{};
         DescriptorLayout *m_layout{};
+        uint32_t m_variableCount = 1;
+        bool m_shared = false;
         std::vector<DescriptorBindingInfo> m_bindingInfos{};
         std::vector<DescriptorUpdateInfo> m_updateInfos{}; // for partial updates
         std::vector<DescriptorUpdateInfo> m_boundResources{};

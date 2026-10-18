@@ -183,6 +183,8 @@ namespace pe
             uint32_t spirvTargetVulkanVersion = 0;
             uint32_t maxPushConstantsBytes = 0;
             uint32_t maxBindlessTextures = 0;
+            // Descriptors every bindless array may hold together, retired copies included.
+            uint32_t bindlessBudget = UINT32_MAX;
             DescriptorBuffer descriptorBuffer{};
         };
 
@@ -255,6 +257,12 @@ namespace pe
         Buffer *GetDx12FillSource(uint32_t value);
         void AddToDeletionQueue(std::function<void()> &&deletor);
         void FlushDeletionQueue(uint32_t frameIndex);
+        // Scene textures for one frame in flight, bound by every pass whose pe_textures set holds nothing else.
+        Descriptor *GetTextureTable(uint32_t frame);
+        // Grows every scene texture array to hold count textures, up to the device limit; false when they cannot.
+        bool ReserveBindlessTextures(uint32_t count);
+        // Textures every scene texture array holds.
+        uint32_t GetBindlessTextureCapacity();
 
         uint32_t GetWidth() const;
         uint32_t GetHeight() const;
@@ -267,8 +275,12 @@ namespace pe
     private:
         RHI() = default;
 
+        void DestroyTextureTables();
+
         std::string m_gpuName;
         DescriptorPool *m_descriptorPool;
+        std::vector<Descriptor *> m_textureTables;
+        std::mutex m_textureTableMutex;
         Queue *m_mainQueue;
         SDL_Window *m_window;
         Surface *m_surface;

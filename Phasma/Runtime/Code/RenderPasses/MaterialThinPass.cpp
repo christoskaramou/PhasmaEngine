@@ -125,12 +125,6 @@ namespace pe
             set->SetSamplers(9, scene->GetOpenPBRSamplers());
 
         set->Update();
-
-        if (sets.size() > 1 && sets[1]->HasBinding(0))
-        {
-            sets[1]->SetImageViews(0, scene->GetImageViews(), {});
-            sets[1]->Update();
-        }
     }
 
     void MaterialThinPass::Update()

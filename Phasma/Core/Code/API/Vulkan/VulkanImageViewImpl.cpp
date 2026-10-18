@@ -83,7 +83,7 @@ namespace pe
 
         const ::PeFormat format = desc.format == PE_FORMAT_UNDEFINED ? owner->m_parent->GetFormat() : desc.format;
 
-        vk::ImageViewCreateInfo info{};
+        auto &info = m_createInfo;
         info.image = GetVulkanImage(owner->m_parent);
         info.viewType = ToVkImageViewType(desc.viewType);
         info.format = ToVkFormat(format);
@@ -99,11 +99,10 @@ namespace pe
 
         // A view reinterpreting a mutable image (the sRGB view of a colour texture) is only sampled; sRGB formats
         // lack the storage support the image's own usage asks for.
-        vk::ImageViewUsageCreateInfo usageInfo{};
         if (format != owner->m_parent->GetFormat())
         {
-            usageInfo.usage = vk::ImageUsageFlagBits::eSampled;
-            info.pNext = &usageInfo;
+            m_usageInfo.usage = vk::ImageUsageFlagBits::eSampled;
+            info.pNext = &m_usageInfo;
         }
 
         m_imageView = VulkanRhi::Device().createImageView(info);
@@ -111,8 +110,22 @@ namespace pe
     }
 
     VulkanImageViewImpl::VulkanImageViewImpl(ImageView *owner, const vk::ImageViewCreateInfo &info)
-        : m_owner{owner}
+        : m_owner{owner}, m_createInfo{info}
     {
+        m_createInfo.pNext = nullptr;
+        const auto *next = static_cast<const VkBaseInStructure *>(info.pNext);
+        while (next)
+        {
+            if (next->sType == VK_STRUCTURE_TYPE_IMAGE_VIEW_USAGE_CREATE_INFO)
+            {
+                m_usageInfo = *reinterpret_cast<const vk::ImageViewUsageCreateInfo *>(next);
+                m_usageInfo.pNext = nullptr;
+                m_createInfo.pNext = &m_usageInfo;
+            }
+
+            next = next->pNext;
+        }
+
         m_imageView = VulkanRhi::Device().createImageView(info);
         Debug::SetObjectName(m_imageView, owner->m_name);
     }

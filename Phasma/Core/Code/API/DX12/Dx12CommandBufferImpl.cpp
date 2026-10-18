@@ -944,6 +944,15 @@ namespace pe
                         m_cmdList->SetGraphicsRootDescriptorTable(rootIdx, samplerTable);
                 }
             }
+
+            const D3D12_GPU_DESCRIPTOR_HANDLE textureTable = impl->GetCbvSrvUavTableGpuHandle(PE_TEXTURE_TABLE_DX_SPACE);
+            if (textureTable.ptr != 0)
+            {
+                if (compute)
+                    m_cmdList->SetComputeRootDescriptorTable(DX12_TEXTURE_TABLE_ROOT_INDEX, textureTable);
+                else
+                    m_cmdList->SetGraphicsRootDescriptorTable(DX12_TEXTURE_TABLE_ROOT_INDEX, textureTable);
+            }
         }
     }
     void Dx12CommandBufferImpl::PushDescriptor(uint32_t, const std::vector<PushDescriptorInfo> &)

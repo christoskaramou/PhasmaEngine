@@ -15,6 +15,80 @@
 
 namespace pe
 {
+    namespace
+    {
+        VkDescriptorSetAndBindingMappingEXT HeapBindingMapping(
+            uint32_t set, const DescriptorBindingInfo &binding, const VulkanHeapBinding &heapBinding)
+        {
+            VkDescriptorSetAndBindingMappingEXT mapping{VK_STRUCTURE_TYPE_DESCRIPTOR_SET_AND_BINDING_MAPPING_EXT};
+            mapping.descriptorSet = set;
+            mapping.firstBinding = binding.binding;
+            mapping.bindingCount = 1;
+            mapping.resourceMask = VK_SPIRV_RESOURCE_TYPE_ALL_EXT;
+            const uint32_t pushOffset = VulkanHeapSetPushOffset + set * sizeof(VulkanHeapSetData);
+            const bool indexedSamplers = binding.type == PE_DESCRIPTOR_TYPE_SAMPLER ||
+                                         binding.type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            if (!indexedSamplers)
+            {
+                mapping.source = VK_DESCRIPTOR_MAPPING_SOURCE_HEAP_WITH_PUSH_INDEX_EXT;
+                auto &source = mapping.sourceData.pushIndex;
+                source.heapOffset = heapBinding.resourceOffset;
+                source.pushOffset = pushOffset + offsetof(VulkanHeapSetData, resourceOffset);
+                source.heapIndexStride = 1;
+                source.heapArrayStride = heapBinding.resourceStride;
+                return mapping;
+            }
+
+            mapping.source = VK_DESCRIPTOR_MAPPING_SOURCE_HEAP_WITH_INDIRECT_INDEX_ARRAY_EXT;
+            auto &source = mapping.sourceData.indirectIndexArray;
+            source.pushOffset = pushOffset;
+            source.addressOffset = heapBinding.indexOffset;
+            source.heapIndexStride = 1;
+            source.samplerPushOffset = source.pushOffset;
+            source.samplerAddressOffset = heapBinding.samplerIndexOffset;
+            source.samplerHeapIndexStride = 1;
+            return mapping;
+        }
+    } // namespace
+
+    void VulkanPipelineImpl::ConfigureDescriptorHeap(vk::PipelineShaderStageCreateInfo *stages, uint32_t count)
+    {
+        if (!UsesVulkanDescriptorHeap())
+            return;
+
+        const auto &descriptors = m_info.GetDescriptors(0);
+        const auto maxPushDataSize = VulkanRhi::Impl()->m_descriptorHeapProperties.maxPushDataSize;
+        if (VulkanHeapSetPushOffset + descriptors.size() * sizeof(VulkanHeapSetData) > maxPushDataSize)
+            return;
+
+        for (uint32_t set = 0; set < descriptors.size(); ++set)
+        {
+            if (!descriptors[set])
+                continue;
+
+            const auto *layout = VulkanDescriptorLayoutImpl::From(descriptors[set]->GetLayout());
+            if (!layout->m_heapLayout || !layout->m_heapLayout->supported)
+                return;
+
+            const auto &bindings = descriptors[set]->GetBindingInfos();
+            for (uint32_t i = 0; i < bindings.size(); ++i)
+            {
+                const auto &heapBinding = layout->m_heapLayout->bindings[i];
+                m_heapMappings.push_back(HeapBindingMapping(set, bindings[i], heapBinding));
+            }
+        }
+
+        m_heapMappingInfo.sType = VK_STRUCTURE_TYPE_SHADER_DESCRIPTOR_SET_AND_BINDING_MAPPING_INFO_EXT;
+        m_heapMappingInfo.mappingCount = static_cast<uint32_t>(m_heapMappings.size());
+        m_heapMappingInfo.pMappings = m_heapMappings.data();
+        for (uint32_t i = 0; i < count; ++i)
+            stages[i].pNext = &m_heapMappingInfo;
+
+        m_heapPipelineFlags.sType = VK_STRUCTURE_TYPE_PIPELINE_CREATE_FLAGS_2_CREATE_INFO;
+        m_heapPipelineFlags.flags = VK_PIPELINE_CREATE_2_DESCRIPTOR_HEAP_BIT_EXT;
+        m_usesDescriptorHeap = true;
+    }
+
     static vk::BlendFactor ToVulkanBlendFactor(PeBlendFactor factor)
     {
         switch (factor)
@@ -163,8 +237,13 @@ namespace pe
         compinfo.stage.pName = m_info.pCompShader->GetEntryName().c_str();
         compinfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
 
-        m_layout = VulkanRhi::Device().createPipelineLayout(plci);
+        ConfigureDescriptorHeap(&compinfo.stage, 1);
+        if (!m_usesDescriptorHeap)
+            m_layout = VulkanRhi::Device().createPipelineLayout(plci);
         compinfo.layout = m_layout;
+
+        if (m_usesDescriptorHeap)
+            compinfo.pNext = &m_heapPipelineFlags;
 
         auto result = VulkanRhi::Device().createComputePipeline(m_cache, compinfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create compute pipeline!");
@@ -417,7 +496,9 @@ namespace pe
         plci.pSetLayouts = layouts.data();
         plci.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
         plci.pPushConstantRanges = pcrs.data();
-        pipeinfo.layout = VulkanRhi::Device().createPipelineLayout(plci);
+        ConfigureDescriptorHeap(stages.data(), static_cast<uint32_t>(stages.size()));
+        if (!m_usesDescriptorHeap)
+            pipeinfo.layout = VulkanRhi::Device().createPipelineLayout(plci);
         m_layout = pipeinfo.layout;
 
         // Render Pass
@@ -460,6 +541,13 @@ namespace pe
         cacheInfo.pInitialData = nullptr;
         cacheInfo.initialDataSize = 0;
         m_cache = VulkanRhi::Device().createPipelineCache(cacheInfo);
+
+        if (m_usesDescriptorHeap)
+        {
+            m_heapPipelineFlags.pNext = pipeinfo.pNext;
+            m_heapPipelineFlags.flags |= static_cast<VkPipelineCreateFlags>(pipeinfo.flags);
+            pipeinfo.pNext = &m_heapPipelineFlags;
+        }
 
         auto result = VulkanRhi::Device().createGraphicsPipeline(m_cache, pipeinfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create graphics pipeline!");
@@ -612,7 +700,9 @@ namespace pe
         layoutInfo.pSetLayouts = layouts.data();
         layoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
         layoutInfo.pPushConstantRanges = pcrs.data();
-        m_layout = VulkanRhi::Device().createPipelineLayout(layoutInfo);
+        ConfigureDescriptorHeap(stages.data(), static_cast<uint32_t>(stages.size()));
+        if (!m_usesDescriptorHeap)
+            m_layout = VulkanRhi::Device().createPipelineLayout(layoutInfo);
 
         vk::RayTracingPipelineCreateInfoKHR pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());
@@ -621,6 +711,9 @@ namespace pe
         pipelineInfo.pGroups = groups.data();
         pipelineInfo.maxPipelineRayRecursionDepth = m_info.acceleration.maxRecursionDepth;
         pipelineInfo.layout = m_layout;
+
+        if (m_usesDescriptorHeap)
+            pipelineInfo.pNext = &m_heapPipelineFlags;
 
         auto result = VulkanRhi::Device().createRayTracingPipelineKHR(nullptr, nullptr, pipelineInfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create Ray Tracing pipeline!");

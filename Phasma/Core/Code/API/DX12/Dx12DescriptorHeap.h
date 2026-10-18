@@ -12,6 +12,8 @@ namespace pe
 
         uint32_t Allocate();
         uint32_t AllocateRange(uint32_t count);
+        // Returns UINT32_MAX when no free range of count slots is left.
+        uint32_t TryAllocateRange(uint32_t count);
         void Free(uint32_t slot);
         void FreeRange(uint32_t firstSlot, uint32_t count);
 

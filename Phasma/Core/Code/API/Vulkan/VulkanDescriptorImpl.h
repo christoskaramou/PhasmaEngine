@@ -3,6 +3,7 @@
 #include "API/Vulkan/VulkanHeaders.h"
 
 #include "API/Descriptor_Internal.h"
+#include "API/Vulkan/VulkanDescriptorHeap.h"
 
 namespace pe
 {
@@ -32,12 +33,25 @@ namespace pe
 
         DescriptorLayout *m_owner{};
         vk::DescriptorSetLayout m_layout{};
+        std::unique_ptr<VulkanHeapLayout> m_heapLayout;
     };
 
     struct VulkanDescriptorImpl final : public Descriptor::Impl
     {
         explicit VulkanDescriptorImpl(Descriptor *owner);
-        ~VulkanDescriptorImpl() override = default;
+        ~VulkanDescriptorImpl() override;
+
+        vk::DescriptorSet GetSet() const;
+        void AllocateSet() const;
+        void UpdateSet(const std::vector<DescriptorBindingInfo> &bindingInfos,
+                       const std::vector<DescriptorUpdateInfo> &updateInfos) const;
+
+        void InitializeHeap();
+        void UpdateHeap(const std::vector<DescriptorUpdateInfo> &updateInfos);
+        void WriteHeapResource(uint32_t bindingIndex, uint32_t element, const DescriptorUpdateInfo &update);
+
+        uint32_t m_heapOffset = UINT32_MAX;
+        uint32_t m_heapSize{};
 
         void Update(const std::vector<DescriptorBindingInfo> &bindingInfos,
                     const std::vector<DescriptorUpdateInfo> &updateInfos) override;
@@ -48,7 +62,8 @@ namespace pe
         static const VulkanDescriptorImpl *TryFrom(const Descriptor *descriptor) { return descriptor && descriptor->m_impl ? From(descriptor) : nullptr; }
 
         Descriptor *m_owner{};
-        vk::DescriptorSet m_set{};
+        mutable vk::DescriptorSet m_set{};
+        mutable std::once_flag m_setOnce;
     };
 
     inline vk::DescriptorPool GetVulkanDescriptorPool(DescriptorPool *pool)
@@ -78,13 +93,13 @@ namespace pe
     inline vk::DescriptorSet GetVulkanDescriptorSet(Descriptor *descriptor)
     {
         VulkanDescriptorImpl *impl = VulkanDescriptorImpl::TryFrom(descriptor);
-        return impl ? impl->m_set : vk::DescriptorSet{};
+        return impl ? impl->GetSet() : vk::DescriptorSet{};
     }
 
     inline vk::DescriptorSet GetVulkanDescriptorSet(const Descriptor *descriptor)
     {
         const VulkanDescriptorImpl *impl = VulkanDescriptorImpl::TryFrom(descriptor);
-        return impl ? impl->m_set : vk::DescriptorSet{};
+        return impl ? impl->GetSet() : vk::DescriptorSet{};
     }
 
     vk::DescriptorType ToVkDescriptorType(PeBindingType type);

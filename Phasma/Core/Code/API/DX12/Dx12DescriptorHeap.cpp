@@ -94,6 +94,17 @@ namespace pe
 
     uint32_t Dx12DescriptorHeap::AllocateRange(uint32_t count)
     {
+        const uint32_t first = TryAllocateRange(count);
+        PE_ERROR_IF(first == UINT32_MAX,
+                    "Dx12DescriptorHeap(%s) exhausted (%u descriptors, requested range %u)",
+                    HeapTypeName(m_type),
+                    m_capacity,
+                    count);
+        return first;
+    }
+
+    uint32_t Dx12DescriptorHeap::TryAllocateRange(uint32_t count)
+    {
         PE_ERROR_IF(count == 0, "Dx12DescriptorHeap(%s): cannot allocate an empty range", HeapTypeName(m_type));
         std::lock_guard<std::mutex> lock(m_mutex);
         if (count == 1)
@@ -124,11 +135,8 @@ namespace pe
             return first;
         }
 
-        PE_ERROR_IF(m_nextSlot + count > m_capacity,
-                    "Dx12DescriptorHeap(%s) exhausted (%u descriptors, requested range %u)",
-                    HeapTypeName(m_type),
-                    m_capacity,
-                    count);
+        if (count > m_capacity - m_nextSlot)
+            return UINT32_MAX;
 
         const uint32_t first = m_nextSlot;
         m_nextSlot += count;

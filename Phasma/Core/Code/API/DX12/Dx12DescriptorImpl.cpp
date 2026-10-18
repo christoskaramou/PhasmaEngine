@@ -163,6 +163,10 @@ namespace pe
 
         uint32_t CbvSrvUavTableOffset(const DescriptorBindingInfo &info)
         {
+            // The texture-table space is one unbounded SRV range from its first slot.
+            if (info.dxSpace == PE_TEXTURE_TABLE_DX_SPACE)
+                return info.dxRegister;
+
             switch (info.type)
             {
             case PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER:
@@ -184,26 +188,35 @@ namespace pe
             }
         }
 
-        uint32_t CbvSrvUavTableEnd(const DescriptorBindingInfo &info)
+        uint32_t CbvSrvUavTableEnd(const DescriptorBindingInfo &info, uint32_t count)
         {
             if (!IsCbvSrvUavDescriptor(info.type))
                 return 0;
-            return CbvSrvUavTableOffset(info) + std::max(1u, info.count);
+            return CbvSrvUavTableOffset(info) + std::max(1u, count);
         }
 
-        uint32_t SamplerTableEnd(const DescriptorBindingInfo &info)
+        uint32_t SamplerTableEnd(const DescriptorBindingInfo &info, uint32_t count)
         {
             if (!IsSamplerDescriptor(info.type))
                 return 0;
-            return info.dxRegister + std::max(1u, info.count);
+            return info.dxRegister + std::max(1u, count);
         }
 
-        void ValidateDescriptorCapacity(const DescriptorBindingInfo &info)
+        void ValidateDescriptorCapacity(const DescriptorBindingInfo &info, uint32_t count)
         {
-            const uint32_t descriptorCount = std::max(1u, info.count);
+            const uint32_t descriptorCount = std::max(1u, count);
             PE_ERROR_IF(info.dxRegister == static_cast<uint32_t>(-1),
                         "DX12 descriptor binding '%s' has no DX register",
                         info.name.empty() ? "<unnamed>" : info.name.c_str());
+
+            if (info.dxSpace == PE_TEXTURE_TABLE_DX_SPACE)
+            {
+                PE_ERROR_IF(info.type != PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE || info.dxRegister != 0,
+                            "DX12 space %u holds only the scene texture array at t0 ('%s')",
+                            PE_TEXTURE_TABLE_DX_SPACE,
+                            info.name.c_str());
+                return;
+            }
 
             auto errorIfOverflow = [&](uint64_t registerEnd, const char *rangeType)
             {
@@ -366,38 +379,55 @@ namespace pe
         };
         std::unordered_map<uint32_t, Required> requiredBySpace;
 
-        for (const DescriptorBindingInfo &info : m_owner->GetBindingInfos())
+        const auto &bindingInfos = m_owner->GetBindingInfos();
+        for (size_t i = 0; i < bindingInfos.size(); ++i)
         {
-            PE_ERROR_IF(info.dxSpace >= DX12_DESCRIPTOR_SPACE_COUNT,
+            const DescriptorBindingInfo &info = bindingInfos[i];
+            const bool textureSpace = info.dxSpace == PE_TEXTURE_TABLE_DX_SPACE;
+            PE_ERROR_IF(info.dxSpace >= DX12_DESCRIPTOR_SPACE_COUNT && !textureSpace,
                         "DX12 descriptor space %u exceeds supported count %u",
                         info.dxSpace,
                         DX12_DESCRIPTOR_SPACE_COUNT);
-            ValidateDescriptorCapacity(info);
+
+            const uint32_t capacity = m_owner->GetBindingCapacity(i);
+            ValidateDescriptorCapacity(info, capacity);
 
             Required &required = requiredBySpace[info.dxSpace];
-            required.cbvSrvUavCount = std::max(required.cbvSrvUavCount, CbvSrvUavTableEnd(info));
-            required.samplerCount = std::max(required.samplerCount, SamplerTableEnd(info));
+            required.cbvSrvUavCount = std::max(required.cbvSrvUavCount, CbvSrvUavTableEnd(info, capacity));
+            required.samplerCount = std::max(required.samplerCount, SamplerTableEnd(info, capacity));
         }
 
         for (const auto &[space, required] : requiredBySpace)
         {
-            TableSlots table{};
+            TableSlots &table = m_tables.emplace_back();
             table.dxSpace = space;
             if (required.cbvSrvUavCount > 0)
             {
-                table.cbvSrvUavBaseSlot = rhi->GetCbvSrvUavHeap()->AllocateRange(required.cbvSrvUavCount);
+                table.cbvSrvUavBaseSlot = rhi->GetCbvSrvUavHeap()->TryAllocateRange(required.cbvSrvUavCount);
                 table.cbvSrvUavCount = required.cbvSrvUavCount;
             }
+
             if (required.samplerCount > 0)
             {
-                table.samplerBaseSlot = rhi->GetSamplerHeap()->AllocateRange(required.samplerCount);
+                table.samplerBaseSlot = rhi->GetSamplerHeap()->TryAllocateRange(required.samplerCount);
                 table.samplerCount = required.samplerCount;
             }
-            m_tables.push_back(table);
+
+            // Growing a bindless array may not fit; the caller keeps the previous descriptor instead of failing.
+            const bool exhausted = (required.cbvSrvUavCount > 0 && table.cbvSrvUavBaseSlot == InvalidSlot) ||
+                                   (required.samplerCount > 0 && table.samplerBaseSlot == InvalidSlot);
+            if (exhausted)
+            {
+                FreeTables();
+                throw std::runtime_error("DX12 shader-visible descriptor heap has no free range for space " +
+                                         std::to_string(space));
+            }
         }
 
-        for (const DescriptorBindingInfo &info : m_owner->GetBindingInfos())
+        for (size_t i = 0; i < bindingInfos.size(); ++i)
         {
+            const DescriptorBindingInfo &info = bindingInfos[i];
+            const uint32_t capacity = std::max(1u, m_owner->GetBindingCapacity(i));
             TableSlots *table = FindTable(info.dxSpace);
             PE_ERROR_IF(!table, "DX12 descriptor table was not allocated");
 
@@ -408,15 +438,15 @@ namespace pe
             if (IsCbvSrvUavDescriptor(info.type))
             {
                 const uint32_t offset = CbvSrvUavTableOffset(info);
-                slots.cbvSrvUavSlots.resize(std::max(1u, info.count));
-                for (uint32_t i = 0; i < slots.cbvSrvUavSlots.size(); ++i)
-                    slots.cbvSrvUavSlots[i] = table->cbvSrvUavBaseSlot + offset + i;
+                slots.cbvSrvUavSlots.resize(capacity);
+                for (uint32_t element = 0; element < capacity; ++element)
+                    slots.cbvSrvUavSlots[element] = table->cbvSrvUavBaseSlot + offset + element;
             }
             if (IsSamplerDescriptor(info.type))
             {
-                slots.samplerSlots.resize(std::max(1u, info.count));
-                for (uint32_t i = 0; i < slots.samplerSlots.size(); ++i)
-                    slots.samplerSlots[i] = table->samplerBaseSlot + info.dxRegister + i;
+                slots.samplerSlots.resize(capacity);
+                for (uint32_t element = 0; element < capacity; ++element)
+                    slots.samplerSlots[element] = table->samplerBaseSlot + info.dxRegister + element;
             }
             m_slots.push_back(std::move(slots));
         }

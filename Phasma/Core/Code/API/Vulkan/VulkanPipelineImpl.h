@@ -18,6 +18,12 @@ namespace pe
         void CreateComputePipeline();
         void CreateGraphicsPipeline(RenderPass *renderPass);
         void CreateSBT();
+        void ConfigureDescriptorHeap(vk::PipelineShaderStageCreateInfo *stages, uint32_t count);
+
+        bool m_usesDescriptorHeap = false;
+        std::vector<VkDescriptorSetAndBindingMappingEXT> m_heapMappings;
+        VkShaderDescriptorSetAndBindingMappingInfoEXT m_heapMappingInfo{};
+        VkPipelineCreateFlags2CreateInfo m_heapPipelineFlags{};
 
         Pipeline *m_owner{};
         PassInfo &m_info;

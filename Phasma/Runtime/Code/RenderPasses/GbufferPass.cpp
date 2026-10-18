@@ -319,7 +319,6 @@ namespace pe
                     setTextures->SetSampler(1, scene.GetDefaultSampler());
                     setTextures->SetBuffer(2, scene.GetMaterialTable());
                     setTextures->SetBuffer(3, scene.GetMaterialByteBuffer());
-                    setTextures->SetImageViews(4, scene.GetImageViews());
                     setTextures->Update();
                 }
             }
@@ -704,7 +703,6 @@ namespace pe
                 setTextures->SetSampler(1, scene.GetDefaultSampler());
                 setTextures->SetBuffer(2, scene.GetMaterialTable());
                 setTextures->SetBuffer(3, scene.GetMaterialByteBuffer());
-                setTextures->SetImageViews(4, scene.GetImageViews());
                 setTextures->Update();
             }
 

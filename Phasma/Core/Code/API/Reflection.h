@@ -100,6 +100,7 @@ namespace pe
         int dxRegister = INT32_MIN;
         int dxSpace = INT32_MIN;
         uint32_t count = 1;
+        bool bindless = false; // an unbounded array, sized at runtime
     };
 
     struct SamplerReflection

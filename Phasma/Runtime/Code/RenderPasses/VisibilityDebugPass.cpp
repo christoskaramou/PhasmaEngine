@@ -59,17 +59,16 @@ namespace pe
             return;
         }
 
-        // The bindless table changes with the geometry version, as DepthPass rebinds it.
+        // The material sampler follows the geometry version, as DepthPass rebinds it; set 2 is the shared texture table.
         if (scene->GetGeometryVersion() != m_lastGeometryVersion)
         {
             m_lastGeometryVersion = scene->GetGeometryVersion();
 
             for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); ++i)
             {
-                Descriptor *textures = m_passInfo->GetDescriptors(i)[1];
-                textures->SetSampler(0, scene->GetDefaultSampler());
-                textures->SetImageViews(1, scene->GetImageViews());
-                textures->Update();
+                Descriptor *samplers = m_passInfo->GetDescriptors(i)[1];
+                samplers->SetSampler(0, scene->GetDefaultSampler());
+                samplers->Update();
             }
         }
 

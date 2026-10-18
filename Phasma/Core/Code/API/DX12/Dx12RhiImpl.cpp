@@ -560,10 +560,18 @@ namespace pe
         m_caps.dynamicRendering = true;
         m_caps.indirectCount = true;
         m_caps.maxPushConstantsBytes = 128;
-        m_caps.maxBindlessTextures = 1'000'000;
+        // Binding tier 3 (required above) leaves texture arrays bounded only by the shader-visible heap; the reserve
+        // keeps room for every other descriptor table while the scene table grows.
+        constexpr uint32_t cbvSrvUavHeapSize = 1'000'000;
+        constexpr uint32_t otherDescriptorReserve = 65'536;
+        m_caps.maxBindlessTextures = cbvSrvUavHeapSize - otherDescriptorReserve;
+        m_caps.bindlessBudget = m_caps.maxBindlessTextures;
+        PE_INFO("[DX12] Bindless texture arrays: up to %u textures", m_caps.maxBindlessTextures);
 
-        m_cbvSrvUavHeap =
-            std::make_unique<Dx12DescriptorHeap>(m_device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV, 1'000'000, true);
+        m_cbvSrvUavHeap = std::make_unique<Dx12DescriptorHeap>(m_device.Get(),
+                                                               D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV,
+                                                               cbvSrvUavHeapSize,
+                                                               true);
         m_samplerHeap = std::make_unique<Dx12DescriptorHeap>(m_device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 2'048, true);
         m_samplerStagingHeap =
             std::make_unique<Dx12DescriptorHeap>(m_device.Get(), D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER, 2'048, false);

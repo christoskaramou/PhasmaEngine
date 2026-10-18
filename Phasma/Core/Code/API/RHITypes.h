@@ -7,7 +7,10 @@ enum PeGraphicsApi : uint32_t
     PE_GRAPHICS_API_COUNT
 };
 
-constexpr uint32_t PE_MAX_DESCRIPTORS_PER_BINDING = 500;
+// Scene textures: an unbounded Texture2D array named pe_textures, in register space 100 on D3D12. Declared alone in its
+// set, it binds the RHI's shared per-frame texture table; sharing a set with other bindings, the pass owns a copy.
+constexpr const char *PE_TEXTURE_TABLE_NAME = "pe_textures";
+constexpr uint32_t PE_TEXTURE_TABLE_DX_SPACE = 100;
 
 constexpr const char *PeGraphicsApiName(PeGraphicsApi api)
 {

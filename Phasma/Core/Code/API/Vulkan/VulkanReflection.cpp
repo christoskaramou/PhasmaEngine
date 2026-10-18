@@ -15,19 +15,22 @@ namespace pe
             return name;
         }
 
-        uint32_t GetResourceArrayCount(const spirv_cross::SPIRType &typeInfo)
+        bool IsUnboundedArray(const spirv_cross::SPIRType &typeInfo)
+        {
+            return !typeInfo.array.empty() && (!typeInfo.array_size_literal[0] || typeInfo.array[0] == 0);
+        }
+
+        // Only sampled-image arrays may be unbounded; they grow at runtime up to the device limit.
+        uint32_t GetResourceArrayCount(const spirv_cross::SPIRType &typeInfo, bool allowUnbounded = false)
         {
             if (typeInfo.array.empty())
                 return 1;
 
-            const uint32_t bindlessCount = std::max(1u, std::min(PE_MAX_DESCRIPTORS_PER_BINDING, RHII.GetCaps().maxBindlessTextures));
-            if (typeInfo.array_size_literal[0])
-            {
-                if (typeInfo.array[0] == 0)
-                    return bindlessCount; // Open array
+            if (!IsUnboundedArray(typeInfo))
                 return typeInfo.array[0];
-            }
-            return bindlessCount; // Unbounded — partially bound at runtime
+
+            PE_ERROR_IF(!allowUnbounded, "Vulkan reflection: unbounded arrays are supported for sampled images only");
+            return std::max(1u, RHII.GetCaps().maxBindlessTextures);
         }
 
         const std::unordered_map<spirv_cross::SPIRType::BaseType, size_t> &TypeSizeMap()
@@ -331,7 +334,8 @@ namespace pe
             desc.name = GetResourceName(compiler, resource.id);
             desc.set = compiler.get_decoration(resource.id, spv::DecorationDescriptorSet);
             desc.binding = compiler.get_decoration(resource.id, spv::DecorationBinding);
-            desc.count = GetResourceArrayCount(type);
+            desc.count = GetResourceArrayCount(type, true);
+            desc.bindless = IsUnboundedArray(type);
             refl.m_images.push_back(desc);
         }
 

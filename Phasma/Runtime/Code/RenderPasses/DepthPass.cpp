@@ -106,7 +106,6 @@ namespace pe
                     Descriptor *dpSetTextures = dpSets[1];
                     dpSetTextures->SetBuffer(0, scene.GetMeshConstants());
                     dpSetTextures->SetSampler(1, scene.GetDefaultSampler());
-                    dpSetTextures->SetImageViews(2, scene.GetImageViews());
                     dpSetTextures->Update();
                 }
             }

@@ -361,13 +361,22 @@ namespace pe
 
     void PassInfo::ReflectDescriptors()
     {
-        for (auto &descriptors : m_descriptorsPF)
+        for (uint32_t frame = 0; frame < m_descriptorsPF.size(); ++frame)
         {
+            auto &descriptors = m_descriptorsPF[frame];
             // Clean up existing descriptors
             for (auto &descriptor : descriptors)
                 Descriptor::Destroy(descriptor);
 
             descriptors = Shader::ReflectPassDescriptors(*this);
+            for (Descriptor *&descriptor : descriptors)
+            {
+                if (!descriptor || !descriptor->IsTextureTable())
+                    continue;
+
+                Descriptor::Destroy(descriptor);
+                descriptor = RHII.GetTextureTable(frame);
+            }
         }
     }
 

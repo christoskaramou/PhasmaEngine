@@ -797,7 +797,7 @@ namespace pe
     }
 
     std::vector<uint8_t> BuildOpenPBRBytes(const MaterialInstance &instance,
-                                           const std::vector<ImageView *> &imageViews)
+                                           const std::unordered_map<ImageView *, uint32_t> &imageViewIndices)
     {
         const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
         const OpenPBRModule &module = *source.module;
@@ -815,12 +815,11 @@ namespace pe
             if (input.type == "SamplerTexture2D")
             {
                 ImageView *view = source.textures.at(input.identity).image->GetSRV();
-                const auto it = std::find(imageViews.begin(), imageViews.end(), view);
-                if (it == imageViews.end())
+                const auto it = imageViewIndices.find(view);
+                if (it == imageViewIndices.end())
                     return {};
 
-                const uint32_t index = static_cast<uint32_t>(std::distance(imageViews.begin(), it));
-                WriteParamValue(bytes, offset, index);
+                WriteParamValue(bytes, offset, it->second);
                 WriteParamValue(bytes, offset + sizeof(uint32_t), OpenPBRSamplerIndex(instance, input));
             }
             else

@@ -85,6 +85,10 @@ namespace pe
         m_pendingImageBarriers.clear();
         m_pendingMemoryBarriers.clear();
 
+        for (auto &state : m_heapStates)
+            state = {};
+        m_heapStateOwner = UINT32_MAX;
+
         PE_ERROR_IF(!(m_owner->m_commandPool->GetFlags() & PE_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER), "CommandBuffer::Reset: CommandPool does not have the reset flag!");
         m_apiHandle.reset();
 
@@ -207,6 +211,8 @@ namespace pe
                                             const std::string &name,
                                             bool skipDynamicPass)
     {
+        // Raw Vulkan recorded around passes (ImGui) binds native descriptor sets, which invalidate heap push data.
+        m_heapStateOwner = UINT32_MAX;
         BeginDebugRegion(name + "_pass");
         m_owner->m_dynamicPass = RHII.GetCaps().dynamicRendering &&
                                  Settings::Get<SceneSettings>().dynamic_rendering &&
@@ -370,6 +376,7 @@ namespace pe
         EndDebugRegion();
 
         m_owner->ClearBoundGraphicsState();
+        m_heapStateOwner = UINT32_MAX;
     }
 
     static void BatchBindDescriptorsVk(vk::CommandBuffer apiHandle, Pipeline *boundPipeline, vk::PipelineBindPoint point, uint32_t count, Descriptor *const *descriptors)
@@ -426,7 +433,30 @@ namespace pe
             PE_ERROR("GetVulkanBindPoint: unknown pipeline type %u", static_cast<uint32_t>(pipeline->GetType()));
             return vk::PipelineBindPoint::eGraphics;
         }
+
+        uint32_t HeapStateIndex(const Pipeline *pipeline)
+        {
+            switch (GetVulkanBindPoint(pipeline))
+            {
+            case vk::PipelineBindPoint::eCompute:
+                return 1;
+            case vk::PipelineBindPoint::eRayTracingKHR:
+                return 2;
+            default:
+                return 0;
+            }
+        }
     } // namespace
+
+    void VulkanCommandBufferImpl::ClaimHeapState(uint32_t bindPoint)
+    {
+        if (m_heapStateOwner == bindPoint)
+            return;
+
+        VulkanRhi::Impl()->m_descriptorHeaps->Bind(m_apiHandle);
+        PushVulkanHeapState(m_apiHandle, m_heapStates[bindPoint]);
+        m_heapStateOwner = bindPoint;
+    }
 
     void VulkanCommandBufferImpl::BindPipeline(PassInfo &passInfo, bool bindDescriptors)
     {
@@ -436,6 +466,10 @@ namespace pe
             m_owner->m_boundPipeline = pipeline;
             m_apiHandle.bindPipeline(GetVulkanBindPoint(m_owner->m_boundPipeline), GetVulkanPipeline(m_owner->m_boundPipeline));
         }
+
+        // Without new descriptors the pipeline keeps its bind point's earlier ones, as with descriptor sets.
+        if (!bindDescriptors && VulkanPipelineImpl::From(pipeline)->m_usesDescriptorHeap)
+            ClaimHeapState(HeapStateIndex(pipeline));
 
         if (bindDescriptors)
         {
@@ -494,12 +528,30 @@ namespace pe
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::BindDescriptors: No bound pipeline found!");
 
+        if (VulkanPipelineImpl::From(m_owner->m_boundPipeline)->m_usesDescriptorHeap)
+        {
+            const uint32_t bindPoint = HeapStateIndex(m_owner->m_boundPipeline);
+            VulkanRhi::Impl()->m_descriptorHeaps->Bind(m_apiHandle);
+            if (m_heapStateOwner != bindPoint)
+            {
+                PushVulkanHeapState(m_apiHandle, m_heapStates[bindPoint]);
+                m_heapStateOwner = bindPoint;
+            }
+
+            BindVulkanHeapDescriptors(m_apiHandle, m_heapStates[bindPoint], count, descriptors);
+            return;
+        }
+
+        // Native sets invalidate heap push data. ponytail: a fallback set pipeline's own sets are not restored after
+        // heap pushes; none exists on heap devices today, so track set state per bind point only if one appears.
+        m_heapStateOwner = UINT32_MAX;
         const vk::PipelineBindPoint point = GetVulkanBindPoint(m_owner->m_boundPipeline);
         BatchBindDescriptorsVk(m_apiHandle, m_owner->m_boundPipeline, point, count, descriptors);
     }
 
     void VulkanCommandBufferImpl::PushDescriptor(uint32_t set, const std::vector<PushDescriptorInfo> &info)
     {
+        m_heapStateOwner = UINT32_MAX;
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::PushDescriptor: No bound pipeline found!");
         PE_ERROR_IF(!RHII.GetCaps().pushDescriptor, "CommandBuffer::PushDescriptor: push descriptors are not supported on this device");
 
@@ -645,6 +697,24 @@ namespace pe
         const auto &offsets = m_owner->m_boundPipeline->GetPushConstantOffsets();
         const auto &sizes = m_owner->m_boundPipeline->GetPushConstantSizes();
 
+        if (VulkanPipelineImpl::From(m_owner->m_boundPipeline)->m_usesDescriptorHeap)
+        {
+            const uint32_t size = sizes.empty() ? 0 : *std::max_element(sizes.begin(), sizes.end());
+            PE_ERROR_IF(size > VulkanHeapSetPushOffset, "Push constants overlap descriptor heap set addresses");
+            if (!size)
+                return;
+
+            const uint32_t bindPoint = HeapStateIndex(m_owner->m_boundPipeline);
+            ClaimHeapState(bindPoint);
+
+            auto &state = m_heapStates[bindPoint];
+            std::memcpy(state.constants.data(), constants.Data(), size);
+            state.constantsSize = std::max(state.constantsSize, size);
+            PushVulkanHeapData(m_apiHandle, 0, size, constants.Data());
+            return;
+        }
+
+        m_heapStateOwner = UINT32_MAX;
         for (size_t i = 0; i < stages.size(); i++)
         {
             m_apiHandle.pushConstants(GetVulkanPipelineLayout(m_owner->m_boundPipeline),

@@ -234,8 +234,8 @@ namespace pe
             return true;
         }
 
-        // Bind set0 (scene uniforms + mesh constants) and set1 (constants + sampler + textures) for
-        // the id pass exactly like the depth prepass. Returns false if the descriptor layout is wrong.
+        // Bind set0 (scene uniforms + mesh constants) and set1 (constants + sampler) for the id pass exactly like the
+        // depth prepass; set2 is the RHI's shared scene texture table. Returns false if the descriptor layout is wrong.
         bool BindObjectIdDescriptors(ObjectIdDecodeCache &cache, Scene &scene, uint32_t frame)
         {
             const auto &idSets = cache.idPI->GetDescriptors(frame);
@@ -249,7 +249,6 @@ namespace pe
             idSetUniforms->Update();
             idSetTextures->SetBuffer(0, scene.GetMeshConstants());
             idSetTextures->SetSampler(1, scene.GetDefaultSampler());
-            idSetTextures->SetImageViews(2, scene.GetImageViews());
             idSetTextures->Update();
             return true;
         }
@@ -634,5 +633,13 @@ namespace pe
 
         out.valid = true;
         return out;
+    }
+
+    void DestroyScenePerception()
+    {
+        ObjectIdDecodeCache &cache = GetObjectIdDecodeCache();
+        Image::Destroy(cache.idTarget);
+        Buffer::Destroy(cache.nodeVis);
+        cache = {};
     }
 } // namespace pe

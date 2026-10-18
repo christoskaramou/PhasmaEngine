@@ -61,4 +61,7 @@ namespace pe
     // after RendererSystem::WaitAllFramesCommands(). `depth` is the live depth-stencil target.
     CameraViewResult DecodeCameraView(Scene &scene, Image *depth, uint32_t minPixels);
     CameraPickResult PickCameraPixel(Scene &scene, Image *depth, int x, int y, float groundY);
+
+    // Releases the object-id decode resources with the renderer's passes, while the RHI is still alive.
+    void DestroyScenePerception();
 } // namespace pe

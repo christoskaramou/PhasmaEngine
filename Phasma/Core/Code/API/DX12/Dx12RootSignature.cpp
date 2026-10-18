@@ -8,7 +8,7 @@ namespace pe
     {
         PE_ERROR_IF(!device, "Dx12RootSignature requires a valid D3D12 device");
 
-        std::array<D3D12_ROOT_PARAMETER1, 1 + DX12_DESCRIPTOR_SPACE_COUNT * 2> parameters{};
+        std::array<D3D12_ROOT_PARAMETER1, DX12_TEXTURE_TABLE_ROOT_INDEX + 1> parameters{};
 
         parameters[DX12_ROOT_CONSTANTS_INDEX].ParameterType = D3D12_ROOT_PARAMETER_TYPE_32BIT_CONSTANTS;
         parameters[DX12_ROOT_CONSTANTS_INDEX].ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
@@ -66,6 +66,20 @@ namespace pe
             parameters[samplerRoot].DescriptorTable.NumDescriptorRanges = 1;
             parameters[samplerRoot].DescriptorTable.pDescriptorRanges = &samplerRange;
         }
+
+        D3D12_DESCRIPTOR_RANGE1 textureRange{};
+        textureRange.RangeType = D3D12_DESCRIPTOR_RANGE_TYPE_SRV;
+        textureRange.NumDescriptors = UINT_MAX;
+        textureRange.BaseShaderRegister = 0;
+        textureRange.RegisterSpace = PE_TEXTURE_TABLE_DX_SPACE;
+        textureRange.Flags = D3D12_DESCRIPTOR_RANGE_FLAG_DESCRIPTORS_VOLATILE;
+        textureRange.OffsetInDescriptorsFromTableStart = 0;
+
+        auto &textureParameter = parameters[DX12_TEXTURE_TABLE_ROOT_INDEX];
+        textureParameter.ParameterType = D3D12_ROOT_PARAMETER_TYPE_DESCRIPTOR_TABLE;
+        textureParameter.ShaderVisibility = D3D12_SHADER_VISIBILITY_ALL;
+        textureParameter.DescriptorTable.NumDescriptorRanges = 1;
+        textureParameter.DescriptorTable.pDescriptorRanges = &textureRange;
 
         D3D12_VERSIONED_ROOT_SIGNATURE_DESC desc{};
         desc.Version = D3D_ROOT_SIGNATURE_VERSION_1_1;

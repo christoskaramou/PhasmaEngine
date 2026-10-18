@@ -4,6 +4,7 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#include "API/Vulkan/VulkanDescriptorHeap.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
 namespace pe
@@ -39,6 +40,17 @@ namespace pe
                 vkUsage |= vk::BufferUsageFlagBits::eResourceDescriptorBufferEXT;
             if (usage & PE_BUFFER_USAGE_SAMPLER_DESCRIPTOR_BUFFER)
                 vkUsage |= vk::BufferUsageFlagBits::eSamplerDescriptorBufferEXT;
+
+            // Indirect-index mappings read per-set index tables from the heap through a pushed address,
+            // which requires uniform usage (VUID-vkCmdDraw-None-11437).
+            if (usage & VulkanDescriptorHeapUsage)
+                vkUsage |= vk::BufferUsageFlagBits::eDescriptorHeapEXT | vk::BufferUsageFlagBits::eUniformBuffer;
+
+            if (UsesVulkanDescriptorHeap() &&
+                (usage & (PE_BUFFER_USAGE_UNIFORM_BUFFER | PE_BUFFER_USAGE_STORAGE_BUFFER)))
+            {
+                vkUsage |= vk::BufferUsageFlagBits::eShaderDeviceAddress;
+            }
             return vkUsage;
         }
 
@@ -83,6 +95,9 @@ namespace pe
         VmaAllocationCreateInfo allocationCreateInfo{};
         allocationCreateInfo.usage = VMA_MEMORY_USAGE_AUTO;
         allocationCreateInfo.flags = vmaFlags;
+
+        if (desc.usage & VulkanDescriptorHeapUsage)
+            allocationCreateInfo.requiredFlags = VK_MEMORY_PROPERTY_HOST_COHERENT_BIT;
 
         VkBuffer vkBuffer = {};
         PE_CHECK(vmaCreateBuffer(VulkanRhi::Allocator(),

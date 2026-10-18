@@ -184,36 +184,12 @@ namespace pe
         if (!tlasChanged && frame < m_boundLightStorage.size() && m_boundLightStorage[frame] != scene.GetLightStorage(frame))
             UpdateDescriptorSets(); // the enabled lights outgrew this frame's buffer
 
+        // Every set, for all frames: a geometry change can come with a texture-table resize, which leaves set 0 empty.
         if (tlasChanged || geoChanged)
         {
-            if (tlasChanged)
-            {
-                UpdateDescriptorSets();
-                m_tlas = tlas;
-            }
-            if (geoChanged)
-            {
-                m_lastGeometryVersion = geoVersion;
-
-                // Update ALL frames' descriptors since buffers changed
-                for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
-                {
-                    const auto &rtSets = m_passInfo->GetDescriptors(i);
-                    if (rtSets.size() > 0 && rtSets[0])
-                    {
-                        Descriptor *rtSet0 = rtSets[0];
-                        rtSet0->SetAccelerationStructure(0, scene.GetTLAS());
-                        rtSet0->SetBuffer(2, scene.GetUniforms(i));
-                        rtSet0->SetBuffer(3, scene.GetMeshConstants());
-                        rtSet0->SetSampler(4, m_display->GetSampler());
-                        rtSet0->SetBuffer(6, scene.GetBuffer());
-                        rtSet0->SetBuffer(7, scene.GetMeshInfoBuffer());
-                        rtSet0->SetBuffer(11, scene.GetMaterialTable());
-                        rtSet0->SetImageViews(12, scene.GetImageViews());
-                        rtSet0->Update();
-                    }
-                }
-            }
+            UpdateDescriptorSets();
+            m_tlas = tlas;
+            m_lastGeometryVersion = geoVersion;
         }
         if (!m_probeTracing)
         {

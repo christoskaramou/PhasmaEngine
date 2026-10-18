@@ -7,7 +7,7 @@
 [[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
 [[vk::binding(2, 1)]] StructuredBuffer<MaterialGpuData> materialTable : register(t2, space1);
 [[vk::binding(3, 1)]] ByteAddressBuffer materialBytes : register(t3, space1);
-[[vk::binding(4, 1)]] Texture2D textures[] : register(t4, space1);
+[[vk::binding(0, 2)]] Texture2D pe_textures[] : register(t0, space100);
 
 MaterialGpuData LoadMaterialFromBytes(uint byteOffset)
 {
@@ -24,7 +24,7 @@ float4 SampleArray(float2 uv, uint index)
 {
     if (index == 0xFFFFFFFF)
         return float4(1.0, 1.0, 1.0, 1.0);
-    return textures[NonUniformResourceIndex(index)].Sample(material_sampler, uv);
+    return pe_textures[NonUniformResourceIndex(index)].Sample(material_sampler, uv);
 }
 
 float4 GetBaseColor(uint id, float2 uv)          { return SampleArray(uv, constants[id].meshImageIndex[0]); }

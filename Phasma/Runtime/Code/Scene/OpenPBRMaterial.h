@@ -88,7 +88,7 @@ namespace pe
     // The value an input resolves to: the instance's param override, then its material's params, then the source's own.
     MaterialParamValue ResolveOpenPBRInput(const MaterialInstance &instance, const OpenPBRInput &input);
     std::vector<uint8_t> BuildOpenPBRBytes(const MaterialInstance &instance,
-                                           const std::vector<ImageView *> &imageViews);
+                                           const std::unordered_map<ImageView *, uint32_t> &imageViewIndices);
 
     // Legacy fields follow the constant inputs, so every legacy consumer (openpbr off, Android, unsupported GPUs, RT
     // hits, the raster G-buffer under the material passes) shows the same base colour, metalness, roughness, IOR and

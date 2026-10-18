@@ -117,8 +117,10 @@ namespace pe
         }
         if (m_usage & PE_BUFFER_USAGE_INDIRECT_BUFFER)
         {
-            PE_ERROR_IF(m_size > RHII.GetMaxDrawIndirectCount() * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE,
-                        "Indirect command buffer size is too big");
+            // 64-bit: a device reporting 2^30 commands (the desktop baseline) wraps the 32-bit product to 0.
+            const uint64_t maxIndirectCommands = RHII.GetMaxDrawIndirectCount();
+            const uint64_t maxIndirectBytes = maxIndirectCommands * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
+            PE_ERROR_IF(m_size > maxIndirectBytes, "Indirect command buffer size is too big");
         }
         if (!m_size)
             m_size = 16;

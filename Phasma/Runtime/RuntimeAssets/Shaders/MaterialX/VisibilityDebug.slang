@@ -26,7 +26,7 @@ struct PushConstants_VisibilityDebug
 [[vk::image_format("rgba8")]][[vk::binding(8, 0)]] RWTexture2D<float4> pe_debug;
 
 [[vk::binding(0, 1)]] SamplerState pe_materialSampler;
-[[vk::binding(1, 1)]] Texture2D pe_textures[];
+[[vk::binding(0, 2)]] Texture2D pe_textures[] : register(t0, space100);
 
 // GBufferPS.hlsl's material record (byte path first, then the structured table).
 MaterialGpuData PeMaterial(uint id)

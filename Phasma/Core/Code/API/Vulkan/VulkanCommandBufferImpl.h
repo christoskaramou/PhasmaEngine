@@ -3,6 +3,7 @@
 #include "API/Vulkan/VulkanHeaders.h"
 
 #include "API/CommandBuffer_Internal.h"
+#include "API/Vulkan/VulkanDescriptorHeap.h"
 
 namespace pe
 {
@@ -86,12 +87,18 @@ namespace pe
         void EndDebugRegion() override;
 
         void FlushBarriers();
+        void ClaimHeapState(uint32_t bindPoint);
 
         CommandBuffer *m_owner{};
         vk::CommandBuffer m_apiHandle{};
         std::vector<vk::BufferMemoryBarrier2> m_pendingBufferBarriers;
         std::vector<vk::ImageMemoryBarrier2> m_pendingImageBarriers;
         std::vector<vk::MemoryBarrier2> m_pendingMemoryBarriers;
+
+        // Descriptor heap state per bind point (graphics, compute, ray tracing) and the bind point whose state the
+        // push data currently holds; UINT32_MAX after anything that may have replaced it.
+        std::array<VulkanHeapBindState, 3> m_heapStates{};
+        uint32_t m_heapStateOwner = UINT32_MAX;
     };
 
     inline vk::CommandBuffer GetVulkanCommandBuffer(CommandBuffer *cmd)

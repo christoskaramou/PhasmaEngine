@@ -18,8 +18,9 @@
 
 // Set 2 (sets 0, 1 and 3 are LightingPS's and ProbeVolume's). DX12 maps binding N to register N and an array to N..N+size-1,
 // so the 18 graph samplers (s2-s19) sit above the cube's s0 and the environment's s1; the unbounded texture array is the
-// set's last binding. Textured graphs sample these; the default module never does, so they are compiled out.
-[[vk::binding(6, 2)]] Texture2D pe_textures[];
+// set's last binding (t0 in space 100 on DX12). No set is free for it alone, so the pass keeps its own copy of the scene
+// texture table. Textured graphs sample these; the default module never does, so they are compiled out.
+[[vk::binding(6, 2)]] Texture2D pe_textures[] : register(t0, space100);
 [[vk::binding(2, 2)]] SamplerState pe_samplers[18];
 
 // OpenPBR's environment: lat-long radiance pyramid and irradiance (Skybox::BuildOpenPBREnvironment).

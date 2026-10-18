@@ -1,4 +1,5 @@
 #include "Render/SceneRendererCore.h"
+#include "Render/ScenePerception.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -183,6 +184,7 @@ namespace pe
     void SceneRendererCore::DestroyRenderPassComponents()
     {
         DestroyInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized);
+        DestroyScenePerception();
     }
 
     void SceneRendererCore::ResizeRenderPassComponents(uint32_t width, uint32_t height, bool hasRayTracingGeometry)

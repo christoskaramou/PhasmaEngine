@@ -1,4 +1,5 @@
 #include "API/Vulkan/VulkanSamplerImpl.h"
+#include "API/Vulkan/VulkanDescriptorHeap.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
@@ -143,10 +144,27 @@ namespace pe
 
         m_sampler = VulkanRhi::Device().createSampler(info);
         Debug::SetObjectName(m_sampler, owner->m_name);
+
+        if (UsesVulkanDescriptorHeap())
+        {
+            auto &heap = VulkanRhi::Impl()->m_descriptorHeaps->samplers;
+            const auto size = VulkanRhi::Impl()->m_descriptorHeapProperties.samplerDescriptorSize;
+            m_heapOffset = heap.Allocate(size);
+            VkHostAddressRangeEXT destination{heap.Data(m_heapOffset), static_cast<size_t>(size)};
+            PE_CHECK(VULKAN_HPP_DEFAULT_DISPATCHER.vkWriteSamplerDescriptorsEXT(
+                VulkanRhi::Device(), 1, reinterpret_cast<const VkSamplerCreateInfo *>(&info), &destination));
+            heap.Flush(m_heapOffset, size);
+        }
     }
 
     VulkanSamplerImpl::~VulkanSamplerImpl()
     {
+        if (m_heapOffset != UINT32_MAX)
+        {
+            auto &heap = VulkanRhi::Impl()->m_descriptorHeaps->samplers;
+            heap.Free(m_heapOffset, VulkanRhi::Impl()->m_descriptorHeapProperties.samplerDescriptorSize);
+        }
+
         if (m_sampler)
             VulkanRhi::Device().destroySampler(m_sampler);
     }
