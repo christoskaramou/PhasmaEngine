@@ -1287,6 +1287,16 @@ namespace pe
             sprite.interpolate =
                 sv.HasMember("interpolate") && sv["interpolate"].IsBool() ? sv["interpolate"].GetBool() : false;
             sprite.metadataLoaded = false;
+
+            // The quad is rebuilt from its primitive source with full-texture UVs, and ApplySpriteFrame skips a frame
+            // whose rect already matches the stored one, so apply the saved rect here to keep mesh and state in step.
+            const auto &refs = scene.GetMeshRefs(node);
+            const bool slotValid = sprite.meshSlot >= 0 && sprite.meshSlot < static_cast<int>(refs.size());
+            if (sprite.frameIndex >= 0 && slotValid)
+            {
+                scene.SetMeshUvRectTransient(refs[sprite.meshSlot], sprite.uvRect);
+                scene.SetMeshSpriteFrameBlendTransient(refs[sprite.meshSlot], sprite.uvRect, 0.0f);
+            }
         }
 
         void RestoreSkinnedStrip2DNode(Scene &scene, NodeId *node, const rapidjson::Value &nodeValue)
