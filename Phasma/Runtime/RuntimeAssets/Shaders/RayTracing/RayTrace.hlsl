@@ -743,28 +743,29 @@ void raygeneration()
     float3 originWorld = mul(float4(originView, 1.0), invView).xyz;
     float3 dirWorld = normalize(mul(dirView, (float3x3)invView));
 
-    // Read depth from raster
-    float opaqueDepth = depthBuffer.Load(int3(launchIndex.xy, 0)).r;
-
-    // Calculate distance to surface
-    float4 pViewOpaque = mul(float4(ndc.x, ndc.y, opaqueDepth, 1.0), invProjection);
-    pViewOpaque.xyz /= pViewOpaque.w;
-    float opaqueDist = length(pViewOpaque.xyz - originView);
-
     // MODE-BASED CONFIGURATION
     // 0 = Raster
     // 1 = Hybrid
     // 2 = RayTracing
-    uint mask = 0x80; // Default: Transparent only
-    // Clamped by raster depth — which includes transparent surfaces (the "transparent" pass variant
-    // writes depth), so at a glass pixel the nearest depth IS the glass. Overshoot slightly so the
-    // ray reliably reaches it; the transparent-only mask keeps opaque geometry unexposed.
-    float tMax = opaqueDist * 1.001 + 0.001;
+    uint mask = 0xFF;       // Trace all geometry
+    float tMax = 100000.0;  // Unlimited distance
 
-    if (cb_renderMode == 2)
+    // Hybrid only: RayTracingPass declares the depth read only then, since full RT may run no depth pass.
+    if (cb_renderMode != 2)
     {
-        mask = 0xFF;            // Trace all geometry
-        tMax = 100000.0;        // Unlimited distance
+        // Read depth from raster
+        float opaqueDepth = depthBuffer.Load(int3(launchIndex.xy, 0)).r;
+
+        // Calculate distance to surface
+        float4 pViewOpaque = mul(float4(ndc.x, ndc.y, opaqueDepth, 1.0), invProjection);
+        pViewOpaque.xyz /= pViewOpaque.w;
+        float opaqueDist = length(pViewOpaque.xyz - originView);
+
+        mask = 0x80; // Transparent only
+        // Clamped by raster depth — which includes transparent surfaces (the "transparent" pass variant
+        // writes depth), so at a glass pixel the nearest depth IS the glass. Overshoot slightly so the
+        // ray reliably reaches it; the transparent-only mask keeps opaque geometry unexposed.
+        tMax = opaqueDist * 1.001 + 0.001;
     }
 
     RayDesc ray;

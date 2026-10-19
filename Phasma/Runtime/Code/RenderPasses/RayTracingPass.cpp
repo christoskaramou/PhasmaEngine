@@ -213,17 +213,20 @@ namespace pe
         }
     }
 
+    // No m_scene guard: RenderGraph::Compile runs while m_scene is null (it is set only for recording),
+    // and the pass is enabled only while the scene has a TLAS anyway.
     void RayTracingPass::DeclareInputs(RGBuilder &builder)
     {
-        if (!m_scene || !m_scene->GetTLAS())
-            return;
-
-        Image *depth = RequireActiveSceneRendererHost().GetDepthStencilRT();
+        const auto &gSettings = Settings::Get<SceneSettings>();
         builder.WriteRayTracing(m_display);
         builder.WriteRayTracing(m_rtDepth);
-        builder.ReadRayTracing(depth);
+
+        // Only hybrid clamps rays by raster depth; full RT may run no depth pass at all.
+        if (gSettings.render_mode != RenderMode::RayTracing)
+            builder.ReadRayTracing(RequireActiveSceneRendererHost().GetDepthStencilRT());
+
         auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
-        if (!m_probeTracing && Settings::Get<SceneSettings>().global_illumination && gi && gi->GetIrradianceHistory())
+        if (!m_probeTracing && gSettings.global_illumination && gi && gi->GetIrradianceHistory())
         {
             builder.ReadRayTracing(gi->GetIrradianceHistory());
             builder.ReadRayTracing(gi->GetDistanceHistory());
@@ -232,9 +235,6 @@ namespace pe
 
     void RayTracingPass::DeclareOutputs(RGBuilder &builder)
     {
-        if (!m_scene || !m_scene->GetTLAS())
-            return;
-
         builder.OutputCustom(m_display, PE_IMAGE_LAYOUT_GENERAL,
                              PE_STAGE_RAY_TRACING_SHADER_KHR,
                              PE_ACCESS_SHADER_WRITE);
