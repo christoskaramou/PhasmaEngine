@@ -1,7 +1,5 @@
 #include "Camera/Camera.h"
-#include "API/Image.h"
 #include "API/RHI.h"
-#include "Render/SceneRendererHost.h"
 #include "RenderPasses/TAAPass.h"
 
 namespace pe
@@ -14,12 +12,13 @@ namespace pe
 
         float DefaultCameraAspect()
         {
-            SceneRendererHost *renderer = GetActiveSceneRendererHost();
-            Image *displayRT = renderer ? renderer->GetDisplayRT() : nullptr;
-            if (!displayRT || displayRT->GetHeight() == 0)
+            // The frame reaches the screen at the RHI size. A render-scaled display target truncates its height
+            // (1369 * 0.5 -> 684), so its ratio would stretch the presented frame and disagree with the editor.
+            const float height = RHII.GetHeightf();
+            if (height <= 0.0f)
                 return 16.0f / 9.0f;
 
-            return displayRT->GetWidth_f() / displayRT->GetHeight_f();
+            return RHII.GetWidthf() / height;
         }
 
         bool DefaultCameraProjectionJitter(vec2 &jitter)
