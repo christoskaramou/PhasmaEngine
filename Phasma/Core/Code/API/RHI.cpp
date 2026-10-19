@@ -652,7 +652,7 @@ namespace pe
         {
             if (dll)
                 return true;
-            dll = LoadLibraryA("nvml.dll");
+            dll = LoadLibraryExA("nvml.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
             return dll != nullptr;
         }
 #elif defined(PE_LINUX)
@@ -735,7 +735,7 @@ namespace pe
         {
             if (so)
                 return true;
-            so = LoadLibraryA("ze_loader.dll");
+            so = LoadLibraryExA("ze_loader.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
             return so != nullptr;
         }
 #else

@@ -618,23 +618,11 @@ bool ImGui_ImplDX12_CreateDeviceObjects()
             D3D12_ROOT_SIGNATURE_FLAG_DENY_DOMAIN_SHADER_ROOT_ACCESS |
             D3D12_ROOT_SIGNATURE_FLAG_DENY_GEOMETRY_SHADER_ROOT_ACCESS;
 
-        // Load d3d12.dll and D3D12SerializeRootSignature() function address dynamically to facilitate using with D3D12On7.
-        // See if any version of d3d12.dll is already loaded in the process. If so, give preference to that.
+        // Reuse the device's loaded D3D12 runtime; otherwise load only the system runtime.
         static HINSTANCE d3d12_dll = ::GetModuleHandleA("d3d12.dll");
         if (d3d12_dll == nullptr)
         {
-            // Attempt to load d3d12.dll from local directories. This will only succeed if
-            // (1) the current OS is Windows 7, and
-            // (2) there exists a version of d3d12.dll for Windows 7 (D3D12On7) in one of the following directories.
-            // See https://github.com/ocornut/imgui/pull/3696 for details.
-            const char *localD3d12Paths[] = {".\\d3d12.dll", ".\\d3d12on7\\d3d12.dll", ".\\12on7\\d3d12.dll"}; // A. current directory, B. used by some games, C. used in Microsoft D3D12On7 sample
-            for (int i = 0; i < IM_ARRAYSIZE(localD3d12Paths); i++)
-                if ((d3d12_dll = ::LoadLibraryA(localD3d12Paths[i])) != nullptr)
-                    break;
-
-            // If failed, we are on Windows >= 10.
-            if (d3d12_dll == nullptr)
-                d3d12_dll = ::LoadLibraryA("d3d12.dll");
+            d3d12_dll = ::LoadLibraryExA("d3d12.dll", nullptr, LOAD_LIBRARY_SEARCH_SYSTEM32);
 
             if (d3d12_dll == nullptr)
                 return false;

@@ -2,6 +2,12 @@
 
 The render path is split between PhasmaRuntime's shared scene renderer and PhasmaCore's backend-neutral RHI wrappers. Code remains the source of truth; use this page for cross-cutting pitfalls that are easy to miss when reading one file at a time.
 
+## Windows Optional Library Loading
+
+Verified 2026-10-19: [RHI.cpp](../../../Phasma/Core/Code/API/RHI.cpp) loads optional NVML and Level Zero telemetry libraries with `LoadLibraryExA` and `LOAD_LIBRARY_SEARCH_SYSTEM32`. Missing system installations retain the existing telemetry fallback; copies placed beside the executable, in the working directory or on `PATH` are not searched. [imgui_impl_dx12.cpp](../../../Phasma/Runtime/Code/UI/Backends/imgui_impl_dx12.cpp) reuses an already loaded D3D12 runtime or loads the system runtime, without the old current-directory D3D12On7 probes.
+
+The vendored `Phasma/Core/third_party/Volk/volk.c` still contains an unrestricted loader, but [Core/CMakeLists.txt](../../../Phasma/Core/CMakeLists.txt) does not compile Volk and no engine source calls `volkInitialize`. Treat that scanner finding as unused vendored code for this build; reassess it before enabling Volk. The WgslBridge [Cargo.lock](../../../Phasma/WebGPU/WgslBridge/Cargo.lock) pins `zerocopy` and `zerocopy-derive` to 0.8.58, including the upstream raw-attribute derive fix.
+
 ## Scene Pipeline Script
 
 A scene's pipeline is its render path (render mode, HDR, dynamic rendering: plain controls), its pipeline script, and the values that script exposes: culling/LOD/cluster, shadows, lighting and GI, the default post-process profile and G-buffer formats, plus any passes the script adds. Since 2026-10-09 (the user's plan C, replacing the pass list and `.pepipeline` assets) the script is the pack: [ScriptSystem.cpp](../../../Phasma/Runtime/Code/Script/ScriptSystem.cpp) `LoadPipelineScript` runs `SceneSettings::pipeline_script` (Assets-relative; empty = [default_pipeline.lua](../../../Phasma/Runtime/RuntimeAssets/Scripts/Pipeline/default_pipeline.lua)) at every scene load in the editor and the player, in edit and play mode, whether or not the scene has a Scene Settings node.
