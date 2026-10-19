@@ -236,7 +236,8 @@ local function register(self, name, description, schema, method)
         schema = schema,
         handler = function(args)
             -- The native MCP table marshaller serializes empty tables as {}.
-            -- Canonical JSON preserves actions=[] when the game has no moves.
+            -- Canonical JSON preserves actions=[] when the game has no moves;
+            -- the registry returns this object text as the tool's JSON object.
             return driver._json.encode(method(self, args))
         end,
     })

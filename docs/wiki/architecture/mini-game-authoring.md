@@ -59,8 +59,20 @@ their callbacks on the main thread. The editor's built-in catalog is unchanged.
 Each adapter supplies observation/action/reset callbacks and owns lifecycle
 attach/detach. Duplicate, stale, malformed, busy and unavailable actions fail
 before callbacks. Callback failures consume their token to prevent unsafe retry.
-MCP handlers return canonical JSON strings so empty action arrays survive the
-registry's separate Lua-to-JSON conversion; the client accepts this nested form.
+MCP handlers return canonical JSON text (`json_encode`), so empty action arrays
+survive the registry's separate Lua-to-JSON conversion.
+
+Verified 2026-10-19: `AgentToolRegistry::Invoke` returns a Lua handler's string
+result as a parsed JSON object when the text is one. A terminal
+`game_observe` therefore reaches MCP clients as an object (`structuredContent`
+and the text part) with `"actions":[]`, and games use the driver without a
+decode adapter. Before this, the text came back as a JSON string. Adapters that
+decoded it and returned the table hit the registry's own `LuaToJson`, which
+writes an empty table as `{}`. `json_encode` has the opposite default: it writes
+every empty table, empty objects included, as `[]`. Other string results and
+JSON arrays still pass through as strings. `PhasmaGameDriver` accepts both
+forms (`Protocol.cpp`, `NormalizeObject`) and played PRISM with `--policy local`
+against the new Player. Local pool test `player-mcp-wire`.
 
 C++ games (ProjectNative, ABI 29, verified 2026-10-16) use
 `Phasma/ProjectNative/Api/GameKit.h`: `phasma::gamekit::Controller(api, Game{...})` registers the

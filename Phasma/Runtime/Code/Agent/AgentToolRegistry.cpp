@@ -124,6 +124,16 @@ namespace pe
         }
         ok = true;
         sol::object ret = result.get<sol::object>();
+
+        // Handlers that return JSON object text (gamekit/driver.lua keeps actions=[] that way) get that
+        // object back instead of a re-encoded JSON string.
+        if (ret.get_type() == sol::type::string)
+        {
+            nlohmann::json parsed = nlohmann::json::parse(ret.as<std::string>(), nullptr, false);
+            if (parsed.is_object())
+                return parsed;
+        }
+
         return LuaToJson(ret);
     }
 
