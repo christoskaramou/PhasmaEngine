@@ -316,15 +316,14 @@ namespace pe
                 lightUp = camera->WorldFront();
 
             const float texelSizeWorld = (radius * 2.0f) / static_cast<float>(gSettings.shadow_map_size);
-            mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, lightUp);
-            vec4 centerLightSpace = lightViewMatrix * vec4(frustumCenter, 1.0f);
+            // Snap in a rotation-only light view: its origin is world-fixed, so the texel grid ignores camera motion.
+            const mat4 lightRotation = lookAt(vec3(0.0f), lightDir, lightUp);
+            vec4 centerLightSpace = lightRotation * vec4(frustumCenter, 1.0f);
             centerLightSpace.x = std::floor(centerLightSpace.x / texelSizeWorld) * texelSizeWorld;
             centerLightSpace.y = std::floor(centerLightSpace.y / texelSizeWorld) * texelSizeWorld;
+            frustumCenter = vec3(inverse(lightRotation) * centerLightSpace);
 
-            mat4 invLightViewMatrix = inverse(lightViewMatrix);
-            vec4 snappedCenter = invLightViewMatrix * centerLightSpace;
-            frustumCenter = vec3(snappedCenter) / snappedCenter.w;
-            lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, lightUp);
+            mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, lightUp);
             mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -clipRange);
 
             // Store split distance and matrix in cascade
