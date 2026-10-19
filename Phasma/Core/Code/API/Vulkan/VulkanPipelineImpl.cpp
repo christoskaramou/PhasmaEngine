@@ -223,7 +223,12 @@ namespace pe
         std::vector<vk::DescriptorSetLayout> layouts{};
         const auto &descriptors = m_info.GetDescriptors(0);
         for (uint32_t i = 0; i < descriptors.size(); i++)
-            layouts.push_back(pe::GetVulkanDescriptorLayout(descriptors[i]->GetLayout()));
+        {
+            if (descriptors[i])
+                layouts.push_back(pe::GetVulkanDescriptorLayout(descriptors[i]->GetLayout()));
+            else
+                layouts.push_back(pe::GetVulkanDescriptorLayout(DescriptorLayout::GetOrCreate({}, PE_SHADER_STAGE_ALL)));
+        }
 
         vk::PipelineLayoutCreateInfo plci{};
         plci.setLayoutCount = static_cast<uint32_t>(layouts.size());

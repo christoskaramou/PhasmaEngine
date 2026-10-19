@@ -914,8 +914,11 @@ namespace pe
 
         for (uint32_t i = 0; i < count; ++i)
         {
+            // A set the shaders leave empty (a gap below a used set) is null, as on Vulkan; nothing to bind.
             Descriptor *descriptor = descriptors[i];
-            PE_ERROR_IF(!descriptor, "Dx12CommandBufferImpl::BindDescriptors: descriptor %u is null", i);
+            if (!descriptor)
+                continue;
+
             const Dx12DescriptorImpl *impl = Dx12DescriptorImpl::From(descriptor);
 
             // A single Descriptor may carry tables for one or more dxSpaces; bind

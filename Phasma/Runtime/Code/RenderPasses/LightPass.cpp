@@ -1015,27 +1015,24 @@ namespace pe
             set->Update();
         }
 
-        if (sets.size() > 2)
+        // Set 2 is the RHI's shared scene texture table; the environment sits above ProbeVolume's set-3 bindings, which
+        // BindProbeLighting (forced) writes and updates below.
+        if (sets.size() > 3)
         {
-            Descriptor *set = sets[2];
+            Descriptor *set = sets[3];
             Image *radiance = renderer.GetSkyBox().GetOpenPBRRadiance();
-            BindMaterialImage(set, 0, renderer.GetSkyBox().GetCubeMap());
-            if (set->HasBinding(2))
-                set->SetSamplers(2, GetActiveScene()->GetOpenPBRSamplers());
+            BindMaterialImage(set, 6, renderer.GetSkyBox().GetCubeMap());
+            if (set->HasBinding(7))
+                set->SetSampler(7, radiance->GetSampler());
 
-            if (set->HasBinding(3))
-                set->SetImageView(3, radiance->GetSRV());
+            if (set->HasBinding(8))
+                set->SetSamplers(8, GetActiveScene()->GetOpenPBRSamplers());
 
-            if (set->HasBinding(4))
-                set->SetImageView(4, renderer.GetSkyBox().GetOpenPBRIrradiance()->GetSRV());
+            if (set->HasBinding(9))
+                set->SetImageView(9, radiance->GetSRV());
 
-            if (set->HasBinding(1))
-                set->SetSampler(1, radiance->GetSampler());
-
-            if (set->HasBinding(6))
-                set->SetImageViews(6, GetActiveScene()->GetImageViews(), {});
-
-            set->Update();
+            if (set->HasBinding(10))
+                set->SetImageView(10, renderer.GetSkyBox().GetOpenPBRIrradiance()->GetSRV());
         }
 
         auto *opaque = GetGlobalComponent<LightOpaquePass>();

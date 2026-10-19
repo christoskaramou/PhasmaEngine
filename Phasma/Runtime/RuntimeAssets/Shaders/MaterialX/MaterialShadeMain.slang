@@ -37,7 +37,7 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
     {
         const float3 V = normalize(cb_camPos.xyz - sp.P);
         const float fogAmount = 1.0f - exp(-max(length(sp.P - cb_camPos.xyz) - cb_fogStart, 0.0f) * cb_fogDensity);
-        color = lerp(color, Cube.SampleLevel(sampler_Cube, -V, 2.0f).xyz, fogAmount);
+        color = lerp(color, pe_fogCube.SampleLevel(sampler_pe_fogCube, -V, 2.0f).xyz, fogAmount);
     }
 
     // MaterialX's colour is scene-linear. Under linear_color the frame stays linear until Tonemap encodes it; otherwise the
