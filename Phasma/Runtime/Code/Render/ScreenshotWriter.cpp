@@ -1,100 +1,32 @@
 #include "Render/ScreenshotWriter.h"
 
+// The stb_image_write PhasmaMCP already vendors, compiled privately here: PhasmaMCP is desktop-only
+// and links its own extern "C" copy into the same binaries.
+#define STB_IMAGE_WRITE_STATIC
+#define STBIWDEF static inline
+#define STBI_WRITE_NO_STDIO
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "../../../MCP/src/stb_image_write.h"
+
 namespace pe
 {
     namespace
     {
-        uint32_t Crc32(const uint8_t *data, size_t length)
+        void AppendPngBytes(void *context, void *data, int size)
         {
-            uint32_t crc = 0xFFFFFFFF;
-            for (size_t i = 0; i < length; ++i)
-            {
-                crc ^= data[i];
-                for (int bit = 0; bit < 8; ++bit)
-                    crc = (crc >> 1) ^ (0xEDB88320 & (-(crc & 1)));
-            }
-            return crc ^ 0xFFFFFFFF;
-        }
-
-        void Put32be(std::vector<uint8_t> &out, uint32_t value)
-        {
-            out.push_back(static_cast<uint8_t>((value >> 24) & 0xFF));
-            out.push_back(static_cast<uint8_t>((value >> 16) & 0xFF));
-            out.push_back(static_cast<uint8_t>((value >> 8) & 0xFF));
-            out.push_back(static_cast<uint8_t>(value & 0xFF));
-        }
-
-        void WriteChunk(std::vector<uint8_t> &out, const char type[4], const uint8_t *data, size_t length)
-        {
-            Put32be(out, static_cast<uint32_t>(length));
-            const size_t typeStart = out.size();
-            for (int i = 0; i < 4; ++i)
-                out.push_back(static_cast<uint8_t>(type[i]));
-            if (data && length > 0)
-                out.insert(out.end(), data, data + length);
-            Put32be(out, Crc32(&out[typeStart], 4 + length));
+            auto *out = static_cast<std::vector<uint8_t> *>(context);
+            const auto *bytes = static_cast<const uint8_t *>(data);
+            out->insert(out->end(), bytes, bytes + size);
         }
 
         std::vector<uint8_t> EncodeRgbaPng(const uint8_t *rgba, uint32_t width, uint32_t height)
         {
-            if (!rgba || width == 0 || height == 0)
+            std::vector<uint8_t> png;
+            const int w = static_cast<int>(width);
+            const int h = static_cast<int>(height);
+            if (!stbi_write_png_to_func(AppendPngBytes, &png, w, h, 4, rgba, w * 4))
                 return {};
 
-            std::vector<uint8_t> png;
-            const uint8_t signature[] = {137, 80, 78, 71, 13, 10, 26, 10};
-            png.insert(png.end(), signature, signature + sizeof(signature));
-
-            std::vector<uint8_t> ihdr;
-            Put32be(ihdr, width);
-            Put32be(ihdr, height);
-            ihdr.push_back(8);
-            ihdr.push_back(6);
-            ihdr.push_back(0);
-            ihdr.push_back(0);
-            ihdr.push_back(0);
-            WriteChunk(png, "IHDR", ihdr.data(), ihdr.size());
-
-            const size_t rowBytes = static_cast<size_t>(width) * 4;
-            const size_t filteredRowBytes = rowBytes + 1;
-            std::vector<uint8_t> raw(static_cast<size_t>(height) * filteredRowBytes);
-            for (uint32_t y = 0; y < height; ++y)
-            {
-                const size_t rowOffset = static_cast<size_t>(y) * filteredRowBytes;
-                raw[rowOffset] = 0;
-                std::memcpy(&raw[rowOffset + 1], rgba + static_cast<size_t>(y) * rowBytes, rowBytes);
-            }
-
-            uint32_t adlerA = 1;
-            uint32_t adlerB = 0;
-            for (uint8_t byte : raw)
-            {
-                adlerA = (adlerA + byte) % 65521;
-                adlerB = (adlerB + adlerA) % 65521;
-            }
-
-            std::vector<uint8_t> zlib;
-            zlib.push_back(0x78);
-            zlib.push_back(0x01);
-
-            size_t offset = 0;
-            while (offset < raw.size())
-            {
-                const size_t blockLength = std::min<size_t>(raw.size() - offset, 65535);
-                const bool last = offset + blockLength >= raw.size();
-                zlib.push_back(last ? 0x01 : 0x00);
-                const uint16_t len = static_cast<uint16_t>(blockLength);
-                const uint16_t nlen = static_cast<uint16_t>(~len);
-                zlib.push_back(static_cast<uint8_t>(len & 0xFF));
-                zlib.push_back(static_cast<uint8_t>((len >> 8) & 0xFF));
-                zlib.push_back(static_cast<uint8_t>(nlen & 0xFF));
-                zlib.push_back(static_cast<uint8_t>((nlen >> 8) & 0xFF));
-                zlib.insert(zlib.end(), raw.begin() + offset, raw.begin() + offset + blockLength);
-                offset += blockLength;
-            }
-
-            Put32be(zlib, (adlerB << 16) | adlerA);
-            WriteChunk(png, "IDAT", zlib.data(), zlib.size());
-            WriteChunk(png, "IEND", nullptr, 0);
             return png;
         }
 

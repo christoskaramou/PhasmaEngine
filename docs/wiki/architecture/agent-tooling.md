@@ -75,6 +75,22 @@ can be drained by its event polling loop before the renderer consumes it
 The editor display target includes native runtime UI. Hidden editor chrome
 does not disable file-command polling.
 
+Screenshot PNGs are deflate-compressed, verified 2026-10-19. `WriteScreenshotPng`
+([ScreenshotWriter.cpp](../../../Phasma/Runtime/Code/Render/ScreenshotWriter.cpp))
+used to write stored deflate blocks, so files were about w×h×4 bytes; two such
+images in one Codex request (24.5 MB) broke the thread. It now encodes with a
+TU-private copy of the stb_image_write that PhasmaMCP vendors
+(`Phasma/MCP/src`). It is included `static` because PhasmaMCP is desktop-only
+and links its own extern copy. Measured on the Release Player:
+
+| Frame | Before | After | Player MCP round trip |
+| --- | --- | --- | --- |
+| Default scene, 1920×1026 | 7,881,374 B | 78,302 B, pixel-identical | — |
+| PRISM, 2560×1369 | 14,021,062 B | 2.58–2.62 MB (18.4–18.7%) | 0.21 → 0.41 s |
+
+The extra ~0.2 s at 2560×1369 is encoding on the main thread's screenshot drain.
+Local pool test `player-mcp-wire`.
+
 The probe connects directly to the editor's Streamable HTTP MCP endpoint and
 accepts only loopback HTTP URLs. The `npx mcp-remote` bridge is for stdio-only
 clients, not this probe. It follows the HTTP lifecycle needed for smoke testing:
