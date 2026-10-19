@@ -187,6 +187,8 @@ namespace pe
         static RenderPass *GetRenderPass(uint32_t count, Attachment *attachments);
         static Framebuffer *GetFramebuffer(RenderPass *renderPass, uint32_t count, Attachment *attachments);
         static Pipeline *GetPipeline(RenderPass *renderPass, PassInfo &info);
+        // Drops the cached pipelines built from info; frames in flight keep them until the deletion queue runs.
+        static void RetirePipelines(const PassInfo &info);
         static void ClearFramebufferCache();
         static void ClearCache();
 

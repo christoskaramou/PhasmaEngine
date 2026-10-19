@@ -10,6 +10,8 @@ namespace pe
 {
     namespace
     {
+        uint64_t g_renderTargetGeneration = 0;
+
         float GetRenderTargetScale(bool useRenderTargetScale)
         {
             const auto &gSettings = Settings::Get<SceneSettings>();
@@ -149,6 +151,12 @@ namespace pe
         for (auto &rt : depthStencilTargets)
             Image::Destroy(rt.second);
         depthStencilTargets.clear();
+        g_renderTargetGeneration++;
+    }
+
+    uint64_t GetSceneRenderTargetGeneration()
+    {
+        return g_renderTargetGeneration;
     }
 
     Image *CreateSceneRenderTarget(SceneRenderTargetMap &renderTargets,
@@ -265,6 +273,7 @@ namespace pe
         CommandBuffer::ClearFramebufferCache();
         Image::Destroy(image);
         renderTargets.erase(it);
+        g_renderTargetGeneration++;
         return true;
     }
 

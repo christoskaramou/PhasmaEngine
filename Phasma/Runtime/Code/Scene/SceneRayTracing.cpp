@@ -491,8 +491,12 @@ namespace pe
                                 { AccelerationStructure *as = t; AccelerationStructure::Destroy(as); });
         RHII.AddToDeletionQueue([b = m_instanceBuffer]()
                                 { Buffer *buf = b; Buffer::Destroy(buf); });
+        // Built with the TLAS below: an empty scene keeps none.
+        RHII.AddToDeletionQueue([b = m_meshInfoBuffer]()
+                                { Buffer *buf = b; Buffer::Destroy(buf); });
         m_tlas = nullptr;
         m_instanceBuffer = nullptr;
+        m_meshInfoBuffer = nullptr;
         RetireTLASUpdateInstanceBuffers();
         m_rtInstances.clear();
 
@@ -622,8 +626,6 @@ namespace pe
             int32_t textures[5];
         };
 
-        RHII.AddToDeletionQueue([b = m_meshInfoBuffer]()
-                                { Buffer *buf = b; Buffer::Destroy(buf); });
         m_meshInfoBuffer = Buffer::Create({
             .size = std::max((size_t)1, (size_t)m_rtInstanceCount) * sizeof(MeshInfoGPU),
             .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,

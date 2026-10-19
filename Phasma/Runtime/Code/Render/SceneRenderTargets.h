@@ -63,6 +63,8 @@ namespace pe
     bool SyncOptionalSceneRenderTargets(SceneRenderTargetMap &renderTargets, bool hasRayTracingGeometry);
 
     void DestroySceneRenderTargets(SceneRenderTargetMap &renderTargets, SceneRenderTargetMap &depthStencilTargets);
+    // Bumped whenever a scene target is destroyed: caches keyed by target pointers are stale once it changes.
+    uint64_t GetSceneRenderTargetGeneration();
 
     void BlitSceneImageToSwapchain(CommandBuffer *cmd, Image *src, uint32_t imageIndex);
 } // namespace pe

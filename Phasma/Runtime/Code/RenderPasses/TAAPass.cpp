@@ -230,6 +230,9 @@ namespace pe
     {
         Image::Destroy(m_historyImage);
         Image::Destroy(m_taaResolved);
+        // Cameras jitter through GenerateJitter/GetProjectionJitter before a re-enabled pass initializes.
+        m_viewportRT = nullptr;
+        m_projectionJitter = vec2(0.0f);
     }
 
     void TAAPass::GenerateJitter()

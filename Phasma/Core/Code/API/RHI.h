@@ -257,6 +257,10 @@ namespace pe
         Buffer *GetDx12FillSource(uint32_t value);
         void AddToDeletionQueue(std::function<void()> &&deletor);
         void FlushDeletionQueue(uint32_t frameIndex);
+        // While on, Image::Destroy and Buffer::Destroy on the calling thread hand the object to the deletion queue,
+        // so nothing created meanwhile reuses its address while a descriptor or cache may still name it.
+        void SetDeferDestroy(bool defer);
+        bool DefersDestroy() const;
         // Scene textures for one frame in flight, bound by every pass whose pe_textures set holds nothing else.
         Descriptor *GetTextureTable(uint32_t frame);
         // Grows every scene texture array to hold count textures, up to the device limit; false when they cannot.

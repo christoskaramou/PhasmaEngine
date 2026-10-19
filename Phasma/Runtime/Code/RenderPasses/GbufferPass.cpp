@@ -562,6 +562,7 @@ namespace pe
 
     void GbufferOpaquePass::Destroy()
     {
+        m_lastGeometryVersion = ~0ull; // a re-initialized pass starts with empty descriptors
         if (m_passInfoDS)
         {
             Shader::Destroy(m_passInfoDS->pVertShader);
@@ -889,6 +890,7 @@ namespace pe
 
     void GbufferTransparentPass::Destroy()
     {
+        m_lastGeometryVersion = ~0ull; // a re-initialized pass starts with empty descriptors
         if (m_voxelPassInfo)
         {
             Shader::Destroy(m_voxelPassInfo->pVertShader);

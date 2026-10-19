@@ -204,10 +204,12 @@ namespace pe
     {
         pe::UpdateSceneRenderGraphPassStates(m_renderGraphPassEnabled, hasRayTracingGeometry);
 
-        // Disabled passes stay initialized and are skipped when recording (destroy/re-init on mode
-        // toggles caused device loss). Setting toggles pass no command buffer; lazily initable
-        // passes must tolerate nullptr here.
+        // Setting toggles pass no command buffer; lazily initable passes must tolerate nullptr here. A pass
+        // disabled for long enough is destroyed and initializes again when re-enabled.
         InitEnabledRenderPassComponents(cmd);
+        ReleaseDisabledSceneRenderGraphPassComponents(m_scenePasses,
+                                                      m_renderGraphPassInitialized,
+                                                      m_renderGraphPassLastEnabledFrame);
 
         // Pipelines follow the modules the scene's material bytes hold (rebuilt by the byte packing, not per frame).
         static const std::vector<uint32_t> noModules;
@@ -337,8 +339,13 @@ namespace pe
 
     void SceneRendererCore::InitEnabledRenderPassComponents(CommandBuffer *cmd)
     {
-        InitEnabledSceneRenderGraphPassComponents(m_scenePasses, [this](SceneRenderGraphPassId passId)
-                                                  { return IsPassEnabled(passId); }, m_renderGraphPassInitialized, cmd);
+        InitEnabledSceneRenderGraphPassComponents(
+            m_scenePasses,
+            [this](SceneRenderGraphPassId passId)
+            { return IsPassEnabled(passId); },
+            m_renderGraphPassInitialized,
+            m_renderGraphPassLastEnabledFrame,
+            cmd);
     }
 
     void SceneRendererCore::SetRenderPassScene(Scene &scene)

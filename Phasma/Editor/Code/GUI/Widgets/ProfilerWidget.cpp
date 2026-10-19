@@ -4,6 +4,7 @@
 #include "Base/ProfilerSnapshot.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
+#include "Render/SceneRenderTargets.h"
 #include "Systems/RendererSystem.h"
 
 namespace pe
@@ -133,6 +134,8 @@ namespace pe
 
         for (auto &[img, ds] : m_rtDescriptorCache)
             m_gui->ReleaseImageTexture(ds);
+        for (auto &[ds, frame] : m_retiredDescriptors)
+            m_gui->ReleaseImageTexture(ds);
     }
 
     // ─── RT descriptor cache for hover previews ──────────────────────────────────
@@ -205,18 +208,27 @@ namespace pe
         if (!rs)
             return;
 
-        // If render targets were recreated (resize), the old Image* pointers in the
-        // cache are dangling. Detect this by comparing the viewport RT pointer.
+        // A destroyed target (resize, a released pass) leaves its Image* in the cache, and a new target can
+        // land at the same address. Frames in flight may still draw the dropped textures, so they are freed
+        // once those frames are done.
         {
-            Image *viewportRT = rs->GetRenderTarget("viewport");
-            if (viewportRT != m_viewportRTSnapshot && !m_rtDescriptorCache.empty())
+            const uint64_t generation = GetSceneRenderTargetGeneration();
+            const uint32_t frame = RHII.GetFrameCounter();
+            if (generation != m_renderTargetGeneration)
             {
-                if (m_gui)
-                    for (auto &[img, ds] : m_rtDescriptorCache)
-                        m_gui->ReleaseImageTexture(ds);
+                for (auto &[img, ds] : m_rtDescriptorCache)
+                    m_retiredDescriptors.push_back({ds, frame});
                 m_rtDescriptorCache.clear();
             }
-            m_viewportRTSnapshot = viewportRT;
+            m_renderTargetGeneration = generation;
+
+            std::erase_if(m_retiredDescriptors, [&](std::pair<void *, uint32_t> &retired)
+                          {
+                              if (frame - retired.second <= RHII.GetSwapchainImageCount() || !m_gui)
+                                  return false;
+
+                              m_gui->ReleaseImageTexture(retired.first);
+                              return true; });
         }
 
         struct ThumbEntry

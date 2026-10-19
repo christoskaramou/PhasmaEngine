@@ -2674,4 +2674,20 @@ namespace pe
         if (frameIndex < m_deletionQueues.size())
             m_deletionQueues[frameIndex]->Flush();
     }
+
+    namespace
+    {
+        thread_local bool t_deferDestroy = false;
+    }
+
+    void RHI::SetDeferDestroy(bool defer)
+    {
+        t_deferDestroy = defer;
+    }
+
+    // Without queues AddToDeletionQueue runs the deletor at once, which would defer again.
+    bool RHI::DefersDestroy() const
+    {
+        return t_deferDestroy && !m_deletionQueues.empty();
+    }
 } // namespace pe

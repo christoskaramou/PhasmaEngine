@@ -134,6 +134,7 @@ namespace pe
 
         // RT descriptor cache for hover image previews (Image* -> ImTextureID as void*)
         std::unordered_map<Image *, void *> m_rtDescriptorCache;
-        Image *m_viewportRTSnapshot = nullptr; // detect render-target recreation on resize
+        uint64_t m_renderTargetGeneration = 0;                         // GetSceneRenderTargetGeneration() the cache was filled at
+        std::vector<std::pair<void *, uint32_t>> m_retiredDescriptors; // dropped textures and the RHI frame they were dropped
     };
 } // namespace pe

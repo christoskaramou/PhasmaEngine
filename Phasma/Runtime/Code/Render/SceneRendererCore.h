@@ -123,6 +123,7 @@ namespace pe
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassEnabled{};
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassDeferred{};
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassInitialized{};
+        std::array<uint32_t, kSceneRenderGraphPassCount> m_renderGraphPassLastEnabledFrame{}; // RHI frame counter
         SceneRenderGraphPassComponents m_scenePasses{};
         float m_renderTargetScale = 0.0f;
         bool m_hdr = false;

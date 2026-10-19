@@ -433,6 +433,10 @@ namespace pe
 
     void LightOpaquePass::UpdateDescriptorSets()
     {
+        // Scene loads and pipeline edits refresh this pass even while it is released (no uniforms).
+        if (m_uniforms.empty())
+            return;
+
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool useShadowResources = ShadowsActive(shadows);
         EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,
@@ -682,6 +686,10 @@ namespace pe
 
     void LightTransparentPass::UpdateDescriptorSets()
     {
+        // Scene loads and pipeline edits refresh this pass even while it is released (no uniforms).
+        if (m_uniforms.empty())
+            return;
+
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool useShadowResources = ShadowsActive(shadows);
         EnsureLightShadowFallbackResources(m_shadowFallbackUniforms,

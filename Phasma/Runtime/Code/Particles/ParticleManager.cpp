@@ -463,6 +463,10 @@ namespace pe
 
     void ParticleManager::InitTextures(CommandBuffer *cmd)
     {
+        // The scene keeps its textures while the particle pass is released and initialized again (with no cmd).
+        if (m_sampler)
+            return;
+
         // Load default texture
         m_textures.push_back(Image::LoadRGBA8(cmd, Path::RuntimeAssets + "Particles/particle_white_soft.png"));
         m_textureNames.push_back("Default Soft");

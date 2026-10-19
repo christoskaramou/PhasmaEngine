@@ -88,7 +88,8 @@ namespace pe
     void RayTracingPass::UpdateDescriptorSets()
     {
         Scene &scene = *GetActiveScene();
-        if (!scene.GetTLAS())
+        // Scene loads and pipeline edits refresh this pass even while it is released (no uniforms).
+        if (!scene.GetTLAS() || m_uniforms.empty())
             return;
 
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
@@ -306,8 +307,16 @@ namespace pe
     {
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
+        m_uniforms.clear();
         Buffer::Destroy(m_giFallbackUniform);
         m_giFallbackUniform = nullptr;
+
+        // Only this pass creates the target (the probe passes deriving from it null m_rtDepth in their Init).
+        SceneRendererHost *rs = GetActiveSceneRendererHost();
+        if (m_rtDepth && rs)
+            rs->DestroyRenderTarget("rtDepth");
+
+        m_rtDepth = nullptr;
     }
 
 } // namespace pe

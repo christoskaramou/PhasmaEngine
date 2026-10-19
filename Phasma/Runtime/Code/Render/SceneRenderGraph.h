@@ -119,13 +119,24 @@ namespace pe
     void CreateSceneRenderGraphPassComponents(OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
                                               bool includeRayTracingPass);
 
+    // Frames a pass stays initialized after it was last enabled, so a brief toggle does not rebuild it.
+    inline constexpr uint32_t kSceneRenderGraphPassReleaseFrames = 30;
+
+    // Initializes enabled components that are not yet initialized and stamps every enabled pass with the RHI frame
+    // counter.
     void InitEnabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                    SceneRenderGraphPassCondition isPassEnabled,
                                                    std::span<bool> passInitialized,
+                                                   std::span<uint32_t> passLastEnabledFrame,
                                                    CommandBuffer *cmd);
 
-    // Resizes every initialized component, enabled or not: once initialized, components stay alive
-    // until scene teardown (destroy/re-init on render-mode toggles caused device loss).
+    // Destroys components whose pass has not been enabled for kSceneRenderGraphPassReleaseFrames (and more frames
+    // than are in flight) and retires their cached pipelines; they initialize again when the pass is re-enabled.
+    void ReleaseDisabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                       std::span<bool> passInitialized,
+                                                       std::span<const uint32_t> passLastEnabledFrame);
+
+    // Resizes every initialized component, enabled or not (a disabled one is initialized until it is released).
     void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                          std::span<bool> passInitialized,
                                                          uint32_t width,

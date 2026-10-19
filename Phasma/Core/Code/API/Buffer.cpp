@@ -66,6 +66,14 @@ namespace pe
 
     void Buffer::Destroy(Buffer *&buf)
     {
+        if (buf && RHII.DefersDestroy())
+        {
+            RHII.AddToDeletionQueue([retired = buf]() mutable
+                                    { Buffer::Destroy(retired); });
+            buf = nullptr;
+            return;
+        }
+
         if (buf)
         {
 #if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)

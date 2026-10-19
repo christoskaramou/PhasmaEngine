@@ -1,4 +1,5 @@
 #include "Render/SceneRenderGraph.h"
+#include "API/Command.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "Render/SceneRenderTargets.h"
@@ -341,15 +342,22 @@ namespace pe
     void InitEnabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
                                                    SceneRenderGraphPassCondition isPassEnabled,
                                                    std::span<bool> passInitialized,
+                                                   std::span<uint32_t> passLastEnabledFrame,
                                                    CommandBuffer *cmd)
     {
-        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount,
+        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount &&
+                      passLastEnabledFrame.size() >= kSceneRenderGraphPassCount,
                   "Scene render graph pass init state span is too small");
 
+        const uint32_t frame = RHII.GetFrameCounter();
         for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
         {
             const size_t index = static_cast<size_t>(desc.id);
-            if (passInitialized[index] || !isPassEnabled(desc.id))
+            if (!isPassEnabled(desc.id))
+                continue;
+
+            passLastEnabledFrame[index] = frame;
+            if (passInitialized[index])
                 continue;
 
             IRenderPassComponent *component = components.*desc.component;
@@ -359,6 +367,56 @@ namespace pe
             InitSceneRenderGraphPassComponent(component, cmd);
             passInitialized[index] = true;
         }
+    }
+
+    void ReleaseDisabledSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,
+                                                       std::span<bool> passInitialized,
+                                                       std::span<const uint32_t> passLastEnabledFrame)
+    {
+        PE_ASSERT(passInitialized.size() >= kSceneRenderGraphPassCount &&
+                      passLastEnabledFrame.size() >= kSceneRenderGraphPassCount,
+                  "Scene render graph pass init state span is too small");
+
+        // Each frame waits for the frame that used its command buffer before recording, so once more frames than
+        // there are in flight have started since a pass last ran, the GPU is done with everything it owns.
+        const uint32_t releaseAfter = std::max(kSceneRenderGraphPassReleaseFrames, RHII.GetSwapchainImageCount() + 1);
+        const uint32_t frame = RHII.GetFrameCounter();
+        bool released = false;
+        for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
+        {
+            const size_t index = static_cast<size_t>(desc.id);
+            if (!passInitialized[index] || frame - passLastEnabledFrame[index] <= releaseAfter)
+                continue;
+
+            if (IRenderPassComponent *component = components.*desc.component)
+            {
+                // Before Destroy, which may free secondary pass infos.
+                for (PassInfo *info : component->GetPassInfos())
+                {
+                    if (info)
+                        CommandBuffer::RetirePipelines(*info);
+                }
+
+                // Consumers rebind by comparing pointers: a resource re-created next frame must not land at a
+                // freed address while another frame's descriptors still name it.
+                RHII.SetDeferDestroy(true);
+                component->Destroy();
+                RHII.SetDeferDestroy(false);
+
+                // A released pass is skipped by shader reload, like one never initialized.
+                for (PassInfo *info : component->GetPassInfos())
+                {
+                    if (info)
+                        info->DestroyShaders();
+                }
+            }
+            passInitialized[index] = false;
+            released = true;
+        }
+
+        // Cached framebuffers are keyed by attachment view pointers, which the released images no longer own.
+        if (released)
+            CommandBuffer::ClearFramebufferCache();
     }
 
     void ResizeInitializedSceneRenderGraphPassComponents(const SceneRenderGraphPassComponents &components,

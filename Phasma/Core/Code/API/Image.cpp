@@ -397,6 +397,14 @@ namespace pe
 
     void Image::Destroy(Image *&image)
     {
+        if (image && RHII.DefersDestroy())
+        {
+            RHII.AddToDeletionQueue([retired = image]() mutable
+                                    { Image::Destroy(retired); });
+            image = nullptr;
+            return;
+        }
+
         if (image)
         {
 #if defined(PE_TRACK_RESOURCES) && !defined(PE_TRACK_RESOURCES_NOSPAM)

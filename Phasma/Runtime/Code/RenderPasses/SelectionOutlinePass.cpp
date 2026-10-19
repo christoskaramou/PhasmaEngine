@@ -210,6 +210,10 @@ namespace pe
 
     void SelectionOutlinePass::Destroy()
     {
+        if (SceneRendererHost *rs = GetActiveSceneRendererHost())
+            rs->DestroyRenderTarget("selectionMask");
+
+        m_maskRT = nullptr;
         if (!m_passInfoMask)
             return;
 

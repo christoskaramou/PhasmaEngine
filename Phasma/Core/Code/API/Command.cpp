@@ -266,12 +266,31 @@ namespace pe
         return it->second;
     }
 
+    void CommandBuffer::RetirePipelines(const PassInfo &info)
+    {
+        std::lock_guard<std::mutex> lock(s_cacheMutex);
+        for (auto it = s_pipelines.begin(); it != s_pipelines.end();)
+        {
+            if (&it->second->GetInfo() != &info)
+            {
+                ++it;
+                continue;
+            }
+
+            RHII.AddToDeletionQueue([pipeline = it->second]() mutable
+                                    { Pipeline::Destroy(pipeline); });
+            it = s_pipelines.erase(it);
+        }
+    }
+
     void CommandBuffer::ClearFramebufferCache()
     {
         std::lock_guard<std::mutex> lock(s_cacheMutex);
+        // Callers clear mid-frame when a target goes away, while frames in flight still use the rest.
         for (auto &[hash, framebuffer] : s_framebuffers)
         {
-            Framebuffer::Destroy(framebuffer);
+            RHII.AddToDeletionQueue([retired = framebuffer]() mutable
+                                    { Framebuffer::Destroy(retired); });
         }
         s_framebuffers.clear();
     }
