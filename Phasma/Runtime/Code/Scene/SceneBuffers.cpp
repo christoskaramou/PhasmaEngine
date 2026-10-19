@@ -1809,7 +1809,13 @@ namespace pe
         // The mirror is a fresh buffer here, so in-flight frames keep reading the previous one.
         (void)cmd;
         if (m_meshConstantsDevice)
+        {
+            // Fresh GPU memory: publish all of it. UpdateMeshSelectionFlags, which also republishes the whole mirror,
+            // runs only with selection_outline on; otherwise the passes read uninitialized constants and can hang the GPU.
             m_pendingMeshConstantsMirror = true;
+            m_meshConstantsMirrorBegin = 0;
+            m_meshConstantsMirrorEnd = SIZE_MAX;
+        }
         // The mirror was just recreated; force UpdateMeshSelectionFlags to republish the selection next
         // frame regardless of whether the selected set changed (ComputeMeshConstants doesn't bake it).
         m_meshSelectionMirrorSignature = ~0ull;

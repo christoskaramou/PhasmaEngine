@@ -37,7 +37,8 @@ Gotchas (each silently breaks rendering if missed):
   copy emitted draws into persistent filtered buffers.
 
 DX12-only: the mesh-constants DEFAULT mirror (`m_meshConstantsDevice`) must be published before the
-same-frame cull dispatch reads it (done in `UploadDynamicUniforms`).
+same-frame cull dispatch reads it (`Scene::RecordPendingInstanceUploads`, on the geometry rebuild and at the front of
+the frame's command buffer; see rendering.md, Scene Texture Table, for the 2026-10-19 hang when it was not).
 
 ## Play-mode lifecycle
 
