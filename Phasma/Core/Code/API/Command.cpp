@@ -394,6 +394,13 @@ namespace pe
         m_impl->Dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
+    void CommandBuffer::DispatchIndirect(Buffer *indirectBuffer, size_t offset)
+    {
+        PE_PROFILE_COUNTER("Cmd DispatchIndirect Calls", 1);
+        PE_PROFILE_SCOPE("Cmd DispatchIndirect");
+        m_impl->DispatchIndirect(indirectBuffer, offset);
+    }
+
     void CommandBuffer::PushConstants()
     {
         PE_PROFILE_COUNTER("Cmd PushConstants Calls", 1);

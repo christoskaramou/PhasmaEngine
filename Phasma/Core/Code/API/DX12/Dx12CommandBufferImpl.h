@@ -59,6 +59,7 @@ namespace pe
         void SetDepthWriteEnable(uint32_t enable) override;
 
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
+        void DispatchIndirect(Buffer *indirectBuffer, size_t offset) override;
         void DispatchExternalCompute(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
         void PushConstants(const PushConstantsBlock<128> &constants) override;
 
@@ -117,6 +118,7 @@ namespace pe
         void BindDescriptorTableSpace(Descriptor *descriptor, uint32_t sourceDxSpace, uint32_t targetDxSpace, bool compute);
         ID3D12CommandSignature *GetDrawIndirectSignature(uint32_t stride);
         ID3D12CommandSignature *GetDrawIndexedIndirectSignature(uint32_t stride);
+        ID3D12CommandSignature *GetDispatchIndirectSignature();
         void MarkPendingImageBarrierRegion(const char *name);
         void PrepareImageForFirstWrite(Dx12ImageImpl *img, D3D12_RESOURCE_STATES requestedState, PeBarrierAccess accessMask);
 
@@ -127,6 +129,7 @@ namespace pe
         D3D12_PRIMITIVE_TOPOLOGY m_lastTopology = D3D_PRIMITIVE_TOPOLOGY_UNDEFINED;
         Microsoft::WRL::ComPtr<ID3D12CommandSignature> m_drawIndirectSignature;
         Microsoft::WRL::ComPtr<ID3D12CommandSignature> m_drawIndexedIndirectSignature;
+        Microsoft::WRL::ComPtr<ID3D12CommandSignature> m_dispatchIndirectSignature;
         uint32_t m_drawIndirectSignatureStride = 0;
         uint32_t m_drawIndexedIndirectSignatureStride = 0;
         std::string m_pendingImageBarrierRegion;

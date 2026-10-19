@@ -45,6 +45,7 @@ namespace pe
         void SetDepthWriteEnable(uint32_t enable) override;
 
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
+        void DispatchIndirect(Buffer *indirectBuffer, size_t offset) override;
         void PushConstants(const PushConstantsBlock<128> &constants) override;
 
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;

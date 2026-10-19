@@ -106,6 +106,8 @@ struct PushConstants_Lighting
     uint vertices_offset; // material pass 2 only: Scene::GetVerticesOffset()
     uint env_samples;     // dword 22: OpenPBR filtered importance samples
     uint module_index;    // dword 23: the runtime OpenPBR module this dispatch shades
+    uint bins_count;      // dword 24: byte offset of the module's tile count in pe_bins (MaterialClassify)
+    uint bins_tiles;      // dword 25: byte offset of the module's tiles in pe_bins
 #endif
 };
 #endif

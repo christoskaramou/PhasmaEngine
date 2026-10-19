@@ -1,7 +1,11 @@
 [numthreads(8, 8, 1)]
 [DerivativeGroupQuad]
-void mainCS(uint3 tid : SV_DispatchThreadID)
+void mainCS(uint3 group : SV_GroupID, uint3 local : SV_GroupThreadID)
 {
+    uint2 tid;
+    if (!PeBinThread(pe_bins, pc.bins_count, pc.bins_tiles, group, local, tid))
+        return;
+
     const uint2 pixel = tid.xy >> 1;
     const uint2 lane = tid.xy & 1u;
     const uint2 lanePixel = (pixel & ~1u) + lane;

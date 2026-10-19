@@ -689,6 +689,12 @@ namespace pe
         m_apiHandle.dispatch(groupCountX, groupCountY, groupCountZ);
     }
 
+    void VulkanCommandBufferImpl::DispatchIndirect(Buffer *indirectBuffer, size_t offset)
+    {
+        FlushBarriers();
+        m_apiHandle.dispatchIndirect(pe::GetVulkanBuffer(indirectBuffer), offset);
+    }
+
     void VulkanCommandBufferImpl::PushConstants(const PushConstantsBlock<128> &constants)
     {
         PE_ERROR_IF(!m_owner->m_boundPipeline, "CommandBuffer::PushConstants: No bound pipeline found!");

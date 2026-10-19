@@ -1,5 +1,6 @@
 #include "LightPass.h"
 #include "GlobalIlluminationPass.h"
+#include "MaterialThinPass.h"
 #include "ReflectionPass.h"
 #include "ScreenProbePass.h"
 #include "API/Buffer.h"
@@ -990,6 +991,7 @@ namespace pe
         BindMaterialBuffer(set, 17, scene->GetMeshConstants());
         BindMaterialBuffer(set, 18, scene->GetMaterialByteBuffer());
         BindMaterialBuffer(set, 20, scene->GetOpenPBRSkinningBinding(frame));
+        BindMaterialBuffer(set, 21, GetGlobalComponent<MaterialThinPass>()->GetBins());
         if (set->HasBinding(19))
             set->SetImageView(19, m_viewportRT->GetUAV(0));
 
@@ -1063,7 +1065,8 @@ namespace pe
                                 frame < m_shadowFallbackUniforms.size();
         const bool uniformsReady = frameReady && opaque->m_uniforms[frame];
         const bool sceneReady = scene && scene->GetBuffer() && scene->GetMaterialByteBuffer();
-        const bool targetsReady = m_visibility && m_viewportRT;
+        const auto *thin = GetGlobalComponent<MaterialThinPass>();
+        const bool targetsReady = m_visibility && m_viewportRT && thin && thin->GetBins();
         if (!uniformsReady || !sceneReady || !targetsReady)
             return;
 
@@ -1131,6 +1134,7 @@ namespace pe
         if (Image *reflections = ActiveReflections(RHII.GetFrameIndex()))
             builder.ReadCompute(reflections);
 
+        builder.ReadBuffer(GetGlobalComponent<MaterialThinPass>()->GetBins());
         builder.WriteCompute(m_viewportRT); // keeps LightOpaque's result: only MaterialX pixels are written
     }
 
@@ -1147,6 +1151,11 @@ namespace pe
         if (!scene || !m_visibility || !m_viewportRT || frame >= m_boundFrames.size() || !m_boundFrames[frame])
             return;
 
+        // MaterialThin binned this frame's tiles per module.
+        const auto *thin = GetGlobalComponent<MaterialThinPass>();
+        if (!thin->BinsReady())
+            return;
+
         SetLightingPushConstants(cmd, m_viewportRT, 0u);
         cmd->SetConstantAt(21, static_cast<uint32_t>(scene->GetVerticesOffset())); // vertices_offset (PE_OPENPBR_SHADE)
         const int envSamples = std::clamp(Settings::Get<SceneSettings>().openpbr_env_samples, 1, 512);
@@ -1155,10 +1164,16 @@ namespace pe
         cmd->BeginDebugRegion("MaterialShadePass");
         for (const auto &[module, info] : m_modulePassInfos)
         {
-            cmd->SetConstantAt(23, module); // module_index (PE_OPENPBR_SHADE)
+            const uint32_t slot = thin->BinSlot(module);
+            if (slot == UINT32_MAX)
+                continue;
+
+            cmd->SetConstantAt(23, module);                          // module_index (PE_OPENPBR_SHADE)
+            cmd->SetConstantAt(24, thin->BinArgsOffset(slot) + 12u); // bins_count
+            cmd->SetConstantAt(25, thin->BinTilesOffset(slot));      // bins_tiles
             cmd->BindPipeline(*info);
             cmd->PushConstants();
-            cmd->Dispatch((m_visibility->GetWidth() * 2u + 7u) / 8u, (m_visibility->GetHeight() * 2u + 7u) / 8u, 1);
+            cmd->DispatchIndirect(thin->GetBins(), thin->BinArgsOffset(slot));
         }
 
         cmd->EndDebugRegion();

@@ -44,6 +44,7 @@ namespace pe
 
         // Compute + push constants
         virtual void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) = 0;
+        virtual void DispatchIndirect(Buffer *indirectBuffer, size_t offset) = 0;
         virtual void PushConstants(const PushConstantsBlock<128> &constants) = 0;
 
         // Draw + indirect

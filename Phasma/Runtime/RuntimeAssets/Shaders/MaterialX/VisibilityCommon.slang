@@ -11,13 +11,39 @@ static const uint PE_EDITOR_FLAG_MATERIALX = 32u; // Mesh_Constants.editorFlags:
 static const uint PE_OPENPBR_INPUTS_OFFSET = 80u;
 static const uint PE_OPENPBR_MODULE_OFFSET = 60u; // MaterialGpuData.transmissionVolume.w: the record's module index
 
+// The module of a draw's MaterialX record, or 0xffffffff when the draw has none.
+uint PeModuleOf(ByteAddressBuffer materials, Mesh_Constants mesh)
+{
+    if ((mesh.editorFlags & PE_EDITOR_FLAG_MATERIALX) == 0u || mesh.materialByteOffset == 0xffffffffu)
+        return 0xffffffffu;
+
+    return materials.Load(mesh.materialByteOffset + PE_OPENPBR_MODULE_OFFSET);
+}
+
 // One dispatch per module: this pixel's draw is a MaterialX record of the module the dispatch shades.
 bool PeMatchesModule(ByteAddressBuffer materials, Mesh_Constants mesh, uint moduleIndex)
 {
-    if ((mesh.editorFlags & PE_EDITOR_FLAG_MATERIALX) == 0u || mesh.materialByteOffset == 0xffffffffu)
+    return PeModuleOf(materials, mesh) == moduleIndex;
+}
+
+// MaterialClassify bins each module's 8x8-pixel tiles: per bin, uint4(group counts x, y, z, tile count), then the packed
+// tile coordinates. A tile is four 8x8-thread groups (two threads per pixel axis), and a row of the indirect grid holds
+// PE_BIN_ROW_TILES tiles, keeping both group counts far under the 65,535 per dimension D3D12 allows.
+static const uint PE_BIN_ROW_TILES = 64u;
+
+// The dispatch thread a binned group's thread stands for (the full-screen dispatch's SV_DispatchThreadID), or false
+// for the whole group past the bin's last tile.
+bool PeBinThread(ByteAddressBuffer bins, uint countOffset, uint tilesOffset, uint3 group, uint3 local, out uint2 tid)
+{
+    tid = uint2(0u, 0u);
+    const uint index = group.y * PE_BIN_ROW_TILES + (group.x >> 2u);
+    if (index >= bins.Load(countOffset))
         return false;
 
-    return materials.Load(mesh.materialByteOffset + PE_OPENPBR_MODULE_OFFSET) == moduleIndex;
+    const uint packed = bins.Load(tilesOffset + index * 4u);
+    const uint2 tile = uint2(packed & 0xffffu, packed >> 16u);
+    tid = tile * 16u + uint2(group.x & 1u, (group.x >> 1u) & 1u) * 8u + local.xy;
+    return true;
 }
 
 struct PeSurfacePoint

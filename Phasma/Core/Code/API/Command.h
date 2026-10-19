@@ -120,6 +120,7 @@ namespace pe
         void SetDepthTestEnable(uint32_t enable);
         void SetDepthWriteEnable(uint32_t enable);
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
+        void DispatchIndirect(Buffer *indirectBuffer, size_t offset); // three uint32 group counts at offset
         template <class T>
         void SetConstantAt(uint16_t offset, const T &value) { m_pushConstants.Set(offset, value); }
         template <class T>

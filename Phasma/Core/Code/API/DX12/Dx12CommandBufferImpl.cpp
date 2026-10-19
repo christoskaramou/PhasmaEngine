@@ -428,6 +428,25 @@ namespace pe
         return m_drawIndexedIndirectSignature.Get();
     }
 
+    ID3D12CommandSignature *Dx12CommandBufferImpl::GetDispatchIndirectSignature()
+    {
+        if (m_dispatchIndirectSignature)
+            return m_dispatchIndirectSignature.Get();
+
+        D3D12_INDIRECT_ARGUMENT_DESC argument{};
+        argument.Type = D3D12_INDIRECT_ARGUMENT_TYPE_DISPATCH;
+
+        D3D12_COMMAND_SIGNATURE_DESC desc{};
+        desc.ByteStride = sizeof(D3D12_DISPATCH_ARGUMENTS);
+        desc.NumArgumentDescs = 1;
+        desc.pArgumentDescs = &argument;
+
+        Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+        PE_ERROR_IF(!rhi || !rhi->GetDevice(), "Dx12CommandBufferImpl::GetDispatchIndirectSignature: DX12 device unavailable");
+        PE_CHECK(rhi->GetDevice()->CreateCommandSignature(&desc, nullptr, IID_PPV_ARGS(&m_dispatchIndirectSignature)));
+        return m_dispatchIndirectSignature.Get();
+    }
+
     void Dx12CommandBufferImpl::FlushBarriers()
     {
         PE_PROFILE_SCOPE("DX12 FlushBarriers");
@@ -1017,6 +1036,24 @@ namespace pe
         PE_ERROR_IF(!IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::Dispatch: bound pipeline is not compute");
         FlushBarriers();
         m_cmdList->Dispatch(groupCountX, groupCountY, groupCountZ);
+    }
+    void Dx12CommandBufferImpl::DispatchIndirect(Buffer *indirectBuffer, size_t offset)
+    {
+        PE_ERROR_IF(!m_owner->m_boundPipeline, "Dx12CommandBufferImpl::DispatchIndirect: No bound pipeline found!");
+        PE_ERROR_IF(!IsComputePipeline(m_owner->m_boundPipeline), "Dx12CommandBufferImpl::DispatchIndirect: bound pipeline is not compute");
+        PE_ERROR_IF(!indirectBuffer, "Dx12CommandBufferImpl::DispatchIndirect: null indirect buffer");
+        constexpr uint32_t argumentsSize = static_cast<uint32_t>(sizeof(D3D12_DISPATCH_ARGUMENTS));
+        PE_ERROR_IF(!IndirectRangeFits(indirectBuffer->Size(), offset, 1, argumentsSize, argumentsSize),
+                    "Dx12CommandBufferImpl::DispatchIndirect: argument range exceeds buffer size");
+
+        PushBufferTransition(m_barrierBatch, Dx12BufferImpl::From(indirectBuffer), D3D12_RESOURCE_STATE_INDIRECT_ARGUMENT);
+        FlushBarriers();
+        m_cmdList->ExecuteIndirect(GetDispatchIndirectSignature(),
+                                   1,
+                                   Dx12BufferImpl::From(indirectBuffer)->GetResource(),
+                                   static_cast<UINT64>(offset),
+                                   nullptr,
+                                   0);
     }
     void Dx12CommandBufferImpl::DispatchExternalCompute(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ)
     {

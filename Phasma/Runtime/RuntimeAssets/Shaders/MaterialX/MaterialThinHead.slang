@@ -11,6 +11,8 @@ struct PushConstants_MaterialThin
     float4 cameraPosition;
     uint verticesOffset;
     uint moduleIndex;
+    uint binsCount; // byte offsets of the module's tile count and tiles in pe_bins (MaterialClassify)
+    uint binsTiles;
 };
 
 [[vk::push_constant]] PushConstants_MaterialThin pc;
@@ -21,6 +23,7 @@ struct PushConstants_MaterialThin
 [[vk::binding(3, 0)]] StructuredBuffer<Mesh_Constants> pe_constants;
 [[vk::binding(4, 0)]] ByteAddressBuffer pe_materialBytes;
 [[vk::binding(10, 0)]] ByteAddressBuffer pe_deformed;
+[[vk::binding(11, 0)]] ByteAddressBuffer pe_bins;
 
 #ifdef PE_NORMAL_RGBA32F
 [[vk::image_format("rgba32f")]][[vk::binding(5, 0)]] RWTexture2D<float4> pe_normalOut;
