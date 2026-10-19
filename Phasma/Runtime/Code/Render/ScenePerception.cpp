@@ -195,6 +195,7 @@ namespace pe
                     .height = height,
                     .format = PE_FORMAT_R32G32_UINT,
                     .usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_SRC,
+                    .clearColor = vec4(0.0f), // id 0 = no object; D3D12 warns when a clear differs from this value
                     .name = "ObjectIdDecodeTarget",
                 });
                 cache.idTarget->CreateRTV();
@@ -263,7 +264,6 @@ namespace pe
             attachments[1].image = depth;
             attachments[1].loadOp = PE_LOAD_OP_LOAD;
             attachments[1].storeOp = PE_STORE_OP_STORE;
-            cache.idTarget->SetClearColor(vec4(0.0f));
 
             PushConstants_DepthPass idConstants{};
             idConstants.jointsCount = static_cast<uint32_t>(scene.GetMaxJointCount());
