@@ -16,6 +16,8 @@
 #include "API/Vertex.h"
 #include "Render/SceneRenderTargets.h"
 
+#include <cstring>
+
 namespace pe
 {
     // Base colour (0) and emissive (4) hold colour: a linear-colour scene samples them through the sRGB view.
@@ -27,6 +29,12 @@ namespace pe
     static bool IsRasterIndirectMesh(const Mesh &mesh)
     {
         return mesh.renderType != RenderType::Lines && mesh.renderType != RenderType::SpriteOutline;
+    }
+
+    static bool IsOpenPBRSkinningMesh(const Mesh &mesh, const NodeGpuData &node)
+    {
+        const bool opaque = mesh.renderType == RenderType::Opaque || mesh.renderType == RenderType::AlphaCut;
+        return mesh.skinned && opaque && mesh.vertexCount > 0 && node.jointCount > 0;
     }
 
     static bool OpenPBRRecordsChanged(const Scene &scene)
@@ -192,6 +200,8 @@ namespace pe
                     flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
                 if (MeshUsesOpenPBR(mesh))
                     flags |= 32u; // MaterialX material: the material passes shade its visibility pixels
+                if (IsOpenPBRSkinningMesh(mesh, m_nodeRuntime[i].gpuData))
+                    flags |= 64u;
 
                 BufferRange range{};
                 range.data = &flags;
@@ -219,6 +229,8 @@ namespace pe
         {
             m_meshSelectionMirrorSignature = selectionSignature;
             m_pendingMeshConstantsMirror = true;
+            m_meshConstantsMirrorBegin = 0;
+            m_meshConstantsMirrorEnd = SIZE_MAX;
         }
     }
 
@@ -505,6 +517,11 @@ namespace pe
     void Scene::CreateIndirectBuffers(CommandBuffer *cmd)
     {
         PE_PROFILE_SCOPE("Scene Indirect Buffers");
+        m_openpbrSkinningMetadata.clear();
+        m_openpbrSkinningJobCount = 0;
+        m_openpbrSkinningJobsOffset = 0;
+        m_openpbrSkinningVertexBytes = 0;
+        m_openpbrSkinningBufferBytes = 0;
         uint32_t indirectCount = 0;
         std::vector<PeDrawIndexedIndirectCommand> &indirectCommands = m_pendingIndirectCommands;
         indirectCommands.clear();
@@ -539,12 +556,16 @@ namespace pe
                 indirectCommand.firstInstance = indirectCount;
                 indirectCommands.push_back(indirectCommand);
 
+                AddOpenPBRSkinningDraw(indirectCount, i, mesh);
+
                 indirectCount++;
                 drawCapacity += std::max(1u, mesh.clusterCount);
             }
         }
 
         PE_ERROR_IF(indirectCount != m_meshCount, "Scene::UploadBuffers: Indirect count mismatch!");
+
+        FinishOpenPBRSkinningMetadata();
 
         m_indirectCapacity = 1;
         PE_ERROR_IF(drawCapacity > (1u << 29), "Cluster draw capacity exceeds the resident buffer limit");
@@ -615,7 +636,8 @@ namespace pe
         EnsureBufferRing(m_indirectTerrain, swapCount, "indirect_Terrain_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_shadowIndirectRegular, swapCount, "shadow_indirect_regular_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_shadowIndirectVoxels, swapCount, "shadow_indirect_voxels_", indirectBytes, indirectUsage);
-        EnsureBufferRing(m_shadowCullCounters, swapCount, "shadow_cull_counters_", 3 * sizeof(uint32_t), counterUsage);
+        EnsureBufferRing(m_shadowIndirectMask, swapCount, "shadow_indirect_mask_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_shadowCullCounters, swapCount, "shadow_cull_counters_", 4 * sizeof(uint32_t), counterUsage);
 
         const size_t sortKeyBytes = static_cast<size_t>(m_indirectCapacity) * sizeof(float);
         EnsureBufferRing(m_sortKeysAlphaBlend, swapCount, "sortKeys_AlphaBlend_", sortKeyBytes,
@@ -647,6 +669,121 @@ namespace pe
         m_visibility = EnsureBuffer(m_visibility, visibilityDesc);
         m_pendingVisibilitySeed = true;
         (void)cmd; // GPU copies are recorded by the caller through RecordPendingInstanceUploads
+    }
+
+    void Scene::AddOpenPBRSkinningDraw(uint32_t draw, uint32_t node, const Mesh &mesh)
+    {
+        if (!IsOpenPBRSkinningMesh(mesh, m_nodeRuntime[node].gpuData))
+            return;
+
+        PE_ERROR_IF(mesh.vertexOffset > m_vertexStore.size() ||
+                        mesh.vertexCount > m_vertexStore.size() - mesh.vertexOffset,
+                    "OpenPBR skinning source vertices exceed the geometry store");
+        const uint64_t headerWords = (static_cast<uint64_t>(m_meshCount) + 1u) * 4u;
+        const uint64_t vertexBytes = static_cast<uint64_t>(mesh.vertexCount) * 80u;
+        const uint64_t chunks = (static_cast<uint64_t>(mesh.vertexCount) + 63u) / 64u;
+        const uint64_t metadataWords = headerWords + (m_openpbrSkinningJobCount + chunks) * 2u;
+        const uint64_t sourceEnd = (static_cast<uint64_t>(mesh.vertexOffset) + mesh.vertexCount) * sizeof(Vertex);
+        const bool validDraw = draw < m_meshCount;
+        const bool fitsMetadata = metadataWords <= UINT32_MAX / sizeof(uint32_t);
+        const bool fitsVertices = vertexBytes <= UINT32_MAX - m_openpbrSkinningVertexBytes;
+        PE_ERROR_IF(!validDraw || !fitsMetadata || !fitsVertices,
+                    "OpenPBR skinning buffer exceeds uint32 addressing");
+        PE_ERROR_IF(m_verticesOffset > UINT32_MAX || sourceEnd > UINT32_MAX - m_verticesOffset,
+                    "OpenPBR skinning source exceeds uint32 addressing");
+
+        if (m_openpbrSkinningMetadata.empty())
+        {
+            m_openpbrSkinningMetadata.resize(static_cast<size_t>(headerWords), 0u);
+            m_openpbrSkinningJobsOffset = static_cast<uint32_t>(headerWords * sizeof(uint32_t));
+        }
+
+        const size_t header = (static_cast<size_t>(draw) + 1u) * 4u;
+        m_openpbrSkinningMetadata[header] = mesh.vertexOffset;
+        m_openpbrSkinningMetadata[header + 1u] = mesh.vertexCount;
+        m_openpbrSkinningMetadata[header + 2u] = m_openpbrSkinningVertexBytes;
+        for (uint32_t first = 0; first < mesh.vertexCount; first += std::min(mesh.vertexCount - first, 64u))
+        {
+            m_openpbrSkinningMetadata.push_back(draw);
+            m_openpbrSkinningMetadata.push_back(first);
+            m_openpbrSkinningJobCount++;
+        }
+        m_openpbrSkinningVertexBytes += static_cast<uint32_t>(vertexBytes);
+    }
+
+    void Scene::FinishOpenPBRSkinningMetadata()
+    {
+        if (m_openpbrSkinningMetadata.empty())
+        {
+            DestroyOpenPBRSkinningBuffers();
+            return;
+        }
+
+        m_openpbrSkinningMetadata.resize((m_openpbrSkinningMetadata.size() + 3u) & ~size_t(3u), 0u);
+        const uint64_t metadataBytes = m_openpbrSkinningMetadata.size() * sizeof(uint32_t);
+        PE_ERROR_IF(metadataBytes > UINT32_MAX - m_openpbrSkinningVertexBytes,
+                    "OpenPBR skinning metadata exceeds uint32 addressing");
+        const size_t jobs = GetOpenPBRSkinningJobsOffset() / sizeof(uint32_t);
+        for (uint32_t job = 0; job < m_openpbrSkinningJobCount; ++job)
+        {
+            if (m_openpbrSkinningMetadata[jobs + job * 2u + 1u] != 0u)
+                continue;
+
+            const size_t draw = m_openpbrSkinningMetadata[jobs + job * 2u];
+            m_openpbrSkinningMetadata[(draw + 1u) * 4u + 2u] += static_cast<uint32_t>(metadataBytes);
+        }
+        m_openpbrSkinningMetadata[0] = m_meshCount;
+        m_openpbrSkinningBufferBytes = static_cast<uint32_t>(metadataBytes) + m_openpbrSkinningVertexBytes;
+        m_openpbrSkinningUploaded.assign(m_openpbrSkinningBuffers.size(), false);
+        SyncOpenPBRSkinningBuffers();
+    }
+
+    void Scene::DestroyOpenPBRSkinningBuffers()
+    {
+        for (Buffer *buffer : m_openpbrSkinningBuffers)
+        {
+            if (buffer)
+            {
+                RHII.AddToDeletionQueue([buffer]() mutable
+                                        { Buffer::Destroy(buffer); });
+            }
+        }
+        m_openpbrSkinningBuffers.clear();
+        m_openpbrSkinningUploaded.clear();
+    }
+
+    void Scene::SyncOpenPBRSkinningBuffers()
+    {
+        if (!SceneUsesOpenPBR() || m_openpbrSkinningJobCount == 0)
+        {
+            DestroyOpenPBRSkinningBuffers();
+            return;
+        }
+
+        const uint32_t count = RHII.GetSwapchainImageCount();
+        if (m_openpbrSkinningBuffers.size() == count && !m_openpbrSkinningBuffers.empty() &&
+            m_openpbrSkinningBuffers.front()->Size() >= m_openpbrSkinningBufferBytes)
+        {
+            return;
+        }
+
+        // Pow2 headroom: spawning skins regrows the ring in steps, not on every structural upload.
+        const size_t bytes = std::min<size_t>(RoundUpPow2(m_openpbrSkinningBufferBytes), UINT32_MAX);
+        EnsureBufferRing(m_openpbrSkinningBuffers, count, "OpenPBR_skinning_", bytes,
+                         PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST);
+        m_openpbrSkinningUploaded.assign(count, false);
+    }
+
+    void Scene::UploadOpenPBRSkinningMetadata(CommandBuffer *cmd)
+    {
+        const uint32_t frame = RHII.GetFrameIndex();
+        Buffer *buffer = GetOpenPBRSkinningBuffer(frame);
+        if (!buffer || m_openpbrSkinningUploaded[frame])
+            return;
+
+        cmd->CopyBufferStaged(buffer, m_openpbrSkinningMetadata.data(),
+                              m_openpbrSkinningMetadata.size() * sizeof(uint32_t), 0);
+        m_openpbrSkinningUploaded[frame] = true;
     }
 
     void Scene::CreateDrawInstanceBuffers()
@@ -722,12 +859,15 @@ namespace pe
         if (m_pendingMeshConstantsMirror && m_meshConstants && m_meshConstantsDevice)
         {
             // DX12: publish the CPU-written constants into the GPU-cached DEFAULT mirror the cull/depth/
-            // GBuffer passes read instead of the slow GPU_UPLOAD heap.
+            // GBuffer passes read instead of the slow GPU_UPLOAD heap. Only the dirty span is copied.
             const size_t bytes = std::min(m_meshConstants->Size(), m_meshConstantsDevice->Size());
-            cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, bytes, 0, 0);
+            const size_t begin = std::min(m_meshConstantsMirrorBegin, bytes);
+            const size_t end = std::min(m_meshConstantsMirrorEnd, bytes);
+            if (end > begin)
+                cmd->CopyBuffer(m_meshConstants, m_meshConstantsDevice, end - begin, begin, begin);
             BufferBarrierInfo barrier{};
             barrier.buffer = m_meshConstantsDevice;
-            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER;
+            barrier.stageMask = PE_STAGE_COMPUTE_SHADER | PE_STAGE_VERTEX_SHADER | PE_STAGE_FRAGMENT_SHADER;
             barrier.accessMask = PE_ACCESS_SHADER_STORAGE_READ;
             barrier.offset = 0;
             barrier.size = bytes;
@@ -739,6 +879,8 @@ namespace pe
         m_pendingIndirectUpload = false;
         m_pendingVisibilitySeed = false;
         m_pendingMeshConstantsMirror = false;
+        m_meshConstantsMirrorBegin = SIZE_MAX;
+        m_meshConstantsMirrorEnd = 0;
         m_pendingIndirectCommands.clear();
     }
 
@@ -1108,6 +1250,7 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Scene Material Byte Packing");
             m_openpbrModules.clear();
+            m_openpbrMaskModules.clear();
 
             for (uint32_t i = 0; i < GetNodeCount(); i++)
                 for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
@@ -1134,6 +1277,15 @@ namespace pe
                     if (MeshUsesOpenPBR(mesh)) // legacy record + OpenPBR inputs, per instance (before the standard_pbr pass packing)
                     {
                         MaterialInstance *inst = mesh.materialInstance;
+                        const uint32_t module = GetOpenPBRSource(*inst).module->index;
+                        if (mesh.renderType == RenderType::AlphaCut &&
+                            std::find(m_openpbrMaskModules.begin(), m_openpbrMaskModules.end(), module) ==
+                                m_openpbrMaskModules.end())
+                        {
+                            // A shared instance can be packed first by an opaque mesh.
+                            m_openpbrMaskModules.push_back(module);
+                        }
+
                         if (inst->gpuByteOffset != 0xFFFFFFFF)
                             continue;
 
@@ -1319,6 +1471,40 @@ namespace pe
             // Don't clear dirty here — collectByteIfDirty still needs it
         };
 
+        bool meshConstantsMapped = false;
+        auto uploadMeshAlpha = [&](uint32_t nodeIndex, int meshIndex, uint32_t indirectSlot)
+        {
+            if (!m_meshConstants || indirectSlot == UINT32_MAX || indirectSlot >= m_meshCount)
+                return;
+
+            Mesh_Constants constants = ComputeMeshConstants(nodeIndex, meshIndex);
+            BufferRange range{};
+            range.data = &constants;
+            range.offset = static_cast<size_t>(indirectSlot) * sizeof(Mesh_Constants);
+            // Scalar material edits also affect depth coverage; preserve the remaining draw constants.
+            range.size = offsetof(Mesh_Constants, meshDataOffset);
+            if (!meshConstantsMapped)
+            {
+                m_meshConstants->Map();
+                meshConstantsMapped = true;
+            }
+
+            const auto *mapped = static_cast<const uint8_t *>(m_meshConstants->Data());
+            if (std::memcmp(mapped + range.offset, &constants, range.size) == 0)
+                return;
+
+            m_meshConstants->Copy(1, &range, true);
+            m_meshConstants->Flush(range.size, range.offset);
+
+            if (m_meshConstantsDevice)
+            {
+                m_pendingMeshConstantsMirror = true;
+                m_meshConstantsMirrorBegin = std::min(m_meshConstantsMirrorBegin, range.offset);
+                m_meshConstantsMirrorEnd = std::max(m_meshConstantsMirrorEnd, range.offset + range.size);
+            }
+            anyDirty = true;
+        };
+
         for (auto &mat : m_ownedMaterials)
             updateIfDirty(mat.get());
         for (auto *model : m_models)
@@ -1336,14 +1522,25 @@ namespace pe
                 continue;
             }
 
-            for (int meshIdx : m_nodeComponentCache[ni].meshRefs->meshRefs)
+            const auto &meshRefs = m_nodeComponentCache[ni].meshRefs->meshRefs;
+            for (uint32_t refSlot = 0; refSlot < meshRefs.size(); ++refSlot)
             {
+                const int meshIdx = meshRefs[refSlot];
                 if (!IsValidMeshIndex(meshIdx))
                     continue;
 
                 Mesh &mesh = m_meshes[meshIdx];
                 MaterialInstance *inst = mesh.materialInstance;
-                if (!inst || !inst->dirty)
+                Material *parent = inst ? inst->GetParent() : mesh.material;
+                const bool instanceDirty = inst && inst->dirty;
+                const bool parentDirty = parent && parent->dirty;
+                if (!instanceDirty && !parentDirty)
+                    continue;
+
+                if (mesh.indexCount > 0 && IsRasterIndirectMesh(mesh))
+                    uploadMeshAlpha(ni, meshIdx, GetMeshRefIndirectSlot(m_nodeIds[ni], refSlot));
+
+                if (!inst)
                     continue;
 
                 const uint32_t materialGpuIndex = m_meshRuntimes[meshIdx].materialGpuIndex;
@@ -1356,6 +1553,9 @@ namespace pe
                 uploadMaterialGpuData(materialGpuIndex, inst->BuildGpuData());
             }
         }
+
+        if (meshConstantsMapped)
+            m_meshConstants->Unmap();
 
         struct ByteDirtyEntry
         {
@@ -1619,10 +1819,16 @@ namespace pe
 
     void Scene::DestroyBuffers()
     {
+        DestroyOpenPBRSkinningBuffers();
+        m_openpbrSkinningMetadata.clear();
+        m_openpbrSkinningJobCount = 0;
+        m_openpbrSkinningJobsOffset = 0;
         m_pendingDrawInstanceUpload = false;
         m_pendingIndirectUpload = false;
         m_pendingVisibilitySeed = false;
         m_pendingMeshConstantsMirror = false;
+        m_meshConstantsMirrorBegin = SIZE_MAX;
+        m_meshConstantsMirrorEnd = 0;
         m_pendingIndirectCommands.clear();
 
         if (m_buffer)
@@ -1685,6 +1891,7 @@ namespace pe
         destroyBufferVec(m_indirectTerrain);
         destroyBufferVec(m_shadowIndirectRegular);
         destroyBufferVec(m_shadowIndirectVoxels);
+        destroyBufferVec(m_shadowIndirectMask);
         destroyBufferVec(m_shadowCullCounters);
         destroyBufferVec(m_sortKeysAlphaBlend);
         destroyBufferVec(m_sortKeysTransmission);
@@ -1933,6 +2140,8 @@ namespace pe
                 growIndirectVec(m_shadowIndirectRegular, "shadow_indirect_regular_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_shadowIndirectVoxels, "shadow_indirect_voxels_", indFlags,
+                                PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+                growIndirectVec(m_shadowIndirectMask, "shadow_indirect_mask_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_sortKeysAlphaBlend, "sortKeys_AlphaBlend_", sortFlags,
                                 sizeof(float));
@@ -2592,6 +2801,8 @@ namespace pe
             flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
         if (MeshUsesOpenPBR(mesh))
             flags |= 32u; // MaterialX material: the material passes shade its visibility pixels
+        if (IsOpenPBRSkinningMesh(mesh, m_nodeRuntime[nodeIndex].gpuData))
+            flags |= 64u; // draw-local pre-deformation when the visibility renderer is active
         constants.editorFlags = flags;
         constants.renderType = static_cast<uint32_t>(mesh.renderType);
 

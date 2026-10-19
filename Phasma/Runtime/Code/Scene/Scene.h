@@ -230,7 +230,7 @@ namespace pe
                                    std::string *outError = nullptr);
         bool SetSpriteOutlineColor(NodeId *node, const vec4 &color);
         void StopSprite(NodeId *node);
-        void UpdateSpriteAnimations(float dt);
+        void UpdateSpriteAnimations(float dt, bool advanceTime);
         NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(NodeId *node);
         const NodeSkinnedStrip2DComponent *GetSkinnedStrip2DState(const NodeId *node) const;
         NodeSkinnedStrip2DComponent &GetOrCreateSkinnedStrip2DState(NodeId *node);
@@ -267,7 +267,7 @@ namespace pe
         // Per-frame (during play): keep each physics-enabled zone's box registered as a Jolt sensor so a
         // physics body overlapping it fires the zone script's onEnter/onExit. Adds/removes the body, and
         // (force-field option) pushes bodies inside the sensor every frame.
-        void UpdatePhysicsZones();
+        void UpdatePhysicsZones(bool applyForces);
         // Trigger-zone section actions, fired on a camera enter (inside=true) / exit (inside=false) edge.
         void ApplyZoneSpawn(NodeId *zoneNode, NodeTriggerZoneTag &z, bool inside);
         void ApplyZoneStream(NodeTriggerZoneTag &z, bool inside);
@@ -478,8 +478,9 @@ namespace pe
         void DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,
                                   Image *hiZPyramid = nullptr, Buffer *occlusionData = nullptr);
         // Per-cascade light-frustum cull for ShadowPass: compacts m_indirectAll into shadow-only
-        // regular + voxel indirect buffers (not the camera frustum / Hi-Z buckets).
-        void DispatchShadowCull(CommandBuffer *cmd, PassInfo *passInfo, const vec4 frustumPlanes[6]);
+        // regular + voxel indirect buffers (not the camera frustum / Hi-Z buckets). generatedMasks moves
+        // generated-mask casters to their own list (counter 3) for the shadow mask replays.
+        void DispatchShadowCull(CommandBuffer *cmd, PassInfo *passInfo, const vec4 frustumPlanes[6], bool generatedMasks);
         // Refill this frame's LOD params UBO from SceneSettings and return it (bound at CullingCS binding 16).
         Buffer *UpdateLodUniforms(uint32_t frame);
         Buffer *GetBuffer() { return m_buffer; }
@@ -503,6 +504,19 @@ namespace pe
         size_t GetAabbVerticesOffset() const { return m_aabbVerticesOffset; }
         size_t GetAabbIndicesOffset() const { return m_aabbIndicesOffset; }
         Buffer *GetIndirectAll() const { return m_indirectAll; }
+        void SyncOpenPBRSkinningBuffers();
+        void UploadOpenPBRSkinningMetadata(CommandBuffer *cmd);
+        Buffer *GetOpenPBRSkinningBuffer(uint32_t frame) const
+        {
+            return frame < m_openpbrSkinningBuffers.size() ? m_openpbrSkinningBuffers[frame] : nullptr;
+        }
+        Buffer *GetOpenPBRSkinningBinding(uint32_t frame) const
+        {
+            Buffer *buffer = GetOpenPBRSkinningBuffer(frame);
+            return buffer ? buffer : m_buffer;
+        }
+        uint32_t GetOpenPBRSkinningJobCount() const { return m_openpbrSkinningJobCount; }
+        uint32_t GetOpenPBRSkinningJobsOffset() const { return m_openpbrSkinningJobsOffset; }
         Buffer *GetClusterBuffer() const { return m_clusterBuffer; }
         void BindDrawIdBuffer(CommandBuffer *cmd) const;
         Buffer *GetCullingCountersBuffer(uint32_t frame) const { return m_cullingCountersBuffers[frame]; }
@@ -521,6 +535,7 @@ namespace pe
         Buffer *GetIndirectTerrain(uint32_t frame) const { return m_indirectTerrain[frame]; }
         Buffer *GetShadowIndirectRegular(uint32_t frame) const { return m_shadowIndirectRegular[frame]; }
         Buffer *GetShadowIndirectVoxels(uint32_t frame) const { return m_shadowIndirectVoxels[frame]; }
+        Buffer *GetShadowIndirectMask(uint32_t frame) const { return m_shadowIndirectMask[frame]; }
         Buffer *GetShadowCullCounters(uint32_t frame) const { return m_shadowCullCounters[frame]; }
         // Two-phase Hi-Z occlusion sets (opaque-only). A = last-frame-visible (phase 1),
         // B = newly-disoccluded (phase 2). Consumed by DepthPass/DepthLatePass/GBuffer only when
@@ -574,6 +589,7 @@ namespace pe
         Buffer *GetMaterialTable() { return m_materialTable; }
         Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
         const std::vector<uint32_t> &GetOpenPBRModules() const { return m_openpbrModules; }
+        const std::vector<uint32_t> &GetOpenPBRMaskModules() const { return m_openpbrMaskModules; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
@@ -762,6 +778,9 @@ namespace pe
         void CreateStorageBuffers();
         void MarkUniformsDirty();
         void CreateIndirectBuffers(CommandBuffer *cmd);
+        void AddOpenPBRSkinningDraw(uint32_t draw, uint32_t node, const Mesh &mesh);
+        void FinishOpenPBRSkinningMetadata();
+        void DestroyOpenPBRSkinningBuffers();
         void UpdateImageViews();
         void BuildImageViewTable(uint32_t limit);
         void CollectOpenPBRImages();
@@ -829,10 +848,20 @@ namespace pe
         // ShadowPass per-cascade light-frustum cull (reused each cascade; counters reset per dispatch).
         std::vector<Buffer *> m_shadowIndirectRegular;
         std::vector<Buffer *> m_shadowIndirectVoxels;
+        std::vector<Buffer *> m_shadowIndirectMask;
         std::vector<Buffer *> m_shadowCullCounters;
         std::vector<Buffer *> m_sortKeysAlphaBlend;
         std::vector<Buffer *> m_sortKeysTransmission;
         Buffer *m_indirectAll = nullptr;
+
+        // Draw headers, {draw, firstVertex} 64-vertex jobs, then instance-local 80-byte deformed vertices.
+        std::vector<uint32_t> m_openpbrSkinningMetadata;
+        std::vector<Buffer *> m_openpbrSkinningBuffers;
+        std::vector<bool> m_openpbrSkinningUploaded;
+        uint32_t m_openpbrSkinningJobCount = 0;
+        uint32_t m_openpbrSkinningJobsOffset = 0;
+        uint32_t m_openpbrSkinningVertexBytes = 0;
+        uint32_t m_openpbrSkinningBufferBytes = 0;
 
         // LOD params UBO (one per swapchain image), bound at CullingCS binding 16. Byte-identical to the
         // cbuffer LodUBO: enabled/bias + three world-unit switch distances; refilled each frame from
@@ -940,6 +969,7 @@ namespace pe
         Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials
         uint32_t m_materialByteBufferUsed = 0;  // current byte offset (append-only)
         std::vector<uint32_t> m_openpbrModules; // OpenPBR modules with a record in m_materialByteBuffer (byte packing)
+        std::vector<uint32_t> m_openpbrMaskModules;
         Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;
@@ -976,6 +1006,8 @@ namespace pe
         bool m_pendingIndirectUpload = false;
         bool m_pendingVisibilitySeed = false;
         bool m_pendingMeshConstantsMirror = false;
+        size_t m_meshConstantsMirrorBegin = SIZE_MAX; // dirty byte span the DX12 mirror republishes
+        size_t m_meshConstantsMirrorEnd = 0;
 
         // Indexed access helpers
         int MeshRefAt(uint32_t index) const
@@ -1015,7 +1047,8 @@ namespace pe
 
         bool m_nodesDirty = false;
         std::vector<NodeId *> m_nodesMoved;
-        uint32_t m_motionRollFrame = UINT32_MAX; // Frame the previousWorldMatrix roll last ran on
+        uint32_t m_motionRollFrame = UINT32_MAX;  // Frame the previousWorldMatrix roll last ran on
+        uint32_t m_timeAdvanceFrame = UINT32_MAX; // Frame Scene::Update last advanced time on (late catch-up repeats it)
 
         // Scratch for ResolvePostProcessProfile() when volumes are blended: holds the composited
         // profile so the renderer's active-profile pointer can target it for the frame.

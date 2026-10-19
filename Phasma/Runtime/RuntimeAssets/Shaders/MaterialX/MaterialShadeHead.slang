@@ -9,6 +9,7 @@
 [[vk::binding(16, 0)]] ByteAddressBuffer pe_frameData;
 [[vk::binding(17, 0)]] StructuredBuffer<Mesh_Constants> pe_constants;
 [[vk::binding(18, 0)]] ByteAddressBuffer pe_materialBytes;
+[[vk::binding(20, 0)]] ByteAddressBuffer pe_deformed;
 
 #ifdef PE_VIEWPORT_RGBA8
 [[vk::image_format("rgba8")]][[vk::binding(19, 0)]] RWTexture2D<float4> pe_viewportOut;

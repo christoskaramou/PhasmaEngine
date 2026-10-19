@@ -83,11 +83,13 @@ namespace pe
         if (!m_passInfoDS)
             m_passInfoDS = std::make_shared<PassInfo>();
         configureDepthPass(*m_passInfoDS, "DepthPrePass_DS_pipeline", PE_CULL_MODE_NONE);
+        m_masks.Rebuild();
     }
 
     void DepthPass::Update()
     {
         Scene &scene = *GetActiveScene();
+        m_masks.Update(scene);
         uint32_t frame = RHII.GetFrameIndex();
 
         uint64_t geoVersion = scene.GetGeometryVersion();
@@ -126,6 +128,9 @@ namespace pe
                 if (setUniforms->HasBinding(2)) // DX12 VISIBILITY variant: DepthVS's IndirectAll
                     setUniforms->SetBuffer(2, scene.GetIndirectAll());
 
+                if (setUniforms->HasBinding(3))
+                    setUniforms->SetBuffer(3, scene.GetOpenPBRSkinningBinding(frame));
+
                 setUniforms->Update();
             }
         }
@@ -148,6 +153,7 @@ namespace pe
         if (!scene)
             return;
         const uint32_t frame = RHII.GetFrameIndex();
+        builder.ReadBuffer(scene->GetOpenPBRSkinningBuffer(frame));
         builder.ReadBuffer(Settings::Get<SceneSettings>().occlusion_culling ? scene->GetOccCountersA(frame)
                                                                             : scene->GetCullingCountersBuffer(frame));
     }
@@ -183,6 +189,8 @@ namespace pe
             Buffer *opaqueDS = occlusion ? m_scene->GetOccOpaqueDSA(frame) : m_scene->GetIndirectOpaqueDS(frame);
             Buffer *alphaCutDS = occlusion ? m_scene->GetOccAlphaCutDSA(frame) : m_scene->GetIndirectAlphaCutDS(frame);
 
+            m_masks.Prepare(cmd, *m_scene);
+
             cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "DepthPass");
             cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
             cmd->SetScissor(0, 0, m_depthStencil->GetWidth(), m_depthStencil->GetHeight());
@@ -198,6 +206,8 @@ namespace pe
             cmd->BindPipeline(*m_passInfoDS);
             cmd->DrawIndexedIndirectCount(opaqueDS, 0, counters, 5 * sizeof(uint32_t), mesh);
             cmd->DrawIndexedIndirectCount(alphaCutDS, 0, counters, 6 * sizeof(uint32_t), mesh);
+            m_masks.Draw(cmd, *m_scene, alphaCutSS, counters, 1, mesh, false);
+            m_masks.Draw(cmd, *m_scene, alphaCutDS, counters, 6, mesh, true);
             cmd->EndPass();
         }
 
@@ -232,6 +242,7 @@ namespace pe
 
     void DepthPass::Destroy()
     {
+        m_masks.Clear();
         if (!m_passInfoDS)
             return;
 

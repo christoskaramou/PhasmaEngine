@@ -11,6 +11,7 @@
 #include "GbufferPass.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
+#include "Render/SceneRenderTargets.h"
 #include "Scene/SceneAccess.h"
 
 namespace pe
@@ -55,8 +56,14 @@ namespace pe
 
     void ShadowPass::UpdatePassInfo()
     {
+        m_maskEnabled = SceneUsesOpenPBR();
+        const std::vector<Define> defines = m_maskEnabled ? std::vector<Define>{{"PE_GENERATED_MASK", "1"}}
+                                                          : std::vector<Define>{};
         m_passInfo->name = "shadows_pipeline";
-        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Shadows/ShadowsVS.hlsl", .entryPoint = "mainVS", .stage = PE_SHADER_STAGE_VERTEX, .defines = std::vector<Define>{}});
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Shadows/ShadowsVS.hlsl",
+                                                  .entryPoint = "mainVS",
+                                                  .stage = PE_SHADER_STAGE_VERTEX,
+                                                  .defines = defines});
         m_passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR, PE_DYNAMIC_STATE_DEPTH_BIAS};
         m_passInfo->cullMode = PE_CULL_MODE_NONE;
         m_passInfo->depthFormat = RHII.GetDepthFormat();
@@ -90,6 +97,97 @@ namespace pe
                             .stage = PE_SHADER_STAGE_COMPUTE,
                             .defines = std::vector<Define>{}});
         m_cullPassInfo->Update();
+        if (m_maskEnabled)
+            UpdateFallbackPassInfo();
+        m_masks.Rebuild();
+    }
+
+    void ShadowPass::UpdateFallbackPassInfo()
+    {
+        if (!m_fallbackPassInfo)
+            m_fallbackPassInfo = std::make_shared<PassInfo>();
+
+        const std::vector<Define> defines{{"PE_GENERATED_MASK", "1"}, {"PE_MASK_FALLBACK", "1"}, {"VISIBILITY", "1"}};
+        PassInfo &info = *m_fallbackPassInfo;
+        info.name = "shadows_mask_fallback_pipeline";
+        info.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Shadows/ShadowsVS.hlsl",
+                                           .entryPoint = "mainVS",
+                                           .stage = PE_SHADER_STAGE_VERTEX,
+                                           .defines = defines});
+        info.pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Shadows/ShadowsVS.hlsl",
+                                           .entryPoint = "mainLegacyPS",
+                                           .stage = PE_SHADER_STAGE_FRAGMENT,
+                                           .defines = defines});
+        info.dynamicStates = m_passInfo->dynamicStates;
+        info.cullMode = m_passInfo->cullMode;
+        info.depthFormat = m_passInfo->depthFormat;
+        info.depthTestEnable = true;
+        info.depthWriteEnable = true;
+        info.depthBiasEnable = true;
+        info.depthBiasConstantFactor = m_passInfo->depthBiasConstantFactor;
+        info.depthBiasClamp = m_passInfo->depthBiasClamp;
+        info.depthBiasSlopeFactor = m_passInfo->depthBiasSlopeFactor;
+        info.Update();
+    }
+
+    void ShadowPass::BindScene(PassInfo &info, Scene &scene)
+    {
+        const uint32_t frame = RHII.GetFrameIndex();
+        const auto &sets = info.GetDescriptors(frame);
+        if (sets.empty() || !sets[0])
+            return;
+
+        Descriptor *set = sets[0];
+        set->SetBuffer(0, scene.GetUniforms(frame));
+        set->SetBuffer(1, scene.GetMeshConstants());
+        if (set->HasBinding(2))
+            set->SetBuffer(2, scene.GetIndirectAll());
+        if (set->HasBinding(3))
+            set->SetBuffer(3, scene.GetOpenPBRSkinningBinding(frame));
+        set->Update();
+    }
+
+    void ShadowPass::DrawFallback(CommandBuffer *cmd, const PushConstants_Shadows &pc,
+                                  Buffer *indirect, Buffer *counters, uint32_t counter, uint32_t capacity)
+    {
+        if (!SceneUsesOpenPBR() || m_scene->GetOpenPBRMaskModules().empty() || !m_fallbackPassInfo)
+            return;
+
+        const auto &settings = Settings::Get<SceneSettings>();
+        cmd->BindPipeline(*m_fallbackPassInfo);
+        cmd->SetDepthBias(settings.depth_bias[0], settings.depth_bias[1], settings.depth_bias[2]);
+        cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+        m_scene->BindDrawIdBuffer(cmd);
+        cmd->SetConstants(pc);
+        cmd->PushConstants();
+        if (counters)
+            cmd->DrawIndexedIndirectCount(indirect, 0, counters, counter * sizeof(uint32_t), capacity);
+        else
+            cmd->DrawIndexedIndirect(indirect, 0, capacity);
+    }
+
+    void ShadowPass::SyncMaskModules(Scene &scene, bool enabled)
+    {
+        if (!enabled)
+        {
+            m_masks.Clear();
+            return;
+        }
+
+        // Shadow resize can keep its images while the effective generated route changes.
+        if (m_maskEnabled != SceneUsesOpenPBR())
+        {
+            for (PassInfo *info : GetPassInfos())
+            {
+                if (info)
+                    info->DestroyShaders();
+            }
+
+            UpdatePassInfo();
+        }
+
+        m_masks.Sync(scene, true);
     }
 
     void ShadowPass::CreateUniforms(CommandBuffer *cmd)
@@ -169,30 +267,22 @@ namespace pe
             m_uniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
 
             Scene &scene = *GetActiveScene();
+            m_masks.Update(scene);
             if (scene.GetMeshCount() > 0)
             {
-                uint32_t frame = RHII.GetFrameIndex();
-                const auto &sets = m_passInfo->GetDescriptors(frame);
-                Descriptor *setUniforms = sets[0];
-                setUniforms->SetBuffer(0, scene.GetUniforms(frame));
-                setUniforms->SetBuffer(1, scene.GetMeshConstants());
-                setUniforms->Update();
-
-                // Same data/constants for the packed-voxel shadow pipeline (its VS reads the node
-                // matrices from `data` and the section origin from Mesh_Constants).
-                if (m_voxelPassInfo)
+                for (PassInfo *info : {m_passInfo.get(), m_voxelPassInfo.get(), m_fallbackPassInfo.get()})
                 {
-                    const auto &vsets = m_voxelPassInfo->GetDescriptors(frame);
-                    if (!vsets.empty() && vsets[0])
-                    {
-                        Descriptor *voxelUniforms = vsets[0];
-                        voxelUniforms->SetBuffer(0, scene.GetUniforms(frame));
-                        voxelUniforms->SetBuffer(1, scene.GetMeshConstants());
-                        voxelUniforms->Update();
-                    }
+                    if (info && info->pVertShader)
+                        BindScene(*info, scene);
                 }
             }
         }
+    }
+
+    void ShadowPass::DeclareInputs(RGBuilder &builder)
+    {
+        if (Scene *scene = GetActiveScene())
+            builder.ReadBuffer(scene->GetOpenPBRSkinningBuffer(RHII.GetFrameIndex()));
     }
 
     void ShadowPass::DeclareOutputs(RGBuilder &builder)
@@ -373,13 +463,15 @@ namespace pe
             const uint32_t regularCount = hasVoxels ? arenaBase : meshCount;
             const uint32_t voxelCount = hasVoxels ? meshCount - arenaBase : 0u;
 
+            m_masks.Prepare(cmd, *m_scene);
+
             uint32_t cascades = Settings::Get<SceneSettings>().num_cascades;
             for (uint32_t i = 0; i < cascades; i++)
             {
                 if (shadowCull)
                 {
                     const vec4 *planes = gSettings.frustum_culling ? m_cascadePlanes[i].data() : keepAll.data();
-                    m_scene->DispatchShadowCull(cmd, m_cullPassInfo.get(), planes);
+                    m_scene->DispatchShadowCull(cmd, m_cullPassInfo.get(), planes, m_maskEnabled);
                 }
 
                 pushConstants.vp = m_cascades[i];
@@ -444,6 +536,17 @@ namespace pe
                         cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
                     }
                 }
+                // The cull lists generated-mask casters apart (counter 3); without it the replays walk every caster.
+                Buffer *maskIndirect = shadowCull ? m_scene->GetShadowIndirectMask(frame)
+                                                  : m_scene->GetIndirectAll();
+                Buffer *maskCounters = shadowCull ? m_scene->GetShadowCullCounters(frame) : nullptr;
+                const uint32_t maskCounter = 3u;
+                if (regularCount > 0)
+                {
+                    DrawFallback(cmd, pushConstants, maskIndirect, maskCounters, maskCounter, regularCount);
+                    m_masks.Draw(cmd, *m_scene, maskIndirect, maskCounters, maskCounter, regularCount, true, &m_cascades[i]);
+                }
+
                 cmd->EndPass();
             }
         }
@@ -510,6 +613,7 @@ namespace pe
 
     void ShadowPass::Destroy()
     {
+        m_masks.Clear();
         CommandBuffer::ClearFramebufferCache();
 
         for (auto &texture : m_textures)

@@ -111,6 +111,8 @@ namespace pe
             set->SetBuffer(3, scene->GetMeshConstants());
         if (set->HasBinding(4))
             set->SetBuffer(4, scene->GetMaterialByteBuffer());
+        if (set->HasBinding(10))
+            set->SetBuffer(10, scene->GetOpenPBRSkinningBinding(frame));
 
         if (set->HasBinding(5))
             set->SetImageView(5, m_normal->GetUAV(0));
@@ -156,6 +158,8 @@ namespace pe
             return;
 
         builder.ReadCompute(m_visibility);
+        if (Scene *scene = GetActiveScene())
+            builder.ReadBuffer(scene->GetOpenPBRSkinningBuffer(RHII.GetFrameIndex()));
 
         // WriteCompute keeps the contents (layout change from the raster attachment): only MaterialX pixels change.
         for (Image *image : {m_normal, m_albedo, m_emissive})

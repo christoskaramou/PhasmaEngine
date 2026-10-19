@@ -78,11 +78,13 @@ namespace pe
         if (!m_passInfoDS)
             m_passInfoDS = std::make_shared<PassInfo>();
         configureDepthPass(*m_passInfoDS, "DepthLatePass_DS_pipeline", PE_CULL_MODE_NONE);
+        m_masks.Rebuild();
     }
 
     void DepthLatePass::Update()
     {
         Scene &scene = *GetActiveScene();
+        m_masks.Update(scene);
         uint32_t frame = RHII.GetFrameIndex();
 
         uint64_t geoVersion = scene.GetGeometryVersion();
@@ -121,6 +123,9 @@ namespace pe
                 if (setUniforms->HasBinding(2)) // DX12 VISIBILITY variant: DepthVS's IndirectAll
                     setUniforms->SetBuffer(2, scene.GetIndirectAll());
 
+                if (setUniforms->HasBinding(3))
+                    setUniforms->SetBuffer(3, scene.GetOpenPBRSkinningBinding(frame));
+
                 setUniforms->Update();
             }
         }
@@ -134,7 +139,10 @@ namespace pe
     void DepthLatePass::DeclareInputs(RGBuilder &builder)
     {
         if (Scene *scene = GetActiveScene())
+        {
             builder.ReadBuffer(scene->GetOccCountersB(RHII.GetFrameIndex()));
+            builder.ReadBuffer(scene->GetOpenPBRSkinningBuffer(RHII.GetFrameIndex()));
+        }
     }
 
     void DepthLatePass::ExecutePass(CommandBuffer *cmd)
@@ -152,6 +160,7 @@ namespace pe
 
         uint32_t frame = RHII.GetFrameIndex();
 
+        m_masks.Prepare(cmd, *m_scene);
         cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "DepthLatePass");
         cmd->SetViewport(0.f, 0.f, m_depthStencil->GetWidth_f(), m_depthStencil->GetHeight_f());
         cmd->SetScissor(0, 0, m_depthStencil->GetWidth(), m_depthStencil->GetHeight());
@@ -169,6 +178,10 @@ namespace pe
         // set B, double-sided
         cmd->DrawIndexedIndirectCount(m_scene->GetOccOpaqueDSB(frame), 0, m_scene->GetOccCountersB(frame), 5 * sizeof(uint32_t), m_scene->GetIndirectCapacity());
         cmd->DrawIndexedIndirectCount(m_scene->GetOccAlphaCutDSB(frame), 0, m_scene->GetOccCountersB(frame), 6 * sizeof(uint32_t), m_scene->GetIndirectCapacity());
+        m_masks.Draw(cmd, *m_scene, m_scene->GetOccAlphaCutSSB(frame), m_scene->GetOccCountersB(frame),
+                     1, m_scene->GetIndirectCapacity(), false);
+        m_masks.Draw(cmd, *m_scene, m_scene->GetOccAlphaCutDSB(frame), m_scene->GetOccCountersB(frame),
+                     6, m_scene->GetIndirectCapacity(), true);
         cmd->EndPass();
 
         m_scene = nullptr;
@@ -196,6 +209,7 @@ namespace pe
 
     void DepthLatePass::Destroy()
     {
+        m_masks.Clear();
         if (!m_passInfoDS)
             return;
 

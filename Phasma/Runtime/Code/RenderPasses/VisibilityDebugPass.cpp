@@ -83,6 +83,8 @@ namespace pe
         set->SetBuffer(5, scene->GetMeshConstants());
         set->SetBuffer(6, scene->GetMaterialTable());
         set->SetBuffer(7, scene->GetMaterialByteBuffer());
+        if (set->HasBinding(9))
+            set->SetBuffer(9, scene->GetOpenPBRSkinningBinding(frame));
         set->SetImageView(8, m_debug->GetUAV(0));
         set->Update();
 
@@ -95,6 +97,8 @@ namespace pe
             return;
 
         builder.ReadCompute(m_visibility);
+        if (Scene *scene = GetActiveScene())
+            builder.ReadBuffer(scene->GetOpenPBRSkinningBuffer(RHII.GetFrameIndex()));
         builder.ReadCompute(m_depth);
         builder.ReadCompute(m_albedo);
         builder.WriteCompute(m_debug);

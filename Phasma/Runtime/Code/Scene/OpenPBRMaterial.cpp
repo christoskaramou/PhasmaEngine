@@ -180,6 +180,15 @@ namespace pe
             if (doc.HasParseError() || !doc.IsObject())
                 throw std::runtime_error("not a PhasmaCook material layout");
 
+            const bool abi = doc.HasMember("module_abi") && doc["module_abi"].IsUint() &&
+                             doc["module_abi"].GetUint() == kOpenPBRModuleAbi;
+            const std::string marker = "#define PE_OPENPBR_MODULE_ABI " + std::to_string(kOpenPBRModuleAbi) + "\n";
+            if (!abi || !code.starts_with(marker))
+            {
+                throw std::runtime_error("incompatible OpenPBR module ABI; regenerate the material with the matching "
+                                         "PhasmaCook/editor and re-export cooked content");
+            }
+
             const bool inputs = doc.HasMember("inputs") && doc["inputs"].IsArray();
             const bool storage = doc.HasMember("byteSize") && doc["byteSize"].IsUint();
             const bool thin = doc.HasMember("thin") && doc["thin"].IsBool();
@@ -319,6 +328,7 @@ namespace pe
                     module->hash = std::to_string(Fnv1a64(code));
                     module->thinSource = dir + "MaterialThin.slang";
                     module->shadeSource = dir + "MaterialShade.slang";
+                    module->maskSource = dir + "MaterialMask.slang";
                 }
                 catch (const std::exception &error)
                 {
@@ -373,8 +383,10 @@ namespace pe
             module->layout = std::move(layout);
             module->thinSource = cached + ".thin.slang";
             module->shadeSource = cached + ".shade.slang";
+            module->maskSource = cached + ".mask.slang";
             WriteWrapper(module->thinSource, modulePath, "MaterialThin");
             WriteWrapper(module->shadeSource, modulePath, "MaterialShade");
+            WriteWrapper(module->maskSource, modulePath, "MaterialMask");
 
             registry.modules.push_back(module);
             return module;
@@ -512,7 +524,10 @@ namespace pe
             cook += ".exe";
 #endif
             if (!std::filesystem::is_regular_file(cook))
-                throw std::runtime_error("PhasmaCook is unavailable next to the executable; live generation requires it");
+            {
+                throw std::runtime_error("PhasmaCook is unavailable next to the executable; regenerate materials with "
+                                         "the matching editor and re-export cooked content");
+            }
 
             const auto serial = std::chrono::steady_clock::now().time_since_epoch().count();
             const auto temp = PathFromUtf8(Path::RootPath() + "ShaderCache/MaterialX/_generate_" + std::to_string(serial));
@@ -556,6 +571,7 @@ namespace pe
             const bool underAssets = !relative.empty() && *relative.begin() != "..";
             std::string context = PathUtf8(underAssets ? relative : parent);
             std::replace(context.begin(), context.end(), '\\', '/');
+            context += "\nmodule_abi=" + std::to_string(kOpenPBRModuleAbi);
 
             // Identical documents in different directories can resolve relative image filenames differently.
             const std::string dir = Path::AssetsPath() + "MaterialX/Cooked/" + std::to_string(Fnv1a64(context)) + "/";

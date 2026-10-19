@@ -21,6 +21,10 @@
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
 [[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
 [[vk::binding(0, 2)]] Texture2D pe_textures[] : register(t0, space100);
+#ifdef VISIBILITY
+// The OpenPBR prepass's visibility target: draw id + 1 wherever it resolved coverage, generated masks included.
+[[vk::binding(4, 0)]] Texture2D<uint4> pe_visibility : register(t4, space0);
+#endif
 
 float4 SampleArray(float2 uv, uint index)
 {
@@ -38,6 +42,18 @@ uint2 mainPS(PS_INPUT_Position_Uv_ID input) : SV_TARGET0
 {
     const uint id = input.id;
 
+#ifdef VISIBILITY
+    // The prepass already chose this pixel's frontmost draw: match it instead of re-testing legacy alpha.
+    const uint winner = pe_visibility.Load(int3(input.position.xy, 0)).x;
+    if (winner != 0u)
+    {
+        if (winner != id + 1u)
+            discard;
+
+        return uint2(id + 1u, asuint(input.position.z));
+    }
+#endif
+
     // Exact depth-prepass alpha-cut silhouette: discard the same texels DepthPS would.
     float4 sampledBase = HasTexture(constants[id].textureMask, TEX_BASE_COLOR_BIT)
                              ? GetBaseColor(id, input.uv)
@@ -46,7 +62,7 @@ uint2 mainPS(PS_INPUT_Position_Uv_ID input) : SV_TARGET0
     if (spriteBlend > 0.0f && HasTexture(constants[id].textureMask, TEX_BASE_COLOR_BIT))
         sampledBase = lerp(sampledBase, GetBaseColor(id, input.nextUv), spriteBlend);
     float alpha = sampledBase.a * input.alphaFactor;
-    if (alpha < constants[id].alphaCut)
+    if (alpha <= 0.0f || alpha < constants[id].alphaCut)
         discard;
 
     return uint2(id + 1u, asuint(input.position.z));

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "OpenPBRMask.h"
+
 namespace pe
 {
     class Image;
@@ -24,6 +26,7 @@ namespace pe
         void CreateUniforms(CommandBuffer *cmd) override;
         void UpdateDescriptorSets() override;
         void Update() override;
+        void DeclareInputs(RGBuilder &builder) override;
         void DeclareOutputs(RGBuilder &builder) override;
         void ExecutePass(CommandBuffer *cmd) override;
         void Resize(uint32_t width, uint32_t height) override;
@@ -37,6 +40,7 @@ namespace pe
         [[nodiscard]] float GetCascadeViewZ(uint32_t cascade) const;
         [[nodiscard]] float GetCascadeTexelSizeWorld(uint32_t cascade) const;
         void SetScene(Scene *scene) { m_scene = scene; }
+        void SyncMaskModules(Scene &scene, bool enabled);
         void ClearDepths(CommandBuffer *cmd);
         // m_voxelPassInfo is the packed-voxel shadow caster (own VS); the framework must see it for
         // shader-reload / pipeline lifecycle alongside the base m_passInfo.
@@ -47,14 +51,23 @@ namespace pe
                 passInfos.push_back(m_voxelPassInfo.get());
             if (m_cullPassInfo)
                 passInfos.push_back(m_cullPassInfo.get());
+            if (m_fallbackPassInfo)
+                passInfos.push_back(m_fallbackPassInfo.get());
+            m_masks.AppendPassInfos(passInfos);
             return passInfos;
         }
 
     private:
+        OpenPBRMask m_masks;
+        bool m_maskEnabled = false;
         friend class LightOpaquePass;
         friend class LightTransparentPass;
 
         void CalculateCascades(Camera *camera);
+        void UpdateFallbackPassInfo();
+        void BindScene(PassInfo &info, Scene &scene);
+        void DrawFallback(CommandBuffer *cmd, const PushConstants_Shadows &pc,
+                          Buffer *indirect, Buffer *counters, uint32_t counter, uint32_t capacity);
 
         static std::array<vec4, 6> ExtractFrustumPlanes(const mat4 &vp);
         static bool AABBInFrustum(const AABB &aabb, const std::array<vec4, 6> &planes);
@@ -68,6 +81,7 @@ namespace pe
         Scene *m_scene = nullptr;
         std::shared_ptr<PassInfo> m_voxelPassInfo; // packed-voxel shadow caster pipeline
         std::shared_ptr<PassInfo> m_cullPassInfo;  // per-cascade light-frustum compact
+        std::shared_ptr<PassInfo> m_fallbackPassInfo;
 
         std::vector<std::array<vec4, 6>> m_cascadePlanes; // [cascade]
     };

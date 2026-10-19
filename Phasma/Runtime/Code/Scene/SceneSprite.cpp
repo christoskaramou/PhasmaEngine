@@ -1179,10 +1179,14 @@ namespace pe
         }
     }
 
-    void Scene::UpdateSpriteAnimations(float dt)
+    void Scene::UpdateSpriteAnimations(float dt, bool advanceTime)
     {
         if (dt <= 0.0f)
             return;
+
+        // The late scene catch-up applies sprite edits without advancing the frame's time again.
+        if (!advanceTime)
+            dt = 0.0f;
 
         for (uint32_t i = 0; i < GetNodeCount(); ++i)
         {

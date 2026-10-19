@@ -1,5 +1,20 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
+#ifdef PE_DEFORMED_VERTEX
+#include "../Common/DeformedGeometry.hlsl"
+[[vk::binding(3, 0)]] ByteAddressBuffer pe_deformed;
+#ifdef PE_DX12
+struct PeSkinDraw
+{
+    uint indexCount;
+    uint instanceCount;
+    uint firstIndex;
+    int vertexOffset;
+    uint firstInstance;
+};
+[[vk::binding(2, 0)]] StructuredBuffer<PeSkinDraw> pe_skinDraws;
+#endif
+#endif
 
 // --- ByteAddressBuffer data ---
 // PerFrameData                 -> 4 * sizeof(mat4)
@@ -50,6 +65,31 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 
     const uint id = input.id;
     output.id = id;
+
+#ifdef PE_DEFORMED_VERTEX
+    const float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
+    output.maskEligible = (!spriteFrameBlend && pc.jointsCount > 0 && weightSum > 0.0) ? 0u : 1u;
+    if (!spriteFrameBlend && (constants[id].editorFlags & PE_EDITOR_FLAG_DEFORMED) != 0u)
+    {
+        uint sourceVertex = input.vertexId;
+#ifdef PE_DX12
+        sourceVertex += uint(pe_skinDraws[id].vertexOffset);
+#endif
+        PeDeformedVertex vertex;
+        if (PeLoadDeformedVertex(pe_deformed, id, sourceVertex, vertex))
+        {
+            output.positionWS = float4(vertex.position, 1.0);
+            output.positionCS = vertex.clip;
+            output.prevPositionCS = vertex.previousClip;
+            output.position = ApplyViewportYConvention(vertex.clip);
+            output.normal = vertex.normal;
+            output.tangent = vertex.tangent;
+            output.color = input.color;
+            output.maskEligible = 1u;
+            return output;
+        }
+    }
+#endif
 
     float4x4 boneTransform = identity_mat;
     float4x4 prevBoneTransform = identity_mat;

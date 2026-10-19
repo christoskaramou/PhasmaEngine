@@ -20,6 +20,7 @@ struct PushConstants_MaterialThin
 [[vk::binding(2, 0)]] ByteAddressBuffer pe_frameData;
 [[vk::binding(3, 0)]] StructuredBuffer<Mesh_Constants> pe_constants;
 [[vk::binding(4, 0)]] ByteAddressBuffer pe_materialBytes;
+[[vk::binding(10, 0)]] ByteAddressBuffer pe_deformed;
 
 #ifdef PE_NORMAL_RGBA32F
 [[vk::image_format("rgba32f")]][[vk::binding(5, 0)]] RWTexture2D<float4> pe_normalOut;

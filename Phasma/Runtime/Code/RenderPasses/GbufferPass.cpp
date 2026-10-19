@@ -25,7 +25,22 @@ namespace pe
             pi.Apply(surface);
 
             const bool visibilityVariant = visibilityAttachment && writeVisibility;
-            if ((!writeVelocity || visibilityVariant) && !surface.fragmentShader.empty() && pi.pFragShader)
+            const bool deformationVariant = visibilityAttachment && !writeVisibility;
+            if (deformationVariant && !surface.vertexShader.empty() && pi.pVertShader)
+            {
+                ShaderDesc desc{};
+                desc.sourcePath = Path::ResolveAsset(surface.vertexShader);
+                desc.entryPoint = "mainVS";
+                desc.stage = PE_SHADER_STAGE_VERTEX;
+                desc.defines.push_back({"PE_DEFORMED_VERTEX", "1"});
+
+                Shader *oldVert = pi.pVertShader;
+                pi.pVertShader = Shader::Create(desc);
+                Shader::Destroy(oldVert);
+            }
+
+            if ((!writeVelocity || visibilityVariant || deformationVariant) &&
+                !surface.fragmentShader.empty() && pi.pFragShader)
             {
                 ShaderDesc desc{};
                 desc.sourcePath = Path::ResolveAsset(surface.fragmentShader);
@@ -36,6 +51,8 @@ namespace pe
                     desc.defines.push_back({"GBUFFER_NO_VELOCITY", "1"});
                 if (visibilityVariant)
                     desc.defines.push_back({"GBUFFER_VISIBILITY", "1"});
+                if (deformationVariant)
+                    desc.defines.push_back({"GBUFFER_GENERATED_MASK", "1"});
 
                 Shader *oldFrag = pi.pFragShader;
                 pi.pFragShader = Shader::Create(desc);
@@ -343,6 +360,11 @@ namespace pe
                 Descriptor *setUniforms = sets[0];
                 setUniforms->SetBuffer(0, scene.GetUniforms(frame));
                 setUniforms->SetBuffer(1, scene.GetMeshConstants());
+                if (setUniforms->HasBinding(2))
+                    setUniforms->SetBuffer(2, scene.GetIndirectAll());
+                if (setUniforms->HasBinding(3))
+                    setUniforms->SetBuffer(3, scene.GetOpenPBRSkinningBinding(frame));
+
                 setUniforms->Update();
             }
 
@@ -384,6 +406,7 @@ namespace pe
         // Voxels and terrain always draw from the frustum lists; meshes from A + B under occlusion.
         const uint32_t frame = RHII.GetFrameIndex();
         builder.ReadBuffer(scene->GetCullingCountersBuffer(frame));
+        builder.ReadBuffer(scene->GetOpenPBRSkinningBuffer(frame));
         if (Settings::Get<SceneSettings>().occlusion_culling)
         {
             builder.ReadBuffer(scene->GetOccCountersA(frame));

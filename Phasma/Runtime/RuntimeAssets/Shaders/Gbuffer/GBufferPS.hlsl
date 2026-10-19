@@ -1,6 +1,9 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 #include "../Common/MaterialFlags.hlsl"
+#ifdef GBUFFER_GENERATED_MASK
+#include "../Common/DeformedGeometry.hlsl"
+#endif
 
 [[vk::push_constant]] PushConstants_GBuffer pc;
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
@@ -57,7 +60,14 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
         authored.rgb = SrgbToLinear(input.color.rgb) * SrgbToLinear(mat.baseColorFactor.rgb);
     float4 combinedColor    = sampledBaseColor * authored;
 
-    if (combinedColor.a <= 0.0f || combinedColor.a < mat.pbrParams.z)
+    bool generatedMask = false;
+#ifdef GBUFFER_GENERATED_MASK
+    const uint e0 = GetAttributeAtVertex(input.maskEligible, 0);
+    const uint e1 = GetAttributeAtVertex(input.maskEligible, 1);
+    const uint e2 = GetAttributeAtVertex(input.maskEligible, 2);
+    generatedMask = PeUsesGeneratedMask(constants[id]) && (e0 & e1 & e2) != 0u;
+#endif
+    if (!generatedMask && (combinedColor.a <= 0.0f || combinedColor.a < mat.pbrParams.z))
         discard;
 
     float3 N = normalize(input.normal);

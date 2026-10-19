@@ -1,5 +1,9 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
+#ifdef VISIBILITY
+#include "../Common/DeformedGeometry.hlsl"
+[[vk::binding(3, 0)]] ByteAddressBuffer pe_deformed;
+#endif
 
 // --- ByteAddressBuffer data ---
 // PerFrameData                 -> 4 * sizeof(mat4)
@@ -8,7 +12,11 @@
 //      NodeGpuData            -> sizeof(mat4) * 2  [worldMatrix, prevWorldMatrix]
 // --- ByteAddressBuffer data ---
 
+#ifdef PE_OPENPBR_MASK
+[[vk::push_constant]] PushConstants_OpenPBRMask pc;
+#else
 [[vk::push_constant]] PushConstants_DepthPass pc;
+#endif
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
 
@@ -44,9 +52,12 @@ float4x4 LoadMatrix(uint offset)
 // Matrices
 float4x4 GetViewProjection()                  { return LoadMatrix(0); }
 float4x4 GetMeshMatrix(uint id)               { return LoadMatrix(constants[id].meshDataOffset); }
-float4x4 GetJointMatrix(uint id, uint index)  { return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE); }
+float4x4 GetJointMatrix(uint id, uint index)
+{
+    return LoadMatrix(constants[id].meshDataOffset + MESH_DATA_SIZE + index * MATRIX_SIZE);
+}
 
-VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
+VS_OUTPUT_Position_Uv_ID PeDepthVertex(VS_INPUT_Depth input)
 {
     VS_OUTPUT_Position_Uv_ID output;
 
@@ -55,6 +66,26 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
     const bool spriteFrameBlend = input.joints.w == SPRITE_FRAME_BLEND_MARKER;
     output.nextUv = spriteFrameBlend ? float2(asfloat(input.joints.x), asfloat(input.joints.y)) : input.uv;
     output.spriteBlend = spriteFrameBlend ? asfloat(input.joints.z) : 0.0f;
+
+#ifdef VISIBILITY
+#ifdef PE_DX12
+    output.vertexId = input.vertexId + uint(IndirectAll[id].vertexOffset);
+#else
+    output.vertexId = input.vertexId;
+#endif
+    if (!spriteFrameBlend && (constants[id].editorFlags & PE_EDITOR_FLAG_DEFORMED) != 0u)
+    {
+        PeDeformedVertex vertex;
+        if (PeLoadDeformedVertex(pe_deformed, id, output.vertexId, vertex))
+        {
+            output.position = ApplyViewportYConvention(vertex.clip);
+            output.uv = input.uv;
+            output.alphaFactor = constants[id].baseColorAlpha;
+            output.visEligible = 1u;
+            return output;
+        }
+    }
+#endif
 
     float4x4 jointTransform = identity_mat;
     if (pc.jointsCount > 0 && !spriteFrameBlend)
@@ -80,17 +111,19 @@ VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
     output.alphaFactor = constants[id].baseColorAlpha;
 
 #ifdef VISIBILITY
-    // Vulkan's VertexIndex includes the base vertex; D3D12's SV_VertexID does not.
-#ifdef PE_DX12
-    output.vertexId = input.vertexId + uint(IndirectAll[id].vertexOffset);
-#else
-    output.vertexId = input.vertexId;
-#endif
-    // Vertices skinned above, and animated sprites, keep the raster path until Phase 4 pre-skins them. Same test as the
-    // skinning branch: static meshes cooked before boneless meshes got zero weights carry weight 1.
+    // A source vertex may be reconstructed only when raster and resolve use the same deformation.
+    // Match the legacy skinning branch: older boneless cooked meshes can still carry weight 1.
     const float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];
-    output.visEligible = (spriteFrameBlend || (pc.jointsCount > 0 && weightSum > 0.0)) ? 0u : 1u;
+    output.visEligible = (!spriteFrameBlend && pc.jointsCount > 0 && weightSum > 0.0) ? 0u : 1u;
 #endif
 
     return output;
 }
+
+#ifndef PE_OPENPBR_MASK
+VS_OUTPUT_Position_Uv_ID mainVS(VS_INPUT_Depth input)
+{
+    VS_OUTPUT_Position_Uv_ID output = PeDepthVertex(input);
+    return output;
+}
+#endif

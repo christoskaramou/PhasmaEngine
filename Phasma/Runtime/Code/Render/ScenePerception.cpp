@@ -2,6 +2,8 @@
 
 #include "Scene/Scene.h"
 #include "Camera/Camera.h"
+#include "Render/SceneRendererHost.h"
+#include "Render/SceneRenderTargets.h"
 #include "RenderPasses/DepthPass.h" // PushConstants_DepthPass
 #include "API/Buffer.h"
 #include "API/Command.h"
@@ -47,6 +49,7 @@ namespace pe
             uint32_t nodeVisCapacity = 0;
             ::PeFormat depthFormat = PE_FORMAT_UNDEFINED;
             bool reverseDepth = false;
+            bool visibility = false; // idPI is the OpenPBR prepass variant that matches the visibility target
             std::unique_ptr<PassInfo> idPI;
             std::unique_ptr<PassInfo> clearPI;
             std::unique_ptr<PassInfo> reducePI;
@@ -130,18 +133,28 @@ namespace pe
             track.size = size;
         }
 
-        std::unique_ptr<PassInfo> CreateObjectIdPassInfo(::PeFormat depthFormat, bool reverseDepth)
+        // The OpenPBR prepass's visibility target while that renderer is active, null otherwise.
+        Image *GetVisibilityTarget()
         {
+            SceneRendererHost *host = GetActiveSceneRendererHost();
+            return SceneUsesOpenPBR() && host ? host->GetRenderTarget("visibility") : nullptr;
+        }
+
+        std::unique_ptr<PassInfo> CreateObjectIdPassInfo(::PeFormat depthFormat, bool reverseDepth, bool visibility)
+        {
+            // The visibility variant is the prepass's own vertex stage, so deformed skins land on the same depth.
+            const std::vector<Define> defines = visibility ? std::vector<Define>{Define{"VISIBILITY", "1"}}
+                                                           : std::vector<Define>{};
             auto passInfo = std::make_unique<PassInfo>();
             passInfo->name = "ObjectIdDecode_pipeline";
             passInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Depth/DepthVS.hlsl",
                                                     .entryPoint = "mainVS",
                                                     .stage = PE_SHADER_STAGE_VERTEX,
-                                                    .defines = std::vector<Define>{}});
+                                                    .defines = defines});
             passInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Perception/ObjectIdPS.hlsl",
                                                     .entryPoint = "mainPS",
                                                     .stage = PE_SHADER_STAGE_FRAGMENT,
-                                                    .defines = std::vector<Define>{}});
+                                                    .defines = defines});
             passInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
             passInfo->cullMode = PE_CULL_MODE_NONE;
             passInfo->colorBlendAttachments = {BlendState::Default};
@@ -168,7 +181,8 @@ namespace pe
             return passInfo;
         }
 
-        bool EnsureObjectIdDecodeResources(ObjectIdDecodeCache &cache, Image *depth, uint32_t meshCount, std::string &outError)
+        bool EnsureObjectIdDecodeResources(ObjectIdDecodeCache &cache, Image *depth, bool visibility, uint32_t meshCount,
+                                           std::string &outError)
         {
             if (!depth)
             {
@@ -217,11 +231,16 @@ namespace pe
 
             const ::PeFormat depthFormat = RHII.GetDepthFormat();
             const bool reverseDepth = Settings::Get<SceneSettings>().reverse_depth;
-            if (!cache.idPI || cache.depthFormat != depthFormat || cache.reverseDepth != reverseDepth)
+            const bool stalePipeline = !cache.idPI ||
+                                       cache.depthFormat != depthFormat ||
+                                       cache.reverseDepth != reverseDepth ||
+                                       cache.visibility != visibility;
+            if (stalePipeline)
             {
-                cache.idPI = CreateObjectIdPassInfo(depthFormat, reverseDepth);
+                cache.idPI = CreateObjectIdPassInfo(depthFormat, reverseDepth, visibility);
                 cache.depthFormat = depthFormat;
                 cache.reverseDepth = reverseDepth;
+                cache.visibility = visibility;
             }
             if (!cache.clearPI)
                 cache.clearPI = CreateObjectIdComputePassInfo("ObjectIdClear_pipeline",
@@ -237,7 +256,7 @@ namespace pe
 
         // Bind set0 (scene uniforms + mesh constants) and set1 (constants + sampler) for the id pass exactly like the
         // depth prepass; set2 is the RHI's shared scene texture table. Returns false if the descriptor layout is wrong.
-        bool BindObjectIdDescriptors(ObjectIdDecodeCache &cache, Scene &scene, uint32_t frame)
+        bool BindObjectIdDescriptors(ObjectIdDecodeCache &cache, Scene &scene, uint32_t frame, Image *visibility)
         {
             const auto &idSets = cache.idPI->GetDescriptors(frame);
             if (idSets.size() < 2)
@@ -247,6 +266,12 @@ namespace pe
             Descriptor *idSetTextures = idSets[1];
             idSetUniforms->SetBuffer(0, scene.GetUniforms(frame));
             idSetUniforms->SetBuffer(1, scene.GetMeshConstants());
+            if (idSetUniforms->HasBinding(2)) // DX12 VISIBILITY variant: DepthVS's IndirectAll
+                idSetUniforms->SetBuffer(2, scene.GetIndirectAll());
+            if (idSetUniforms->HasBinding(3))
+                idSetUniforms->SetBuffer(3, scene.GetOpenPBRSkinningBinding(frame));
+            if (visibility && idSetUniforms->HasBinding(4))
+                idSetUniforms->SetImageView(4, visibility->GetSRV());
             idSetUniforms->Update();
             idSetTextures->SetBuffer(0, scene.GetMeshConstants());
             idSetTextures->SetSampler(1, scene.GetDefaultSampler());
@@ -255,8 +280,19 @@ namespace pe
         }
 
         // Record the object-id raster pass (reuses the live GPU-culled indirect draws) into `cmd`.
-        void RecordObjectIdPass(CommandBuffer *cmd, ObjectIdDecodeCache &cache, Scene &scene, Image *depth, uint32_t frame, const char *passName)
+        void RecordObjectIdPass(CommandBuffer *cmd, ObjectIdDecodeCache &cache, Scene &scene, Image *depth, Image *visibility,
+                                uint32_t frame, const char *passName)
         {
+            if (visibility)
+            {
+                ImageBarrierInfo visibilityRead{};
+                visibilityRead.image = visibility;
+                visibilityRead.layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                visibilityRead.stageFlags = PE_STAGE_FRAGMENT_SHADER;
+                visibilityRead.accessMask = PE_ACCESS_SHADER_SAMPLED_READ;
+                cmd->ImageBarrier(visibilityRead);
+            }
+
             Attachment attachments[2]{};
             attachments[0].image = cache.idTarget;
             attachments[0].loadOp = PE_LOAD_OP_CLEAR;
@@ -333,9 +369,10 @@ namespace pe
             return out;
         }
 
+        Image *visibility = GetVisibilityTarget();
         ObjectIdDecodeCache &cache = GetObjectIdDecodeCache();
         std::string error;
-        if (!EnsureObjectIdDecodeResources(cache, depth, meshCount, error))
+        if (!EnsureObjectIdDecodeResources(cache, depth, visibility != nullptr, meshCount, error))
         {
             out.error = error;
             return out;
@@ -347,7 +384,7 @@ namespace pe
             out.error = "scene draw buffers not available";
             return out;
         }
-        if (!BindObjectIdDescriptors(cache, scene, frame))
+        if (!BindObjectIdDescriptors(cache, scene, frame, visibility))
         {
             out.error = "object-id descriptor layout missing expected sets";
             return out;
@@ -379,7 +416,7 @@ namespace pe
         cmd->Begin();
         scene.RecordPendingInstanceUploads(cmd); // an instance rebuild this frame may not have reached the GPU yet
 
-        RecordObjectIdPass(cmd, cache, scene, depth, frame, "ObjectIdPass");
+        RecordObjectIdPass(cmd, cache, scene, depth, visibility, frame, "ObjectIdPass");
 
         ImageBarrierInfo idReadBarrier{};
         idReadBarrier.image = cache.idTarget;
@@ -516,9 +553,10 @@ namespace pe
         RHII.WaitDeviceIdle(); // see DecodeCameraView: settle in-flight frame work before recording
 
         const uint32_t meshCount = scene.GetMeshCount();
+        Image *visibility = GetVisibilityTarget();
         ObjectIdDecodeCache &cache = GetObjectIdDecodeCache();
         std::string error;
-        if (!EnsureObjectIdDecodeResources(cache, depth, std::max(meshCount, 1u), error))
+        if (!EnsureObjectIdDecodeResources(cache, depth, visibility != nullptr, std::max(meshCount, 1u), error))
         {
             out.error = error;
             return out;
@@ -542,7 +580,7 @@ namespace pe
 
         if (haveDraws)
         {
-            if (!BindObjectIdDescriptors(cache, scene, frame))
+            if (!BindObjectIdDescriptors(cache, scene, frame, visibility))
             {
                 out.error = "object-id descriptor layout missing expected sets";
                 return out;
@@ -563,7 +601,7 @@ namespace pe
             CommandBuffer *cmd = queue->AcquireCommandBuffer();
             cmd->Begin();
             scene.RecordPendingInstanceUploads(cmd);
-            RecordObjectIdPass(cmd, cache, scene, depth, frame, "ObjectIdPickPass");
+            RecordObjectIdPass(cmd, cache, scene, depth, visibility, frame, "ObjectIdPickPass");
             // CopyImageToBuffer inserts its own COLOR_ATTACHMENT -> TRANSFER_SRC barrier internally
             // (Vulkan Image::CopyToBuffer / DX12 TransitionForCopy), so no explicit barrier needed.
             cmd->CopyImageToBuffer(cache.idTarget, staging, 0, 0, 1);

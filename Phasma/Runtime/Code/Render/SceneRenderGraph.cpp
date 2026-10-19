@@ -38,6 +38,7 @@
 #include "RenderPasses/UpsamplePass.h"
 #include "RenderPasses/VisibilityDebugPass.h"
 #include "RenderPasses/MaterialThinPass.h"
+#include "RenderPasses/OpenPBRSkinningPass.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/OpenPBRMaterial.h"
@@ -55,6 +56,7 @@ namespace pe
         };
 
         constexpr SceneRenderGraphPassDesc kSceneRenderGraphPasses[] = {
+            {SceneRenderGraphPassId::OpenPBRSkinning, 90, "OpenPBRSkinning", &SceneRenderGraphPassComponents::openpbrSkinning},
             {SceneRenderGraphPassId::Culling, 50, "Culling", &SceneRenderGraphPassComponents::culling},
             {SceneRenderGraphPassId::Shadow, 100, "Shadow", &SceneRenderGraphPassComponents::shadow},
             {SceneRenderGraphPassId::CullPhase1, 180, "CullPhase1", &SceneRenderGraphPassComponents::cullPhase1},
@@ -147,6 +149,8 @@ namespace pe
             if (!component || !component->IsEnabled())
                 return false;
 
+            if (component == components.openpbrSkinning)
+                return isPassEnabled(SceneRenderGraphPassId::OpenPBRSkinning);
             if (component == components.culling)
                 return isPassEnabled(SceneRenderGraphPassId::Culling);
             if (component == components.shadow)
@@ -289,6 +293,7 @@ namespace pe
                                               bool includeRayTracingPass)
     {
         CreateSceneRenderGraphPassComponent<CullingPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<OpenPBRSkinningPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<ShadowPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<CullPhase1Pass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<DepthPass>(renderPassComponents);
@@ -416,6 +421,7 @@ namespace pe
     {
         SceneRenderGraphPassComponents scenePasses{};
         scenePasses.culling = GetGlobalComponent<CullingPass>();
+        scenePasses.openpbrSkinning = GetGlobalComponent<OpenPBRSkinningPass>();
         scenePasses.shadow = GetGlobalComponent<ShadowPass>();
         scenePasses.cullPhase1 = GetGlobalComponent<CullPhase1Pass>();
         scenePasses.depth = GetGlobalComponent<DepthPass>();
@@ -473,7 +479,11 @@ namespace pe
         // (culling, Forward+, grid, AABBs) are independent of it and keep reading gs.
         const bool settingsActive = SceneSettingsActive();
 
-        const Scene *activeScene = GetActiveScene();
+        Scene *activeScene = GetActiveScene();
+        if (activeScene)
+            activeScene->SyncOpenPBRSkinningBuffers();
+
+        const bool skinning = activeScene && activeScene->GetOpenPBRSkinningBuffer(RHII.GetFrameIndex());
         const bool materialModules = SceneUsesOpenPBR() && activeScene && !activeScene->GetOpenPBRModules().empty();
         const auto &gs = Settings::Get<SceneSettings>();
         const auto &pp = ActivePostProcessProfile();
@@ -499,6 +509,7 @@ namespace pe
             const bool dx12NeedGBuffer = dx12RenderRaster || dx12NeedVelocity;
 
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Culling, true);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::OpenPBRSkinning, skinning && dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Shadow, settingsActive && gs.shadows && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::CullPhase1, gs.occlusion_culling && dx12NeedDepth);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Depth, dx12NeedDepth);
@@ -600,6 +611,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline,
                        gs.selection_outline && (renderRaster || renderRayTracing));
 
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::OpenPBRSkinning, skinning && needDepth);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::VisibilityDebug, SceneUsesOpenPBRDebug() && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialThin,
                        materialModules && renderRaster);
@@ -611,6 +623,28 @@ namespace pe
                                               const SceneRenderGraphPassComponents &components,
                                               const SceneRenderGraphPassCondition &isPassEnabled)
     {
+        // Pipeline creation follows dirty-built module IDs before concurrent descriptor updates.
+        if (Scene *scene = GetActiveScene())
+        {
+            if (components.depth)
+            {
+                const bool enabled = ShouldUpdateSceneRenderGraphPass(components, isPassEnabled, components.depth);
+                static_cast<DepthPass *>(components.depth)->SyncMaskModules(*scene, enabled);
+            }
+
+            if (components.depthLate)
+            {
+                const bool enabled = ShouldUpdateSceneRenderGraphPass(components, isPassEnabled, components.depthLate);
+                static_cast<DepthLatePass *>(components.depthLate)->SyncMaskModules(*scene, enabled);
+            }
+
+            if (components.shadow)
+            {
+                const bool enabled = ShouldUpdateSceneRenderGraphPass(components, isPassEnabled, components.shadow);
+                static_cast<ShadowPass *>(components.shadow)->SyncMaskModules(*scene, enabled);
+            }
+        }
+
         std::vector<std::shared_future<void>> futures;
         futures.reserve(renderPassComponents.size());
         for (auto &rc : renderPassComponents)

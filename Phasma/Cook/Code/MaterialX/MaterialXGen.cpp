@@ -1,5 +1,6 @@
 #include "MaterialXGen.h"
 #include "PeSurfaceNodeSlang.h"
+#include "Scene/OpenPBRMaterial.h"
 #include <MaterialXFormat/Util.h>
 #include <MaterialXFormat/XmlIo.h>
 #include <MaterialXGenHw/HwConstants.h>
@@ -137,6 +138,76 @@ namespace pe
             return out + "]";
         }
 
+        std::string SurfaceInputStruct(const mx::ShaderNode &surface, mx::GenContext &context)
+        {
+            std::string text = "struct PeSurfaceInputs\n{\n";
+            for (const mx::ShaderInput *input : surface.getInputs())
+            {
+                const std::string type = context.getShaderGenerator().getSyntax().getTypeName(input->getType());
+                if (type != "float" && type != "float3" && type != "bool")
+                    throw std::runtime_error("unsupported evaluated OpenPBR input type '" + type + "'");
+
+                text += "    " + type + " " + input->getName() + ";\n";
+            }
+            return text + "};\n\n";
+        }
+
+        std::string SurfaceDirectionHelpers()
+        {
+            return "float3 pe_blend_direction(float3 a, float3 b, float t)\n"
+                   "{\n"
+                   "    float3 v = lerp(a, b, t);\n"
+                   "    if (dot(v, v) <= 1e-12)\n"
+                   "        v = a;\n"
+                   "    const float len2 = dot(v, v);\n"
+                   "    return len2 <= 1e-12 ? float3(0.0, 0.0, 1.0) : v * rsqrt(len2);\n"
+                   "}\n\n"
+                   "float3 pe_surface_tangent(float3 v, float3 n)\n"
+                   "{\n"
+                   "    v -= n * dot(n, v);\n"
+                   "    if (dot(v, v) <= 1e-12)\n"
+                   "        v = abs(n.x) < 0.9 ? cross(n, float3(1.0, 0.0, 0.0)) : cross(n, float3(0.0, 1.0, 0.0));\n"
+                   "    return normalize(v);\n"
+                   "}\n\n";
+        }
+
+        std::string SurfaceInputBlend(const mx::ShaderNode &surface, mx::GenContext &context)
+        {
+            std::string text = SurfaceDirectionHelpers() +
+                               "PeSurfaceInputs pe_blend_inputs(PeSurfaceInputs a, PeSurfaceInputs b, float t)\n{\n"
+                               "    PeSurfaceInputs p;\n";
+            for (const mx::ShaderInput *input : surface.getInputs())
+            {
+                const std::string &name = input->getName();
+                const std::string type = context.getShaderGenerator().getSyntax().getTypeName(input->getType());
+                const bool normal = name == "geometry_normal" || name == "geometry_coat_normal";
+                const std::string first = "a." + name;
+                const std::string second = "b." + name;
+                const std::string value = type == "bool" ? "t < 0.5 ? " + first + " : " + second
+                                                         : (normal ? "pe_blend_direction(" : "lerp(") +
+                                                               first + ", " + second + ", t)";
+                text += "    p." + name + " = " + value + ";\n";
+            }
+
+            text += "    p.geometry_tangent = pe_surface_tangent(p.geometry_tangent, p.geometry_normal);\n"
+                    "    p.geometry_coat_tangent = pe_surface_tangent(p.geometry_coat_tangent, p.geometry_coat_normal);\n"
+                    "    return p;\n}\n\n";
+            return text;
+        }
+
+        std::string SurfaceInputShade(const mx::ShaderNode &surface)
+        {
+            std::string text = "#ifndef PE_MATERIAL_THIN\n"
+                               "float4 pe_shade_inputs(PeSurfaceInputs p)\n{\n"
+                               "    surfaceshader result;\n"
+                               "    NG_open_pbr_surface_surfaceshader(\n";
+            for (const mx::ShaderInput *input : surface.getInputs())
+                text += "        p." + input->getName() + ",\n";
+
+            return text + "        result);\n"
+                          "    return float4(result.color, 1.0);\n}\n#endif\n\n";
+        }
+
         void CaptureThinInputs(std::string &text, const mx::ShaderNode &surface, mx::GenContext &context)
         {
             const auto [start, end] = FindBlock(text, "float4 pe_material_fragment(");
@@ -144,37 +215,52 @@ namespace pe
             if (start == std::string::npos || call == std::string::npos || call > end)
                 throw std::runtime_error("open_pbr_surface call not found in pe_material_fragment");
 
-            const std::pair<const char *, const char *> captures[] = {
-                {"base_color", "float3"},
-                {"base_weight", "float"},
-                {"specular_roughness", "float"},
-                {"base_metalness", "float"},
-                {"geometry_normal", "float3"},
-            };
-
-            std::string statics;
-            std::string assignments;
-            for (const auto &[input, type] : captures)
+            // Keep MaterialX's topological upstream evaluation, including UV and colour transforms, before the closure.
+            const size_t body = text.find('{', start);
+            const size_t callLine = text.rfind('\n', call) + 1;
+            std::string evaluator = "PeSurfaceInputs pe_evaluate_inputs(VertexData _vd)\n{" +
+                                    text.substr(body + 1, callLine - body - 1) + "    PeSurfaceInputs p;\n";
+            for (const mx::ShaderInput *input : surface.getInputs())
             {
-                const mx::ShaderInput *port = surface.getInput(input);
-                if (!port)
-                    throw std::runtime_error("open_pbr_surface has no input '" + std::string(input) + "'");
-
-                const std::string var = "pe_thin_" + std::string(input);
-                statics += "static " + std::string(type) + " " + var + ";\n";
-                assignments += "    " + var + " = " +
-                               context.getShaderGenerator().getUpstreamResult(port, context) + ";\n";
+                evaluator += "    p." + input->getName() + " = " +
+                             context.getShaderGenerator().getUpstreamResult(input, context) + ";\n";
             }
 
-            // Pass 1 (PE_MATERIAL_THIN) stops at the captures: MaterialX emits nodes in topological order, so everything the
-            // captured inputs need precedes the surface call, and the closures after it never compile into pass 1.
-            const std::string cut = "#ifdef PE_MATERIAL_THIN\n"
-                                    "    return float4(0.0, 0.0, 0.0, 0.0);\n"
-                                    "#else\n";
+            evaluator += "    return p;\n}\n\n";
+            text.replace(start, end - start + 1,
+                         SurfaceInputStruct(surface, context) + evaluator +
+                             SurfaceInputBlend(surface, context) + SurfaceInputShade(surface));
+        }
 
-            text.insert(text.rfind('\n', end) + 1, "#endif\n");
-            text.insert(text.rfind('\n', call) + 1, assignments + cut);
-            text.insert(start, statics + "\n");
+        std::string SurfaceFrameEvaluator(bool hasUv)
+        {
+            // Without texcoord_0 both sprite frames evaluate identical inputs: one evaluation is the blend.
+            if (!hasUv)
+            {
+                return "PeSurfaceInputs pe_material_inputs(float2 nextUv, float blend)\n{\n"
+                       "    return pe_evaluate_inputs(vd);\n}\n\n";
+            }
+
+            const std::string text = "PeSurfaceInputs pe_material_inputs(float2 nextUv, float blend)\n{\n"
+                                     "    const VertexData current = vd;\n"
+                                     "    VertexData next = current;\n"
+                                     "    next.texcoord_0 = nextUv;\n";
+
+            return text + "\n"
+                          "    if (blend >= 1.0)\n"
+                          "    {\n"
+                          "        const PeSurfaceInputs p = pe_evaluate_inputs(next);\n"
+                          "        vd = current;\n"
+                          "        return p;\n"
+                          "    }\n\n"
+                          "    PeSurfaceInputs p = pe_evaluate_inputs(current);\n"
+                          "    if (blend > 0.0)\n"
+                          "    {\n"
+                          "        const PeSurfaceInputs q = pe_evaluate_inputs(next);\n"
+                          "        vd = current;\n"
+                          "        p = pe_blend_inputs(p, q, blend);\n"
+                          "    }\n"
+                          "    return p;\n}\n\n";
         }
 
         // An image's filename as MaterialX resolves it (fileprefix included), made absolute next to its document.
@@ -440,7 +526,18 @@ namespace pe
                     tail += "    vd." + var + " = " + it->second + swizzle + ";\n";
                     vertexData.push_back(var);
                 }
-                tail += "}\n\nfloat4 pe_material_shade()\n{\n    return pe_material_fragment(vd);\n}\n";
+                tail += "}\n\n" + SurfaceFrameEvaluator(
+                                      std::find(vertexData.begin(), vertexData.end(), "texcoord_0") != vertexData.end());
+                tail += "float pe_material_mask(PeSurfacePoint sp, float2 nextUv, float blend)\n"
+                        "{\n"
+                        "    pe_fill_vertex_data(sp);\n"
+                        "    return pe_material_inputs(nextUv, blend).geometry_opacity;\n"
+                        "}\n\n";
+                tail += "#ifndef PE_MATERIAL_THIN\n"
+                        "float4 pe_material_shade(float2 nextUv, float blend)\n{\n"
+                        "    return pe_shade_inputs(pe_material_inputs(nextUv, blend));\n}\n\n"
+                        "float4 pe_material_shade()\n{\n"
+                        "    return pe_material_shade(float2(0.0, 0.0), 0.0);\n}\n#endif\n";
 
                 tail += "\nstruct PeThin\n"
                         "{\n"
@@ -450,21 +547,23 @@ namespace pe
                         "    float metalness;\n"
                         "};\n"
                         "\n"
-                        "PeThin pe_material_thin(PeSurfacePoint sp)\n"
+                        "PeThin pe_material_thin(PeSurfacePoint sp, float2 nextUv, float blend)\n"
                         "{\n"
                         "    pe_fill_vertex_data(sp);\n"
-                        "    pe_material_fragment(vd);\n"
+                        "    const PeSurfaceInputs p = pe_material_inputs(nextUv, blend);\n"
                         "\n"
                         "    PeThin t;\n"
-                        "    t.normal = normalize(pe_thin_geometry_normal);\n"
-                        "    t.albedo = pe_thin_base_color * pe_thin_base_weight;\n"
-                        "    t.roughness = pe_thin_specular_roughness;\n"
-                        "    t.metalness = pe_thin_base_metalness;\n"
+                        "    t.normal = normalize(p.geometry_normal);\n"
+                        "    t.albedo = p.base_color * p.base_weight;\n"
+                        "    t.roughness = p.specular_roughness;\n"
+                        "    t.metalness = p.base_metalness;\n"
                         "    return t;\n"
-                        "}\n";
-                text += tail;
+                        "}\n\n"
+                        "PeThin pe_material_thin(PeSurfacePoint sp)\n{\n"
+                        "    return pe_material_thin(sp, float2(0.0, 0.0), 0.0);\n}\n";
+                text = "#define PE_OPENPBR_MODULE_ABI " + std::to_string(kOpenPBRModuleAbi) + "\n" + text + tail;
 
-                std::string json = "{\"material\":\"" + name +
+                std::string json = "{\"module_abi\":" + std::to_string(kOpenPBRModuleAbi) + ",\"material\":\"" + name +
                                    "\",\"surface\":\"" + surface->getNamePath() + "\",\"inputs\":[";
                 bool firstInput = true;
                 for (const PeMaterialInput &in : inputs)

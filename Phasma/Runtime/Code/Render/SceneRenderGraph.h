@@ -53,6 +53,7 @@ namespace pe
         VisibilityDebug, // openpbr_debug: quad-exact reconstruction check of the visibility payload
         MaterialThin,    // openpbr: material pass 1 (thin G-buffer)
         MaterialShade,   // openpbr: material pass 2 (MaterialX shading)
+        OpenPBRSkinning,
         Count
     };
 
@@ -100,6 +101,7 @@ namespace pe
         IRenderPassComponent *visibilityDebug = nullptr;
         IRenderPassComponent *materialThin = nullptr;
         IRenderPassComponent *materialShade = nullptr;
+        IRenderPassComponent *openpbrSkinning = nullptr;
     };
 
     using SceneRenderGraphPassCondition = std::function<bool(SceneRenderGraphPassId)>;

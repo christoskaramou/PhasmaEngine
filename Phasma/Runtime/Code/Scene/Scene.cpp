@@ -505,7 +505,7 @@ namespace pe
         }
     }
 
-    void Scene::UpdatePhysicsZones()
+    void Scene::UpdatePhysicsZones(bool applyForces)
     {
         // Physics section: only meaningful while simulating (Jolt bodies are live in play). Each enabled
         // zone registers one body shaped to the common `shape` — half-extents/radius = 0.5 local, which
@@ -596,7 +596,10 @@ namespace pe
 
             // Force field: push every body currently overlapping the sensor by physicsForce each frame.
             // The inside-set is maintained by the sensor enter/exit callbacks (SetSceneZonePhysics*Trigger).
-            if (z->physicsBodyActive && z->physicsForceField && z->physicsMode == ZonePhysicsMode::Sensor)
+            const bool forceField = z->physicsBodyActive &&
+                                    z->physicsForceField &&
+                                    z->physicsMode == ZonePhysicsMode::Sensor;
+            if (applyForces && forceField)
             {
                 auto &inside = z->physicsBodiesInside;
                 for (size_t k = 0; k < inside.size();)
@@ -622,6 +625,11 @@ namespace pe
 
     void Scene::Update()
     {
+        // The editor's late catch-up runs Scene::Update twice in a frame: time-driven state advances once.
+        const uint32_t frameCounter = RHII.GetFrameCounter();
+        const bool advanceTime = frameCounter != m_timeAdvanceFrame;
+        m_timeAdvanceFrame = frameCounter;
+
         {
             PE_PROFILE_SCOPE("Camera Update");
             UpdateCameras();
@@ -629,10 +637,11 @@ namespace pe
 
         UpdateTriggerZones();
         UpdateAudioZones();
-        UpdatePhysicsZones();
+        UpdatePhysicsZones(advanceTime);
 
         UpdateSpriteAnimations(std::max(0.0f, static_cast<float>(FrameTimer::Instance().GetDelta()) *
-                                                  Settings::Get<SceneSettings>().time_scale));
+                                                  Settings::Get<SceneSettings>().time_scale),
+                               advanceTime);
 
         if (const bool linear = Settings::Get<SceneSettings>().linear_color; linear != m_linearColorViews)
         {
@@ -646,7 +655,7 @@ namespace pe
         if (Settings::Get<SceneSettings>().selection_outline)
             UpdateMeshSelectionFlags();
         UpdateLights();
-        if (m_particleManager)
+        if (m_particleManager && advanceTime)
             m_particleManager->Update();
     }
 
@@ -1991,7 +2000,7 @@ namespace pe
         }
     }
 
-    void Scene::DispatchShadowCull(CommandBuffer *cmd, PassInfo *passInfo, const vec4 frustumPlanes[6])
+    void Scene::DispatchShadowCull(CommandBuffer *cmd, PassInfo *passInfo, const vec4 frustumPlanes[6], bool generatedMasks)
     {
         if (!passInfo || !m_indirectAll || m_meshCount == 0)
             return;
@@ -2000,7 +2009,7 @@ namespace pe
         const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
         const uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         const uint64_t indirectAllSize = static_cast<uint64_t>(m_indirectAll->Size());
-        const uint64_t countersSize = 3 * sizeof(uint32_t);
+        const uint64_t countersSize = 4 * sizeof(uint32_t);
 
         auto makeBufferBarrier = [](Buffer *buffer, PeBarrierSync stageMask, PeBarrierAccess accessMask, uint64_t size)
         {
@@ -2020,13 +2029,14 @@ namespace pe
             {
                 cmd->FillBuffer(m_shadowIndirectRegular[frame], 0, indirectSize, 0);
                 cmd->FillBuffer(m_shadowIndirectVoxels[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_shadowIndirectMask[frame], 0, indirectSize, 0);
             }
         }
 
         {
             PE_PROFILE_SCOPE("ShadowCull Compute Access Barriers");
             std::vector<BufferBarrierInfo> barriers;
-            barriers.reserve(5);
+            barriers.reserve(6);
             if (indirectAllSize > 0)
             {
                 barriers.push_back(makeBufferBarrier(m_indirectAll,
@@ -2042,6 +2052,7 @@ namespace pe
             // unsynchronised between the per-cascade dispatches.
             barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectRegular[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectVoxels[frame]->Size()));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectMask[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectMask[frame]->Size()));
             cmd->BufferBarriers(barriers);
         }
 
@@ -2057,6 +2068,7 @@ namespace pe
             set->SetBuffer(2, m_shadowCullCounters[frame]);
             set->SetBuffer(3, m_shadowIndirectRegular[frame]);
             set->SetBuffer(4, m_shadowIndirectVoxels[frame]);
+            set->SetBuffer(5, m_shadowIndirectMask[frame]);
             set->SetBuffer(12, GetUniforms(frame));
             set->SetBuffer(19, m_drawInstanceIds[frame]);
             // LOD params (binding 16) so shadow casters pick the same distance-based LOD as the main pass.
@@ -2071,7 +2083,8 @@ namespace pe
         {
             uint32_t maxDrawCount;
             uint32_t arenaSlotBase;
-            uint32_t pad0[2];
+            uint32_t generatedMasks;
+            uint32_t pad0;
             alignas(16) vec4 planes[6];
             float cameraPos[3];
             float shadowLodBias;
@@ -2080,6 +2093,7 @@ namespace pe
         constants.maxDrawCount = m_meshCount;
         // No arena: m_arenaSlotBase stays 0 — treat all draws as regular (idx >= meshCount is never true).
         constants.arenaSlotBase = HasArenaVoxels() ? m_arenaSlotBase : m_meshCount;
+        constants.generatedMasks = generatedMasks ? 1u : 0u;
         for (int i = 0; i < 6; ++i)
             constants.planes[i] = frustumPlanes[i];
         if (Camera *camera = m_cameras.empty() ? nullptr : m_cameras[0])
@@ -2107,12 +2121,13 @@ namespace pe
             recordComputeWrite(m_shadowCullCounters[frame]);
             recordComputeWrite(m_shadowIndirectRegular[frame]);
             recordComputeWrite(m_shadowIndirectVoxels[frame]);
+            recordComputeWrite(m_shadowIndirectMask[frame]);
         }
 
         {
             PE_PROFILE_SCOPE("ShadowCull Final Indirect Barriers");
             std::vector<BufferBarrierInfo> barriers;
-            barriers.reserve(4);
+            barriers.reserve(5);
             barriers.push_back(makeBufferBarrier(m_drawInstanceIds[frame],
                                                  PE_STAGE_VERTEX_INPUT,
                                                  PE_ACCESS_VERTEX_ATTRIBUTE_READ,
@@ -2125,6 +2140,10 @@ namespace pe
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,
                                                  m_shadowIndirectVoxels[frame]->Size()));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectMask[frame],
+                                                 PE_STAGE_DRAW_INDIRECT,
+                                                 PE_ACCESS_INDIRECT_COMMAND_READ,
+                                                 m_shadowIndirectMask[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowCullCounters[frame],
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,

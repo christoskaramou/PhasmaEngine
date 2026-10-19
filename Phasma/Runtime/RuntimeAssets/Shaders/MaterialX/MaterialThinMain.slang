@@ -18,11 +18,11 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
     if (!PeMatchesModule(pe_materialBytes, pe_constants[vis.x - 1u], pc.moduleIndex))
         return;
 
-    const PeTriangle tri = PeLoadTriangle(pe_geometry, pe_frameData, pe_constants, pc.verticesOffset, vis);
+    const PeTriangle tri = PeLoadTriangle(pe_geometry, pe_frameData, pe_deformed, pe_constants, pc.verticesOffset, vis);
     const PeSurfacePoint sp = PeSurfaceAt(tri, float2(lanePixel) + 0.5, float2(size));
 
     pe_load_material(pe_materialBytes, pe_constants[vis.x - 1u].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    const PeThin thin = pe_material_thin(sp);
+    const PeThin thin = pe_material_thin(sp, sp.nextUv, sp.spriteBlend);
 
     if (!all(lane == (pixel & 1u)))
         return;

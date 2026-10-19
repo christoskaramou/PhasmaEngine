@@ -23,6 +23,7 @@ struct PushConstants_VisibilityDebug
 [[vk::binding(5, 0)]] StructuredBuffer<Mesh_Constants> pe_constants;
 [[vk::binding(6, 0)]] StructuredBuffer<MaterialGpuData> pe_materialTable;
 [[vk::binding(7, 0)]] ByteAddressBuffer pe_materialBytes;
+[[vk::binding(9, 0)]] ByteAddressBuffer pe_deformed;
 [[vk::image_format("rgba8")]][[vk::binding(8, 0)]] RWTexture2D<float4> pe_debug;
 
 [[vk::binding(0, 1)]] SamplerState pe_materialSampler;
@@ -45,18 +46,25 @@ MaterialGpuData PeMaterial(uint id)
 }
 
 // GBufferPS.hlsl's albedo output: base texture x vertex colour x factor, sRGB-encoded under linear_color.
-float3 PeGBufferAlbedo(uint id, float2 uv, float4 vertexColor)
+float3 PeGBufferAlbedo(uint id, PeSurfacePoint sp)
 {
     const MaterialGpuData mat = PeMaterial(id);
     const uint index = uint(pe_constants[id].meshImageIndex[0]);
 
     float4 sampled = float4(1.0, 1.0, 1.0, 1.0);
     if (HasTexture(pe_constants[id].textureMask, TEX_BASE_COLOR_BIT) && index != 0xFFFFFFFF)
-        sampled = pe_textures[NonUniformResourceIndex(index)].Sample(pe_materialSampler, uv);
+    {
+        sampled = pe_textures[NonUniformResourceIndex(index)].Sample(pe_materialSampler, sp.uv0);
+        if (sp.spriteBlend > 0.0)
+        {
+            const float4 next = pe_textures[NonUniformResourceIndex(index)].Sample(pe_materialSampler, sp.nextUv);
+            sampled = lerp(sampled, next, sp.spriteBlend);
+        }
+    }
 
-    float4 authored = vertexColor * mat.baseColorFactor;
+    float4 authored = sp.color0 * mat.baseColorFactor;
     if (pc.linearColor != 0)
-        authored.rgb = SrgbToLinear(vertexColor.rgb) * SrgbToLinear(mat.baseColorFactor.rgb);
+        authored.rgb = SrgbToLinear(sp.color0.rgb) * SrgbToLinear(mat.baseColorFactor.rgb);
 
     const float4 combined = sampled * authored;
     return pc.linearColor != 0 ? LinearToSrgb(combined.rgb) : combined.rgb;
@@ -84,9 +92,9 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
         return;
     }
 
-    const PeTriangle tri = PeLoadTriangle(pe_geometry, pe_frameData, pe_constants, pc.verticesOffset, vis);
+    const PeTriangle tri = PeLoadTriangle(pe_geometry, pe_frameData, pe_deformed, pe_constants, pc.verticesOffset, vis);
     const PeSurfacePoint sp = PeSurfaceAt(tri, float2(lanePixel) + 0.5, float2(size));
-    const float3 albedo = PeGBufferAlbedo(vis.x - 1u, sp.uv0, sp.color0);
+    const float3 albedo = PeGBufferAlbedo(vis.x - 1u, sp);
     if (!owner)
         return;
 

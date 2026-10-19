@@ -25,7 +25,8 @@ void mainPS(PS_INPUT_Position_Uv_ID input)
     const float spriteBlend = saturate(input.spriteBlend);
     if (spriteBlend > 0.0f && HasTexture(constants[id].textureMask, TEX_BASE_COLOR_BIT))
         sampledBase = lerp(sampledBase, GetBaseColor(id, input.nextUv), spriteBlend);
+    // Same coverage as GBufferPS and the generated masks: zero alpha never covers, even at cutoff 0.
     float alpha = sampledBase.a * input.alphaFactor;
-    if (alpha < constants[id].alphaCut)
+    if (alpha <= 0.0f || alpha < constants[id].alphaCut)
         discard;
 }

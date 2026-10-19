@@ -1,5 +1,7 @@
 #pragma once
 
+#include "OpenPBRMask.h"
+
 #include <memory>
 #include <vector>
 
@@ -33,12 +35,22 @@ namespace pe
             std::vector<PassInfo *> passInfos{m_passInfo.get()};
             if (m_passInfoDS)
                 passInfos.push_back(m_passInfoDS.get());
+            m_masks.AppendPassInfos(passInfos);
             return passInfos;
         }
 
         void SetScene(Scene *scene) { m_scene = scene; }
+        void SyncMaskModules(Scene &scene, bool enabled)
+        {
+            // Mask pipelines write the visibility target: build them only while this pass has it.
+            if (enabled && m_visibility)
+                m_masks.Sync(scene);
+            else
+                m_masks.Clear();
+        }
 
     private:
+        OpenPBRMask m_masks;
         std::shared_ptr<PassInfo> m_passInfoDS;
 
         Image *m_depthStencil = nullptr;

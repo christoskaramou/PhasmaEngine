@@ -2,6 +2,7 @@
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/SceneRuntimeHooks.h"
+#include "Render/SceneRenderTargets.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Queue.h"
@@ -1372,6 +1373,12 @@ namespace pe
             barrier.buffer = m_buffer;
             barrier.stageMask = PE_STAGE_VERTEX_INPUT;
             barrier.accessMask = PE_ACCESS_VERTEX_ATTRIBUTE_READ;
+            if (SceneUsesOpenPBR())
+            {
+                barrier.stageMask |= PE_STAGE_COMPUTE_SHADER;
+                barrier.accessMask |= PE_ACCESS_SHADER_READ;
+            }
+
             barrier.offset = 0;
             barrier.size = m_buffer->Size();
             cmd->BufferBarrier(barrier);

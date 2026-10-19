@@ -4,6 +4,8 @@
 
 namespace pe
 {
+    inline constexpr uint32_t kOpenPBRModuleAbi = 2;
+
     struct Mesh;
     class Scene;
     class ImageView;
@@ -37,6 +39,7 @@ namespace pe
         OpenPBRLayout layout;
         std::string thinSource;
         std::string shadeSource;
+        std::string maskSource;
     };
 
     struct OpenPBRTexture

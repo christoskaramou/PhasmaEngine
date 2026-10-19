@@ -7,6 +7,16 @@ struct PushConstants_DepthPass
     uint jointsCount;
 };
 
+struct PushConstants_OpenPBRMask
+{
+    uint jointsCount;
+    uint verticesOffset;
+    uint moduleIndex;
+    uint padding;
+    float4 cameraPosition;
+    float4x4 lightViewProjection;
+};
+
 struct PushConstants_f2
 {
     float2 values;
@@ -187,6 +197,9 @@ struct VS_INPUT_Gbuffer
     uint4 joints : BLENDINDICES;
     float4 weights : BLENDWEIGHT;
     uint id : PE_DRAW_ID;
+#ifdef PE_DEFORMED_VERTEX
+    uint vertexId : SV_VertexID;
+#endif
 };
 
 float4 ApplyViewportYConvention(float4 position)
@@ -205,6 +218,9 @@ struct VS_OUTPUT_Position
 struct VS_OUTPUT_Position_Uv
 {
     float2 uv : TEXCOORD0;
+#ifdef PE_MASK_FALLBACK
+    nointerpolation uint maskEligible : TEXCOORD1;
+#endif
     float4 position : SV_POSITION;
 };
 
@@ -222,6 +238,21 @@ struct VS_OUTPUT_Position_Uv_ID
     float4 position : SV_POSITION;
 };
 
+struct VS_OUTPUT_OpenPBRMask
+{
+    float4 position : SV_POSITION;
+    float3 worldPosition : TEXCOORD0;
+    float3 normal : TEXCOORD1;
+    float4 tangent : TEXCOORD2;
+    float4 color : COLOR0;
+    float2 uv : TEXCOORD3;
+    float2 nextUv : TEXCOORD4;
+    nointerpolation float spriteBlend : TEXCOORD5;
+    nointerpolation uint id : TEXCOORD6;
+    nointerpolation uint vertexId : TEXCOORD7;
+    nointerpolation uint maskEligible : TEXCOORD8;
+};
+
 struct VS_OUTPUT_Gbuffer
 {
     float2 uv : TEXCOORD0;
@@ -234,6 +265,9 @@ struct VS_OUTPUT_Gbuffer
     nointerpolation uint id : TEXCOORD5;
     float2 nextUv : TEXCOORD6;
     float spriteBlend : TEXCOORD7;
+#if defined(PE_DEFORMED_VERTEX) || defined(GBUFFER_GENERATED_MASK)
+    nointerpolation uint maskEligible : TEXCOORD8;
+#endif
     float4 position : SV_POSITION;
 };
 
@@ -257,6 +291,9 @@ struct PS_INPUT_Gbuffer
     nointerpolation uint id : TEXCOORD5;
     float2 nextUv : TEXCOORD6;
     float spriteBlend : TEXCOORD7;
+#if defined(PE_DEFORMED_VERTEX) || defined(GBUFFER_GENERATED_MASK)
+    nointerpolation uint maskEligible : TEXCOORD8;
+#endif
 };
 
 struct PS_INPUT_Position_Uv

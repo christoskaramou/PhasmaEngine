@@ -981,6 +981,7 @@ namespace pe
         BindMaterialBuffer(set, 16, scene->GetUniforms(frame));
         BindMaterialBuffer(set, 17, scene->GetMeshConstants());
         BindMaterialBuffer(set, 18, scene->GetMaterialByteBuffer());
+        BindMaterialBuffer(set, 20, scene->GetOpenPBRSkinningBinding(frame));
         if (set->HasBinding(19))
             set->SetImageView(19, m_viewportRT->GetUAV(0));
 
@@ -1107,6 +1108,9 @@ namespace pe
 
         auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
         Scene *scene = GetActiveScene();
+        if (scene)
+            builder.ReadBuffer(scene->GetOpenPBRSkinningBuffer(RHII.GetFrameIndex()));
+
         if (Settings::Get<SceneSettings>().global_illumination &&
             gi &&
             scene &&

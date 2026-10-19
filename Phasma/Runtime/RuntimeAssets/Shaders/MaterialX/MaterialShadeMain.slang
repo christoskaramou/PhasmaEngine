@@ -18,7 +18,8 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
     if (!PeMatchesModule(pe_materialBytes, pe_constants[vis.x - 1u], pc.module_index))
         return;
 
-    const PeTriangle tri = PeLoadTriangle(pe_geometry, pe_frameData, pe_constants, pc.vertices_offset, vis);
+    const PeTriangle tri = PeLoadTriangle(pe_geometry, pe_frameData, pe_deformed,
+                                         pe_constants, pc.vertices_offset, vis);
     PeSurfacePoint sp = PeSurfaceAt(tri, float2(lanePixel) + 0.5, float2(size));
     PeBendLimbNormal(tri, normalize(cb_camPos.xyz - sp.P), sp);
 
@@ -30,7 +31,7 @@ void mainCS(uint3 tid : SV_DispatchThreadID)
 
     pe_load_material(pe_materialBytes, pe_constants[vis.x - 1u].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
     pe_fill_vertex_data(sp);
-    float3 color = pe_material_shade().rgb;
+    float3 color = pe_material_shade(sp.nextUv, sp.spriteBlend).rgb;
 
     if (cb_fogDensity > 0.0f) // LightingPS's distance haze, toward the blurred sky behind the pixel
     {
