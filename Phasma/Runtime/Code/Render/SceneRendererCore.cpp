@@ -13,6 +13,7 @@
 #include "Scene/MaterialReflection.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "RenderPasses/RayTracingPass.h"
 #include "RenderPasses/MaterialThinPass.h"
 #include "RenderPasses/LightPass.h"
 
@@ -221,6 +222,34 @@ namespace pe
 
         if (m_renderGraphPassInitialized[static_cast<size_t>(SceneRenderGraphPassId::MaterialShade)])
             static_cast<MaterialShadePass *>(m_scenePasses.materialShade)->SyncModules(modules);
+
+        SyncRTHitModules();
+    }
+
+    // RT hit groups and the TLAS offsets that select them follow the scene's modules while OpenPBR is effective and its
+    // sky (bound by module hits) exists, in the same frame; the first RT pass to trace refits the instances before any
+    // ray reads them.
+    void SceneRendererCore::SyncRTHitModules()
+    {
+        static const std::vector<uint32_t> noModules;
+        Scene *scene = GetActiveScene();
+        const bool openpbrSky = m_skyBox.GetOpenPBRRadiance() && m_skyBox.GetOpenPBRIrradiance();
+        const std::vector<uint32_t> &modules = SceneUsesOpenPBR() && openpbrSky && scene ? scene->GetOpenPBRModules()
+                                                                                         : noModules;
+        if (scene)
+            scene->SetRTHitModules(modules);
+
+        const std::pair<SceneRenderGraphPassId, IRenderPassComponent *> rayTracers[] = {
+            {SceneRenderGraphPassId::RayTracing, m_scenePasses.rayTracing},
+            {SceneRenderGraphPassId::GlobalIllumination, m_scenePasses.globalIllumination},
+            {SceneRenderGraphPassId::ScreenProbes, m_scenePasses.screenProbes},
+            {SceneRenderGraphPassId::Reflections, m_scenePasses.reflections},
+        };
+        for (const auto &[id, pass] : rayTracers)
+        {
+            if (pass && m_renderGraphPassInitialized[static_cast<size_t>(id)])
+                static_cast<RayTracingPass *>(pass)->SyncHitModules(modules);
+        }
     }
 
     bool SceneRendererCore::IsPassEnabled(SceneRenderGraphPassId passId) const

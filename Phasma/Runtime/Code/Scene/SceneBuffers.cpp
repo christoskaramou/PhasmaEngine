@@ -1396,6 +1396,11 @@ namespace pe
                 totalBytes = static_cast<uint32_t>(next);
             }
         }
+
+        // A mesh can change module (or two can swap) with the hit-module list unchanged: rewrite the TLAS hit-group offsets.
+        if (!m_rtHitModules.empty())
+            m_tlasMasksDirty = true;
+
         PE_PROFILE_SCOPE("Scene Material Byte Upload");
         if (totalBytes == 0)
             totalBytes = 4;

@@ -98,6 +98,8 @@ namespace pe
         void DestroyScreenshotBuffer();
 
     private:
+        void SyncRTHitModules();
+
         void InitEnabledRenderPassComponents(CommandBuffer *cmd);
 
         RenderGraph m_renderGraph;

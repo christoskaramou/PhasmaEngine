@@ -590,6 +590,9 @@ namespace pe
         Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
         const std::vector<uint32_t> &GetOpenPBRModules() const { return m_openpbrModules; }
         const std::vector<uint32_t> &GetOpenPBRMaskModules() const { return m_openpbrMaskModules; }
+        // MaterialX modules with an RT hit group after the legacy one, in SBT order; empty while OpenPBR is off.
+        void SetRTHitModules(const std::vector<uint32_t> &modules);
+        const std::vector<uint32_t> &GetRTHitModules() const { return m_rtHitModules; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
@@ -1071,7 +1074,8 @@ namespace pe
         // RT dirty flags (independent of raster geometry)
         bool m_blasDirty = false;      // BLAS rebuild needed (geometry buffer was recreated)
         bool m_tlasDirty = false;      // TLAS rebuild needed (instance set changed)
-        bool m_tlasMasksDirty = false; // render visibility changed: refit the TLAS instance masks
+        bool m_tlasMasksDirty = false; // render visibility or hit groups changed: refit the TLAS instance records
+        std::vector<uint32_t> m_rtHitModules;
 
         // --- Light data ---
         LightsUBO m_lightsUBO{};

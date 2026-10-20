@@ -20,7 +20,7 @@ namespace pe
         uint32_t renderMode; // 0=Raster, 1=Hybrid, 2=RayTracing
         uint32_t orthographicCamera;
         uint32_t linear_color; // decode authored colours at hits
-        uint32_t padding;      // Alignment padding
+        uint32_t env_samples;  // MaterialX hits: openpbr_env_samples (RTCommon cb_envSamples)
     };
 
     class RayTracingPass : public IRenderPassComponent
@@ -39,7 +39,12 @@ namespace pe
 
         void SetScene(Scene *scene) { m_scene = scene; }
 
+        // One hit group per MaterialX module after the legacy group, in Scene::GetRTHitModules order (OpenPBR).
+        void SyncHitModules(const std::vector<uint32_t> &modules);
+
     protected:
+        void BuildTracePipeline();
+
         bool m_probeTracing = false;
         bool m_screenProbes = false; // probe tracing for ScreenProbePass
         bool m_reflections = false;  // probe tracing for ReflectionPass
@@ -52,5 +57,8 @@ namespace pe
         std::vector<Buffer *> m_boundLightStorage; // per frame: a grown light buffer replaces the old one
         std::vector<Buffer *> m_uniforms;
         uint64_t m_lastGeometryVersion = 0;
+        std::vector<uint32_t> m_hitModules;     // MaterialX modules with a hit group, in SBT order after the legacy group
+        Buffer *m_boundMaterialBytes = nullptr; // the hit groups' bindings follow a repacked buffer or a rebuilt sky
+        Image *m_boundEnvRadiance = nullptr;
     };
 } // namespace pe

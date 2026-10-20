@@ -11,6 +11,7 @@
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Render/SceneRendererHost.h"
@@ -30,6 +31,11 @@ namespace pe
     }
 
     void RayTracingPass::UpdatePassInfo()
+    {
+        BuildTracePipeline();
+    }
+
+    void RayTracingPass::BuildTracePipeline()
     {
         std::vector<Define> defines;
         if (m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT)
@@ -54,8 +60,49 @@ namespace pe
         m_passInfo->acceleration.rayGen = rayGen;
         m_passInfo->acceleration.miss = {miss};
         m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
+
+        // Each MaterialX module runs its graph at the hit; instances select a group by their SBT offset (WriteRTInstances).
+        // Module hits read only these defines, so passes that agree on them share one compiled shader (about 4 s cold
+        // per closest-hit); every pass shares the any-hit. SCREEN_PROBES and REFLECTIONS also select this frame's probe
+        // atlas (ProbeVolume.hlsl GI_AFTER_UPDATE), as their legacy hits do.
+        std::vector<Define> hitDefines = {{"PE_MATERIAL_HIT", "1"}, {m_probeTracing ? "GI_PROBES" : "GI_SHADING", "1"}};
+        if (m_screenProbes)
+            hitDefines.push_back({"SCREEN_PROBES", "1"});
+
+        if (m_reflections)
+            hitDefines.push_back({"REFLECTIONS", "1"});
+
+        const std::vector<Define> maskDefines = {{"PE_MATERIAL_HIT", "1"}, {"GI_PROBES", "1"}};
+        for (uint32_t module : m_hitModules)
+        {
+            const std::string &source = GetOpenPBRModule(module).hitSource;
+            Shader *moduleHit = Shader::Create({.sourcePath = source,
+                                                .entryPoint = "pe_hit_closest",
+                                                .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR,
+                                                .defines = hitDefines});
+            Shader *moduleMask = Shader::Create({.sourcePath = source,
+                                                 .entryPoint = "pe_hit_any",
+                                                 .stage = PE_SHADER_STAGE_ANY_HIT_KHR,
+                                                 .defines = maskDefines});
+            m_passInfo->acceleration.hitGroups.push_back({.closestHit = moduleHit, .anyHit = moduleMask});
+        }
+
         m_passInfo->acceleration.maxRecursionDepth = 4;
         m_passInfo->Update();
+    }
+
+    void RayTracingPass::SyncHitModules(const std::vector<uint32_t> &modules)
+    {
+        if (modules == m_hitModules)
+            return;
+
+        m_hitModules = modules;
+
+        // In-flight frames still use the old pipeline's descriptor sets: retire them with the frame, as module passes do.
+        RHII.AddToDeletionQueue([retired = m_passInfo] {});
+        m_passInfo = std::make_shared<PassInfo>();
+        BuildTracePipeline();
+        UpdateDescriptorSets();
     }
 
     void RayTracingPass::CreateUniforms(CommandBuffer *cmd)
@@ -130,6 +177,32 @@ namespace pe
                 m_boundLightStorage[i] = scene.GetLightStorage(i);
                 if (desc->HasBinding(3))
                     desc->SetImageView(3, m_rtDepth->GetUAV(0));
+
+                // MaterialX hit groups (MaterialHitHead.slang): each binding is in the layout only if a module hit reads it.
+                const SkyBox &sky = RequireActiveSceneRendererHost().GetSkyBox();
+                m_boundMaterialBytes = scene.GetMaterialByteBuffer();
+                m_boundEnvRadiance = sky.GetOpenPBRRadiance();
+                if (desc->HasBinding(4))
+                    desc->SetBuffer(4, m_boundMaterialBytes);
+
+                if (desc->HasBinding(6))
+                    desc->SetSamplers(6, scene.GetOpenPBRSamplers());
+
+                // A rebuild before the frame's sync can still carry module groups after openpbr destroyed the sky; the
+                // sync drops them before any ray is traced.
+                Image *irradiance = sky.GetOpenPBRIrradiance();
+                if (m_boundEnvRadiance && irradiance)
+                {
+                    if (desc->HasBinding(5))
+                        desc->SetSampler(5, m_boundEnvRadiance->GetSampler());
+
+                    if (desc->HasBinding(7))
+                        desc->SetImageView(7, m_boundEnvRadiance->GetSRV());
+
+                    if (desc->HasBinding(8))
+                        desc->SetImageView(8, irradiance->GetSRV());
+                }
+
                 desc->Update();
             }
             if (!m_probeTracing && descriptors.size() > 2 && descriptors[2])
@@ -167,6 +240,7 @@ namespace pe
             ubo.ibl_intensity = 0.f;
         ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
         ubo.linear_color = SceneUsesLinearColor() ? 1u : 0u;
+        ubo.env_samples = static_cast<uint32_t>(std::clamp(gSettings.openpbr_env_samples, 1, 512));
 
         BufferRange range{};
         range.data = &ubo;
@@ -192,6 +266,13 @@ namespace pe
             m_tlas = tlas;
             m_lastGeometryVersion = geoVersion;
         }
+
+        const bool hitBindingsMoved = !m_hitModules.empty() &&
+                                      (m_boundMaterialBytes != scene.GetMaterialByteBuffer() ||
+                                       m_boundEnvRadiance != RequireActiveSceneRendererHost().GetSkyBox().GetOpenPBRRadiance());
+        if (hitBindingsMoved)
+            UpdateDescriptorSets();
+
         if (!m_probeTracing)
         {
             const auto &sets = m_passInfo->GetDescriptors(frame);
@@ -317,6 +398,11 @@ namespace pe
             rs->DestroyRenderTarget("rtDepth");
 
         m_rtDepth = nullptr;
+
+        // A released pass re-initializes legacy-only; the frame's SyncHitModules adds the modules back.
+        m_hitModules.clear();
+        m_boundMaterialBytes = nullptr;
+        m_boundEnvRadiance = nullptr;
     }
 
 } // namespace pe

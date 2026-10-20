@@ -89,6 +89,56 @@ namespace pe
             return std::regex_search(text, std::regex("\\b" + name + "\\b"));
         }
 
+        // RT hit stages (PE_MATERIAL_HIT) have no derivatives: zero differentials there (mip 0, as legacy hits sample),
+        // the builtins everywhere else. Subsurface's curvature ratio would become 0/0, so hits read the hit triangle's.
+        constexpr const char *kDerivativeSeams = R"(#ifdef PE_MATERIAL_HIT
+#define pe_ddx(x) ((x) * 0.0)
+#define pe_ddy(x) ((x) * 0.0)
+#define pe_fwidth(x) ((x) * 0.0)
+#define pe_ddx_fine(x) ((x) * 0.0)
+#define pe_ddy_fine(x) ((x) * 0.0)
+#define pe_ddx_coarse(x) ((x) * 0.0)
+#define pe_ddy_coarse(x) ((x) * 0.0)
+float pe_curvature(float3 N, float3 P)
+{
+    return pe_hit_curvature;
+}
+#else
+#define pe_ddx(x) ddx(x)
+#define pe_ddy(x) ddy(x)
+#define pe_fwidth(x) fwidth(x)
+#define pe_ddx_fine(x) ddx_fine(x)
+#define pe_ddy_fine(x) ddy_fine(x)
+#define pe_ddx_coarse(x) ddx_coarse(x)
+#define pe_ddy_coarse(x) ddy_coarse(x)
+float pe_curvature(float3 N, float3 P)
+{
+    return length(fwidth(N)) / length(fwidth(P));
+}
+#endif
+)";
+
+        bool AddDerivativeSeams(std::string &text, const std::string &name, std::string &error)
+        {
+            const std::string curvature = "length(fwidth(N)) / length(fwidth(P))";
+            size_t at = text.find(curvature);
+            if (at == std::string::npos && References(text, "mx_subsurface_scattering_approx"))
+            {
+                error = name + ": subsurface curvature expression not found (MaterialX changed it; update the hit seam)";
+                return false;
+            }
+
+            while (at != std::string::npos)
+            {
+                text.replace(at, curvature.size(), "pe_curvature(N, P)");
+                at = text.find(curvature, at);
+            }
+
+            static const std::regex derivative(R"((^|[^\w.])(ddx|ddy|fwidth|ddx_fine|ddy_fine|ddx_coarse|ddy_coarse)(?=\s*\())");
+            text = kDerivativeSeams + std::regex_replace(text, derivative, "$1pe_$2");
+            return true;
+        }
+
         // [first, last] of "<header> ... { ... }" with balanced braces, or npos when absent.
         std::pair<size_t, size_t> FindBlock(const std::string &text, const std::string &header)
         {
@@ -464,6 +514,8 @@ namespace pe
 
                 text.replace(cbStart, cbEnd - cbStart + 1, statics);
                 text = std::regex_replace(text, std::regex("\\bu_viewPosition\\b"), "pe_view_position()");
+                if (!AddDerivativeSeams(text, name, error))
+                    return false;
 
                 for (const std::string &var : dropped)
                 {

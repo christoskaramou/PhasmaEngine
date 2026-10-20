@@ -4,7 +4,7 @@
 
 namespace pe
 {
-    inline constexpr uint32_t kOpenPBRModuleAbi = 2;
+    inline constexpr uint32_t kOpenPBRModuleAbi = 3;
 
     struct Mesh;
     class Scene;
@@ -40,6 +40,7 @@ namespace pe
         std::string thinSource;
         std::string shadeSource;
         std::string maskSource;
+        std::string hitSource; // RT closest-hit wrapper (MaterialHit*.slang)
     };
 
     struct OpenPBRTexture

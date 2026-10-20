@@ -171,6 +171,11 @@ Empty-bin compaction is deferred to the performance phase.
 - **Ray-traced secondary rays** (reflections, GI hits).
   - Correct answer: per-material hit groups that run the generated graph at the hit (UE's hit-lighting model). That is Phase 5.
   - Until then, hits use the legacy-mirrored constant values (base colour, metalness, roughness, IOR, emission) through the legacy hit shading. That is an approximation even for untextured materials: coat, fuzz, thin film and subsurface are absent at hits. The GI fold is as today.
+  - *Amended 2026-10-20 (Phase 5 implemented, [plan](../plans/2026-10-20-openpbr-phase5.md)):* each module has its own hit group, selected by the TLAS instance's SBT offset.
+    - Reflection and camera hits run `pe_material_shade` under the legacy hit's lights, shadow rays and probe irradiance, with the OpenPBR sky for FIS.
+    - GI and screen-probe hits evaluate the graph's inputs through the legacy surface-cache fold. That was the user's choice (B) over a full shade at every hit, and it keeps specular fireflies out of the probes.
+    - Alpha-cut modules use the generated mask at any-hit.
+    - Limits: texture LOD at hits is mip 0 (no ray cones); subsurface's curvature comes from the hit triangle, since hits have no derivatives (generated-module ABI 3); skinned meshes and sprites are still absent from the TLAS.
 - **Transparent / alpha-blend / transmission surfaces** (Phase 6): the generated code in a forward pixel shader, where hardware derivatives are native.
 - **Skinned meshes and sprites** (Phase 4): compute pre-skinning into current and previous vertex buffers (as Horizon Forbidden West does). These feed the visibility raster and the resolve.
 - **Alpha-cut:** a generated opacity-only `Mask()` in the visibility pixel shader.

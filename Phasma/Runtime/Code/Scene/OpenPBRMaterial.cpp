@@ -329,6 +329,7 @@ namespace pe
                     module->thinSource = dir + "MaterialThin.slang";
                     module->shadeSource = dir + "MaterialShade.slang";
                     module->maskSource = dir + "MaterialMask.slang";
+                    module->hitSource = dir + "MaterialHit.slang";
                 }
                 catch (const std::exception &error)
                 {
@@ -384,9 +385,11 @@ namespace pe
             module->thinSource = cached + ".thin.slang";
             module->shadeSource = cached + ".shade.slang";
             module->maskSource = cached + ".mask.slang";
+            module->hitSource = cached + ".hit.slang";
             WriteWrapper(module->thinSource, modulePath, "MaterialThin");
             WriteWrapper(module->shadeSource, modulePath, "MaterialShade");
             WriteWrapper(module->maskSource, modulePath, "MaterialMask");
+            WriteWrapper(module->hitSource, modulePath, "MaterialHit");
 
             registry.modules.push_back(module);
             return module;

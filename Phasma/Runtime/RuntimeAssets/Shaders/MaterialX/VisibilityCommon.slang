@@ -193,11 +193,10 @@ float3 PeClipBarycentrics(float4 c0, float4 c1, float4 c2, float2 ndc)
     return n / (n.x + n.y + n.z);
 }
 
-// The surface a pixel shader rasterising tri would see at ndc: GBufferVS's world transforms (remove_scale3x3 for
-// normals and tangents), perspective-correct attributes, SV_Position = (pixel centre, NDC depth, 1/w).
-PeSurfacePoint PeSurfaceAt(PeTriangle t, float2 pixelCentre, float2 size)
+// The surface at barycentrics b: GBufferVS's world transforms (remove_scale3x3 for normals and tangents) and its
+// attributes. svPosition is the caller's (zero for RT hits, which have no pixel).
+PeSurfacePoint PeSurfaceAtBarycentrics(PeTriangle t, float3 b)
 {
-    const float3 b = PeClipBarycentrics(t.c0, t.c1, t.c2, PeNdcFromPixel(pixelCentre, size));
     const float3x3 rot = float3x3(normalize(t.world[0].xyz), normalize(t.world[1].xyz), normalize(t.world[2].xyz));
 
     PeSurfacePoint sp;
@@ -240,6 +239,17 @@ PeSurfacePoint PeSurfaceAt(PeTriangle t, float2 pixelCentre, float2 size)
     // Sprite animation stores one blend for the entire quad; keep graph-evaluation branches quad-uniform.
     sp.spriteBlend = t.v0.spriteBlend;
     sp.color0 = t.v0.color * b.x + t.v1.color * b.y + t.v2.color * b.z;
+    sp.svPosition = float4(0.0, 0.0, 0.0, 0.0);
+
+    return sp;
+}
+
+// The surface a pixel shader rasterising tri would see at ndc: perspective-correct barycentrics and
+// SV_Position = (pixel centre, NDC depth, 1/w).
+PeSurfacePoint PeSurfaceAt(PeTriangle t, float2 pixelCentre, float2 size)
+{
+    const float3 b = PeClipBarycentrics(t.c0, t.c1, t.c2, PeNdcFromPixel(pixelCentre, size));
+    PeSurfacePoint sp = PeSurfaceAtBarycentrics(t, b);
 
     const float clipW = dot(b, float3(t.c0.w, t.c1.w, t.c2.w));
     sp.svPosition = float4(pixelCentre, dot(b, float3(t.c0.z, t.c1.z, t.c2.z)) / clipW, 1.0 / clipW);

@@ -6,6 +6,7 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vertex.h"
+#include "Scene/OpenPBRMaterial.h"
 
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12AccelerationStructure.h"
@@ -21,6 +22,16 @@ namespace pe
             const PeGraphicsApi api = RHII.GetApi();
             return RHII.GetCaps().rayTracing &&
                    (api == PE_GRAPHICS_API_VULKAN || api == PE_GRAPHICS_API_DX12);
+        }
+
+        // A MaterialX mesh's hit group is 1 + its module's slot in the hit list; everything else uses the legacy group 0.
+        uint32_t RTHitGroup(const Mesh &mesh, const std::vector<uint32_t> &modules)
+        {
+            if (modules.empty() || !MeshUsesOpenPBR(mesh))
+                return 0;
+
+            const auto slot = std::find(modules.begin(), modules.end(), mesh.materialInstance->gpuOpenPBRModule);
+            return slot == modules.end() ? 0u : 1u + static_cast<uint32_t>(slot - modules.begin());
         }
 
         bool IsVulkanSceneRayTracing()
@@ -152,6 +163,15 @@ namespace pe
         m_tlasUpdateInstanceBuffers.clear();
     }
 
+    void Scene::SetRTHitModules(const std::vector<uint32_t> &modules)
+    {
+        if (modules == m_rtHitModules)
+            return;
+
+        m_rtHitModules = modules;
+        m_tlasMasksDirty = true;
+    }
+
     bool Scene::WriteRTInstances(Buffer *buffer)
     {
         if (!buffer || m_rtInstances.empty())
@@ -219,6 +239,7 @@ namespace pe
             // set_visible(false) keeps the instance (no rebuild); mask 0 makes every ray skip it.
             const bool hidden = m_nodeRuntime[record.nodeIndex].gpuData.renderVisible == 0u;
             const uint32_t mask = hidden ? 0x00u : (isTransparent ? 0x80u : 0x01u);
+            const uint32_t hitGroup = RTHitGroup(mesh, m_rtHitModules);
 
             if (vkInstances)
             {
@@ -227,7 +248,7 @@ namespace pe
                 vkInstances[i].transform = transformMatrix;
                 vkInstances[i].instanceCustomIndex = static_cast<uint32_t>(i);
                 vkInstances[i].mask = mask;
-                vkInstances[i].instanceShaderBindingTableRecordOffset = 0;
+                vkInstances[i].instanceShaderBindingTableRecordOffset = hitGroup;
                 vkInstances[i].flags = static_cast<VkGeometryInstanceFlagBitsKHR>(
                     vk::GeometryInstanceFlagBitsKHR::eTriangleFacingCullDisable);
                 vkInstances[i].accelerationStructureReference = blasIt->second->GetDeviceAddress();
@@ -238,7 +259,7 @@ namespace pe
                 FillDx12Transform(dxInstances[i].Transform, t);
                 dxInstances[i].InstanceID = static_cast<UINT>(i);
                 dxInstances[i].InstanceMask = mask;
-                dxInstances[i].InstanceContributionToHitGroupIndex = 0;
+                dxInstances[i].InstanceContributionToHitGroupIndex = hitGroup;
                 dxInstances[i].Flags = D3D12_RAYTRACING_INSTANCE_FLAG_TRIANGLE_CULL_DISABLE;
                 dxInstances[i].AccelerationStructure = blasIt->second->GetDeviceAddress();
             }
