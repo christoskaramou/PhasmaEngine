@@ -9,7 +9,6 @@
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "GbufferPass.h"
-#include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Render/SceneRenderTargets.h"
 #include "Scene/SceneAccess.h"
@@ -344,9 +343,9 @@ namespace pe
                 vec3(-1.0f, -1.0f, 0.0f),
             };
 
-            // Project frustum corners into world space
-            Image *displayRT = RequireActiveSceneRendererHost().GetDisplayRT();
-            const float aspect = displayRT->GetWidth_f() / displayRT->GetHeight_f();
+            // Project frustum corners into world space, with the camera's own projection aspect: the display target can be
+            // render-scaled (truncated) or replaced by the swapchain, and the editor's aspect modes letterbox it.
+            const float aspect = camera->GetAspect();
             const vec3 position = camera->GetPosition();
             mat4 projection;
             if (camera->IsOrthographic())
