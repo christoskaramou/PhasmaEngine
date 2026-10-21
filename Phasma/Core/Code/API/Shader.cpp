@@ -107,6 +107,16 @@ namespace pe
         {
             PE_ERROR_IF(shader->GetShaderStage() != expectedStage, "Invalid shader stage");
         }
+
+        // `file` is already weakly_canonical, so its hash is the watcher's key and the CompileShaders payload.
+        void WatchShaderFile(const std::string &file)
+        {
+            if (FileWatcher::Get(StringHash(file)))
+                return;
+
+            FileWatcher::Add(file, [](size_t fileEvent)
+                             { EventSystem::PushEvent(EventType::CompileShaders, fileEvent); });
+        }
     } // namespace
 
     Shader::Impl *CreateShaderImpl(Shader *owner, const ShaderDesc &desc, bool needsCompile)
@@ -151,11 +161,7 @@ namespace pe
         const std::string path = std::filesystem::weakly_canonical(desc.sourcePath, ec).generic_string();
 
         PE_ERROR_IF(!AssetFileExists(path), "[Shader] Source file does not exist: %s", desc.sourcePath.c_str());
-        if (!FileWatcher::Get(path))
-        {
-            FileWatcher::Add(path, [](size_t fileEvent)
-                             { EventSystem::PushEvent(EventType::CompileShaders, fileEvent); });
-        }
+        WatchShaderFile(path);
         shader->m_pathID = StringHash(path);
 
         Hash definesHash(GetGlobalDefinesHash());
@@ -167,6 +173,9 @@ namespace pe
         definesHash.CombineValue(static_cast<uint32_t>(desc.stage));
 
         shader->m_cache.Init(path, shader->m_entryName, definesHash);
+        for (const std::string &include : shader->m_cache.GetIncludes())
+            WatchShaderFile(include);
+
         const bool needsCompile = shader->m_cache.ShaderNeedsCompile();
         if (needsCompile)
         {

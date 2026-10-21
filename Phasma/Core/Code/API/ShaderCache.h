@@ -15,6 +15,8 @@ namespace pe
         bool ShaderNeedsCompile();
         inline const std::string &GetSourcePath() { return m_sourcePath; }
         inline const std::string &GetShaderCode() { return m_code; }
+        // Every file Init() inlined, as FileWatcher keys it (weakly_canonical, generic separators).
+        inline const std::vector<std::string> &GetIncludes() const { return m_includes; }
         size_t GetHash() { return m_hash; }
         std::vector<uint8_t> ReadBytecodeFile();
         void WriteBytecodeToFile(const std::vector<uint8_t> &bytecode);
@@ -25,6 +27,7 @@ namespace pe
     private:
         std::string m_sourcePath;
         std::string m_code;
+        std::vector<std::string> m_includes;
         StringHash m_hash;
         std::string m_tempFilePath;
     };

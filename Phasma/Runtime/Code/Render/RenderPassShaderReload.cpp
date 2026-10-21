@@ -7,6 +7,20 @@ namespace pe
 {
     namespace
     {
+        bool ShaderReadsFile(Shader *shader, size_t fileHash)
+        {
+            if (shader->GetPathID() == fileHash)
+                return true;
+
+            for (const std::string &include : shader->GetCache().GetIncludes())
+            {
+                if (static_cast<size_t>(StringHash(include)) == fileHash)
+                    return true;
+            }
+
+            return false;
+        }
+
         void AddUniqueShader(std::vector<Shader *> &shaders, Shader *shader)
         {
             if (!shader)
@@ -50,7 +64,7 @@ namespace pe
                     return true;
 
                 for (Shader *shader : GetShaders())
-                    if (shader->GetPathID() == changedShaderHash.value())
+                    if (ShaderReadsFile(shader, changedShaderHash.value()))
                         return true;
 
                 return false;

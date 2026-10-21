@@ -74,6 +74,12 @@ namespace pe
                         }
                     }
                 }
+
+                std::error_code ec;
+                std::string watched = std::filesystem::weakly_canonical(includeFileFull, ec).generic_string();
+                if (!ec && std::find(m_includes.begin(), m_includes.end(), watched) == m_includes.end())
+                    m_includes.push_back(std::move(watched));
+
                 size_t posStart = code.find(line);
                 if (posStart != std::string::npos)
                 {
@@ -92,6 +98,7 @@ namespace pe
     void ShaderCache::Init(const std::string &sourcePath, const std::string &entryPoint, size_t definesHash)
     {
         m_sourcePath = sourcePath;
+        m_includes.clear();
         m_code = ParseShader(m_sourcePath);
 
         m_hash = StringHash(m_code);
