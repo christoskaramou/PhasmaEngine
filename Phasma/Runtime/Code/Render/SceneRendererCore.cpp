@@ -223,6 +223,16 @@ namespace pe
         if (m_renderGraphPassInitialized[static_cast<size_t>(SceneRenderGraphPassId::MaterialShade)])
             static_cast<MaterialShadePass *>(m_scenePasses.materialShade)->SyncModules(modules);
 
+        if (Scene *active = GetActiveScene())
+            active->SetOpenPBRForwardRaster(SceneUsesOpenPBR());
+
+        if (m_renderGraphPassInitialized[static_cast<size_t>(SceneRenderGraphPassId::OpenPBRForward)])
+        {
+            const bool openpbr = SceneUsesOpenPBR() && scene;
+            const std::vector<uint32_t> &forward = openpbr ? scene->GetOpenPBRForwardModules() : noModules;
+            static_cast<OpenPBRForwardPass *>(m_scenePasses.openpbrForward)->SyncModules(forward);
+        }
+
         SyncRTHitModules();
     }
 

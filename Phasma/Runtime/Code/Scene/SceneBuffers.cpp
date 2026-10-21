@@ -55,7 +55,7 @@ namespace pe
                 if (!instance || mesh.indexCount == 0)
                     continue;
 
-                if (!MeshUsesOpenPBR(mesh))
+                if (!MeshUsesOpenPBR(mesh) && !MeshUsesOpenPBRForward(mesh))
                 {
                     if (instance->gpuOpenPBRModule != UINT32_MAX)
                         return true;
@@ -200,6 +200,8 @@ namespace pe
                     flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
                 if (MeshUsesOpenPBR(mesh))
                     flags |= 32u; // MaterialX material: the material passes shade its visibility pixels
+                if (MeshUsesOpenPBRForward(mesh))
+                    flags |= 128u; // MaterialX alpha-blend/transmission: the forward pass shades it while OpenPBR is on
                 if (IsOpenPBRSkinningMesh(mesh, m_nodeRuntime[i].gpuData))
                     flags |= 64u;
 
@@ -910,8 +912,12 @@ namespace pe
         {
             for (int meshIndex : GetMeshRefs(GetNodeId(ni)))
             {
-                if (IsValidMeshIndex(meshIndex) && MeshUsesOpenPBR(GetMesh(meshIndex)))
-                    addSource(GetOpenPBRSource(*GetMesh(meshIndex).materialInstance));
+                if (!IsValidMeshIndex(meshIndex))
+                    continue;
+
+                const Mesh &mesh = GetMesh(meshIndex);
+                if (MeshUsesOpenPBR(mesh) || MeshUsesOpenPBRForward(mesh))
+                    addSource(GetOpenPBRSource(*mesh.materialInstance));
             }
         }
 
@@ -971,10 +977,14 @@ namespace pe
         {
             for (int meshIndex : GetMeshRefs(GetNodeId(ni)))
             {
-                if (!IsValidMeshIndex(meshIndex) || !MeshUsesOpenPBR(GetMesh(meshIndex)))
+                if (!IsValidMeshIndex(meshIndex))
                     continue;
 
-                MaterialInstance &instance = *GetMesh(meshIndex).materialInstance;
+                const Mesh &mesh = GetMesh(meshIndex);
+                if (!MeshUsesOpenPBR(mesh) && !MeshUsesOpenPBRForward(mesh))
+                    continue;
+
+                MaterialInstance &instance = *mesh.materialInstance;
                 const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
                 auto [it, inserted] = checked.try_emplace(&source, true);
                 if (inserted)
@@ -1251,6 +1261,7 @@ namespace pe
             PE_PROFILE_SCOPE("Scene Material Byte Packing");
             m_openpbrModules.clear();
             m_openpbrMaskModules.clear();
+            m_openpbrForwardModules.clear();
 
             for (uint32_t i = 0; i < GetNodeCount(); i++)
                 for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
@@ -1274,7 +1285,10 @@ namespace pe
                     if (mesh.indexCount == 0 || !mesh.material)
                         continue;
 
-                    if (MeshUsesOpenPBR(mesh)) // legacy record + OpenPBR inputs, per instance (before the standard_pbr pass packing)
+                    const bool visibility = MeshUsesOpenPBR(mesh);
+                    const bool forward = MeshUsesOpenPBRForward(mesh);
+                    // Legacy record + OpenPBR inputs, per instance (before the standard_pbr pass packing).
+                    if (visibility || forward)
                     {
                         MaterialInstance *inst = mesh.materialInstance;
                         const uint32_t module = GetOpenPBRSource(*inst).module->index;
@@ -1286,17 +1300,16 @@ namespace pe
                             m_openpbrMaskModules.push_back(module);
                         }
 
+                        // The material passes and RT hit groups take visibility modules only; the forward pass its own.
+                        std::vector<uint32_t> &modules = visibility ? m_openpbrModules : m_openpbrForwardModules;
+                        if (std::find(modules.begin(), modules.end(), module) == modules.end())
+                            modules.push_back(module);
+
                         if (inst->gpuByteOffset != 0xFFFFFFFF)
                             continue;
 
                         inst->gpuByteOffset = 0; // gathered; final offsets follow byte packing
-                        inst->gpuOpenPBRModule = GetOpenPBRSource(*inst).module->index;
-
-                        const auto known = std::find(m_openpbrModules.begin(),
-                                                     m_openpbrModules.end(),
-                                                     inst->gpuOpenPBRModule);
-                        if (known == m_openpbrModules.end())
-                            m_openpbrModules.push_back(inst->gpuOpenPBRModule);
+                        inst->gpuOpenPBRModule = module;
 
                         byteEntries.push_back({&inst->gpuByteOffset, &inst->gpuByteSize, {}, mesh.material, inst, nullptr});
                         continue;
@@ -1397,8 +1410,9 @@ namespace pe
             }
         }
 
-        // A mesh can change module (or two can swap) with the hit-module list unchanged: rewrite the TLAS hit-group offsets.
-        if (!m_rtHitModules.empty())
+        // A mesh can change module (or two can swap) with the hit-module list unchanged, or become a forward mesh while
+        // that list is empty: rewrite the TLAS hit-group offsets and masks.
+        if (!m_rtHitModules.empty() || m_openpbrForwardRaster)
             m_tlasMasksDirty = true;
 
         PE_PROFILE_SCOPE("Scene Material Byte Upload");
@@ -1636,7 +1650,7 @@ namespace pe
                     continue;
                 }
 
-                if (MeshUsesOpenPBR(mesh))
+                if (MeshUsesOpenPBR(mesh) || MeshUsesOpenPBRForward(mesh))
                 {
                     if (inst->gpuByteOffset == 0xFFFFFFFF)
                     {
@@ -2708,6 +2722,55 @@ namespace pe
         }
     }
 
+    std::vector<Scene::OpenPBRForwardDraw> Scene::GetOpenPBRForwardDraws(const vec3 &cameraPosition) const
+    {
+        std::vector<OpenPBRForwardDraw> draws;
+        if (m_openpbrForwardModules.empty())
+            return draws;
+
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            const NodeRuntime &rt = m_nodeRuntime[i];
+            const bool drawn = !rt.gpuPending && IsNodeHierarchyEnabled(m_nodeIds[i]) && rt.gpuData.renderVisible != 0u;
+            if (!drawn)
+                continue;
+
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            for (uint32_t slot = 0; slot < static_cast<uint32_t>(refs.size()); slot++)
+            {
+                const int meshIdx = refs[slot];
+                const bool indirect = slot < rt.meshRefIndirect.size() && rt.meshRefIndirect[slot] != UINT32_MAX;
+                if (!IsValidMeshIndex(meshIdx) || !indirect)
+                    continue;
+
+                const Mesh &mesh = m_meshes[meshIdx];
+                if (mesh.indexCount == 0 || !MeshUsesOpenPBRForward(mesh))
+                    continue;
+
+                const uint32_t module = mesh.materialInstance->gpuOpenPBRModule;
+                if (module == UINT32_MAX) // not packed yet: the byte rebuild that follows the assignment packs it
+                    continue;
+
+                const vec3 localCentre = (mesh.boundingBox.min + mesh.boundingBox.max) * 0.5f;
+                const vec3 centre = vec3(rt.gpuData.worldMatrix * vec4(localCentre, 1.0f));
+                draws.push_back({module,
+                                 rt.meshRefIndirect[slot],
+                                 mesh.indexCount,
+                                 mesh.indexOffset,
+                                 static_cast<int32_t>(mesh.vertexOffset),
+                                 length(centre - cameraPosition)});
+            }
+        }
+
+        std::sort(draws.begin(),
+                  draws.end(),
+                  [](const OpenPBRForwardDraw &a, const OpenPBRForwardDraw &b)
+                  {
+                      return a.distance > b.distance;
+                  });
+        return draws;
+    }
+
     std::vector<Scene::VoxelTransparentDraw> Scene::GetVoxelTransparentDraws() const
     {
         // Transparent (water) arena slots are tombstoned to indexCount=0 on release and never relocate
@@ -2812,6 +2875,8 @@ namespace pe
             flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
         if (MeshUsesOpenPBR(mesh))
             flags |= 32u; // MaterialX material: the material passes shade its visibility pixels
+        if (MeshUsesOpenPBRForward(mesh))
+            flags |= 128u; // MaterialX alpha-blend/transmission: the forward pass shades it while OpenPBR is on
         if (IsOpenPBRSkinningMesh(mesh, m_nodeRuntime[nodeIndex].gpuData))
             flags |= 64u; // draw-local pre-deformation when the visibility renderer is active
         constants.editorFlags = flags;

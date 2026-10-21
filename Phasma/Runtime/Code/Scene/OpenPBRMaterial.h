@@ -40,7 +40,8 @@ namespace pe
         std::string thinSource;
         std::string shadeSource;
         std::string maskSource;
-        std::string hitSource; // RT closest-hit wrapper (MaterialHit*.slang)
+        std::string hitSource;     // RT closest-hit wrapper (MaterialHit*.slang)
+        std::string forwardSource; // forward pixel shader for alpha-blend/transmission (MaterialForward*.slang)
     };
 
     struct OpenPBRTexture
@@ -79,8 +80,11 @@ namespace pe
     // standard_pbr.pass, whose byte record is MaterialGpuData). Shader-driven materials own their bytes.
     bool OpenPBREligible(Material &material, const OpenPBRModule &module);
 
-    // Also requires an opaque or alpha-cut mesh: blended meshes stay legacy until the transparency phase.
+    // The visibility path: also requires an opaque or alpha-cut mesh.
     bool MeshUsesOpenPBR(const Mesh &mesh);
+
+    // The forward pass (Phase 6): an eligible MaterialX mesh whose render type is alpha-blend or transmission.
+    bool MeshUsesOpenPBRForward(const Mesh &mesh);
 
     // Production mutations shared by scripts and the inspector; failed validation preserves the instance.
     bool AssignOpenPBRMaterial(Scene &scene, Mesh &mesh,

@@ -1065,9 +1065,7 @@ namespace pe
                                 frame < m_shadowFallbackUniforms.size();
         const bool uniformsReady = frameReady && opaque->m_uniforms[frame];
         const bool sceneReady = scene && scene->GetBuffer() && scene->GetMaterialByteBuffer();
-        const auto *thin = GetGlobalComponent<MaterialThinPass>();
-        const bool targetsReady = m_visibility && m_viewportRT && thin && thin->GetBins();
-        if (!uniformsReady || !sceneReady || !targetsReady)
+        if (!uniformsReady || !sceneReady || !TargetsReady())
             return;
 
         const auto &sky = RequireActiveSceneRendererHost().GetSkyBox();
@@ -1081,6 +1079,12 @@ namespace pe
         }
 
         m_boundFrames[frame] = !m_modulePassInfos.empty();
+    }
+
+    bool MaterialShadePass::TargetsReady() const
+    {
+        const auto *thin = GetGlobalComponent<MaterialThinPass>();
+        return m_visibility && m_viewportRT && thin && thin->GetBins();
     }
 
     void MaterialShadePass::UpdateDescriptorSets()
@@ -1208,5 +1212,127 @@ namespace pe
 
         m_viewportRT = m_visibility = m_albedoRT = nullptr;
         m_boundFrames.clear();
+    }
+
+    void OpenPBRForwardPass::Init()
+    {
+        SceneRendererHost *rs = &RequireActiveSceneRendererHost();
+        m_viewportRT = rs->GetRenderTarget("viewport");
+        m_albedoRT = rs->GetRenderTarget("albedo");
+        m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
+        m_boundFrames.assign(RHII.GetSwapchainImageCount(), false);
+
+        m_attachments.assign(2, {});
+        m_attachments[0].image = m_viewportRT;
+        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
+        m_attachments[1].image = m_depthStencilRT;
+        m_attachments[1].loadOp = PE_LOAD_OP_LOAD;
+    }
+
+    std::vector<Define> OpenPBRForwardPass::Defines() const
+    {
+        std::vector<Define> defines = LightingDefines();
+        defines.push_back(Define{"PE_OPENPBR_FORWARD", "1"});
+        // Unused by the shaders: a viewport format change alters the key, so Resize rebuilds the pipelines' formats.
+        if (m_viewportRT && m_viewportRT->GetFormat() == PE_FORMAT_R8G8B8A8_UNORM)
+            defines.push_back(Define{"PE_VIEWPORT_RGBA8", "1"});
+
+        return defines;
+    }
+
+    void OpenPBRForwardPass::BuildPipeline(PassInfo &info, uint32_t module)
+    {
+        const std::vector<Define> defines = Defines();
+        info.name = "OpenPBRForward_pipeline_" + std::to_string(module);
+        info.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Gbuffer/GBufferVS.hlsl",
+                                           .entryPoint = "mainVS",
+                                           .stage = PE_SHADER_STAGE_VERTEX,
+                                           .defines = defines});
+        info.pFragShader = Shader::Create({.sourcePath = GetOpenPBRModule(module).forwardSource,
+                                           .entryPoint = "mainPS",
+                                           .stage = PE_SHADER_STAGE_FRAGMENT,
+                                           .defines = defines});
+        info.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+
+        // standard_pbr.pass "transparent" raster state without depth writes, and MaterialX's own blend over a colour
+        // that already carries its opacity (GlslRenderer; plan Decision 2 = A).
+        const bool reverseDepth = Settings::Get<SceneSettings>().reverse_depth;
+        info.cullMode = PE_CULL_MODE_FRONT;
+        info.depthTestEnable = true;
+        info.depthWriteEnable = false;
+        info.depthCompareOp = reverseDepth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL;
+        info.blendEnable = true;
+        info.colorBlendAttachments = {BlendState::Default};
+        info.colorFormats = {m_viewportRT->GetFormat()};
+        info.depthFormat = RHII.GetDepthFormat();
+        info.Update();
+    }
+
+    bool OpenPBRForwardPass::TargetsReady() const
+    {
+        return m_viewportRT && m_depthStencilRT;
+    }
+
+    void OpenPBRForwardPass::DeclareInputs(RGBuilder &builder)
+    {
+        ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+        if (ShadowsActive(shadows))
+        {
+            for (auto *tex : shadows.GetTextures())
+                builder.Read(tex);
+        }
+
+        ReadProbeLighting(builder);
+    }
+
+    void OpenPBRForwardPass::ExecutePass(CommandBuffer *cmd)
+    {
+        Scene *scene = GetActiveScene();
+        Camera *camera = scene ? scene->GetActiveCamera() : nullptr;
+        const uint32_t frame = RHII.GetFrameIndex();
+        if (!camera || frame >= m_boundFrames.size() || !m_boundFrames[frame])
+            return;
+
+        const std::vector<Scene::OpenPBRForwardDraw> draws = scene->GetOpenPBRForwardDraws(camera->GetPosition());
+        if (draws.empty())
+            return;
+
+        SetLightingPushConstants(cmd, m_viewportRT, 1u);
+        const int envSamples = std::clamp(Settings::Get<SceneSettings>().openpbr_env_samples, 1, 512);
+        cmd->SetConstantAt(21, static_cast<uint32_t>(envSamples));                // env_samples (PE_OPENPBR_FORWARD)
+        cmd->SetConstantAt(22, static_cast<uint32_t>(scene->GetMaxJointCount())); // jointsCount
+
+        cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "OpenPBRForwardPass");
+        cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
+        cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
+
+        uint32_t boundModule = UINT32_MAX;
+        for (const Scene::OpenPBRForwardDraw &draw : draws)
+        {
+            const auto info = m_modulePassInfos.find(draw.module);
+            if (info == m_modulePassInfos.end())
+                continue;
+
+            if (draw.module != boundModule)
+            {
+                cmd->BindPipeline(*info->second);
+                cmd->BindIndexBuffer(scene->GetBuffer(), 0);
+                cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetVerticesOffset());
+                scene->BindDrawIdBuffer(cmd);
+                cmd->PushConstants();
+                boundModule = draw.module;
+            }
+
+            cmd->DrawIndexed(draw.indexCount, 1, draw.firstIndex, draw.vertexOffset, draw.slot);
+        }
+
+        cmd->EndPass();
+    }
+
+    void OpenPBRForwardPass::Destroy()
+    {
+        MaterialShadePass::Destroy();
+        m_attachments.clear();
+        m_depthStencilRT = nullptr;
     }
 } // namespace pe

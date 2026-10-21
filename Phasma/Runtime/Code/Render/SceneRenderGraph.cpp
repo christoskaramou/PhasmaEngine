@@ -81,6 +81,8 @@ namespace pe
              &SceneRenderGraphPassComponents::gbufferTransparent},
             {SceneRenderGraphPassId::LightTransparent, 700, "LightTransparent",
              &SceneRenderGraphPassComponents::lightTransparent},
+            {SceneRenderGraphPassId::OpenPBRForward, 805, "OpenPBRForward",
+             &SceneRenderGraphPassComponents::openpbrForward},
             {SceneRenderGraphPassId::Lines, 720, "Lines", &SceneRenderGraphPassComponents::lines},
             {SceneRenderGraphPassId::RayTracing, 800, "RayTracing", &SceneRenderGraphPassComponents::rayTracing},
             {SceneRenderGraphPassId::RTDepthResolve, 810, "RTDepthResolve", &SceneRenderGraphPassComponents::rtDepthResolve},
@@ -236,6 +238,9 @@ namespace pe
             if (component == components.materialShade)
                 return isPassEnabled(SceneRenderGraphPassId::MaterialShade);
 
+            if (component == components.openpbrForward)
+                return isPassEnabled(SceneRenderGraphPassId::OpenPBRForward);
+
             return true;
         }
     } // namespace
@@ -329,6 +334,7 @@ namespace pe
         CreateSceneRenderGraphPassComponent<VisibilityDebugPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<MaterialThinPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<MaterialShadePass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<OpenPBRForwardPass>(renderPassComponents);
         if (includeRayTracingPass)
         {
             CreateSceneRenderGraphPassComponent<GlobalIlluminationPass>(renderPassComponents);
@@ -519,6 +525,7 @@ namespace pe
         scenePasses.visibilityDebug = GetGlobalComponent<VisibilityDebugPass>();
         scenePasses.materialThin = GetGlobalComponent<MaterialThinPass>();
         scenePasses.materialShade = GetGlobalComponent<MaterialShadePass>();
+        scenePasses.openpbrForward = GetGlobalComponent<OpenPBRForwardPass>();
         return scenePasses;
     }
 
@@ -543,6 +550,9 @@ namespace pe
 
         const bool skinning = activeScene && activeScene->GetOpenPBRSkinningBuffer(RHII.GetFrameIndex());
         const bool materialModules = SceneUsesOpenPBR() && activeScene && !activeScene->GetOpenPBRModules().empty();
+        const bool forwardModules = SceneUsesOpenPBR() &&
+                                    activeScene &&
+                                    !activeScene->GetOpenPBRForwardModules().empty();
         const auto &gs = Settings::Get<SceneSettings>();
         const auto &pp = ActivePostProcessProfile();
 
@@ -619,6 +629,8 @@ namespace pe
                            materialModules && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialShade,
                            materialModules && dx12RenderRaster);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::OpenPBRForward,
+                           forwardModules && dx12RenderRaster);
 
             return;
         }
@@ -675,6 +687,8 @@ namespace pe
                        materialModules && renderRaster);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::MaterialShade,
                        materialModules && renderRaster);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::OpenPBRForward,
+                       forwardModules && renderRaster);
     }
 
     void UpdateSceneRenderGraphPassComponents(const OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,

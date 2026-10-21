@@ -3,47 +3,23 @@ float PeMaskTangentSign(uint3 vertices)
     const PeVertex v0 = PeLoadVertex(pe_geometry, pc.verticesOffset, vertices.x);
     const PeVertex v1 = PeLoadVertex(pe_geometry, pc.verticesOffset, vertices.y);
     const PeVertex v2 = PeLoadVertex(pe_geometry, pc.verticesOffset, vertices.z);
-    const float2 d1 = v1.uv - v0.uv;
-    const float2 d2 = v2.uv - v0.uv;
-    return d1.x * d2.y - d2.x * d1.y < 0.0 ? -1.0 : 1.0;
+    return PeUvWindingSign(v0.uv, v1.uv, v2.uv);
 }
 
 PeSurfacePoint PeMaskSurface(VS_OUTPUT_OpenPBRMask input, uint3 vertices)
 {
-    PeSurfacePoint sp;
-    sp.svPosition = input.position;
-    sp.P = input.worldPosition;
-    sp.N = normalize(input.normal);
-    sp.uv0 = input.uv;
-    sp.nextUv = input.nextUv;
-    sp.spriteBlend = input.spriteBlend;
-    sp.color0 = input.color;
-
-    float3 tangent = input.tangent.xyz;
-    float sign = input.tangent.w;
-    const float3 e1 = ddx(sp.P);
-    const float3 e2 = ddy(sp.P);
-    const float2 d1 = ddx(sp.uv0);
-    const float2 d2 = ddy(sp.uv0);
-    if (dot(tangent, tangent) < 1e-8)
-    {
-        // The same triangle UV tangent as PeSurfaceAt, derived in this raster's projection.
-        const float det = d1.x * d2.y - d2.x * d1.y;
-        tangent = (e1 * d2.y - e2 * d1.y) * (det < 0.0 ? -1.0 : 1.0);
-        // Screen derivatives recover dP/du, but source UV winding owns the bitangent sign.
-        sign = PeMaskTangentSign(vertices);
-    }
-
-    tangent -= sp.N * dot(sp.N, tangent);
-    if (dot(tangent, tangent) < 1e-12)
-    {
-        tangent = abs(sp.N.x) < 0.9 ? cross(sp.N, float3(1.0, 0.0, 0.0))
-                                  : cross(sp.N, float3(0.0, 1.0, 0.0));
-    }
-
-    sp.T = normalize(tangent);
-    sp.B = cross(sp.N, sp.T) * (sign < 0.0 ? -1.0 : 1.0);
-    return sp;
+    // The vertex loads are skipped unless the mesh has no tangents.
+    const bool tangentless = dot(input.tangent.xyz, input.tangent.xyz) < 1e-8;
+    const float fallbackSign = tangentless ? PeMaskTangentSign(vertices) : 1.0;
+    return PeRasterSurface(input.position,
+                           input.worldPosition,
+                           input.normal,
+                           input.tangent,
+                           input.uv,
+                           input.nextUv,
+                           input.spriteBlend,
+                           input.color,
+                           fallbackSign);
 }
 
 #ifdef PE_MASK_SHADOW

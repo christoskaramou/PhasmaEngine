@@ -291,4 +291,60 @@ void PeBendLimbNormal(PeTriangle t, float3 V, inout PeSurfacePoint sp)
     sp.B = cross(sp.N, sp.T) * handedness;
 }
 
+// The bitangent sign of a triangle's source UV winding (PeSurfaceAt's convention).
+float PeUvWindingSign(float2 uv0, float2 uv1, float2 uv2)
+{
+    const float2 d1 = uv1 - uv0;
+    const float2 d2 = uv2 - uv0;
+    return d1.x * d2.y - d2.x * d1.y < 0.0 ? -1.0 : 1.0;
+}
+
+// A raster pixel's surface (mask and forward passes): interpolated attributes, with PeSurfaceAt's triangle UV tangent
+// where the mesh has none. fallbackSign is the source UV winding; only that path reads it.
+PeSurfacePoint PeRasterSurface(float4 svPosition,
+                               float3 P,
+                               float3 N,
+                               float4 tangentIn,
+                               float2 uv,
+                               float2 nextUv,
+                               float spriteBlend,
+                               float4 color,
+                               float fallbackSign)
+{
+    PeSurfacePoint sp;
+    sp.svPosition = svPosition;
+    sp.P = P;
+    sp.N = normalize(N);
+    sp.uv0 = uv;
+    sp.nextUv = nextUv;
+    sp.spriteBlend = spriteBlend;
+    sp.color0 = color;
+
+    float3 tangent = tangentIn.xyz;
+    float sign = tangentIn.w;
+    const float3 e1 = ddx(sp.P);
+    const float3 e2 = ddy(sp.P);
+    const float2 d1 = ddx(sp.uv0);
+    const float2 d2 = ddy(sp.uv0);
+    if (!(dot(tangent, tangent) >= 1e-8)) // also NaN: GBufferVS normalizes a tangent-less mesh's zero tangent
+    {
+        // The same triangle UV tangent as PeSurfaceAt, derived in this raster's projection.
+        const float det = d1.x * d2.y - d2.x * d1.y;
+        tangent = (e1 * d2.y - e2 * d1.y) * (det < 0.0 ? -1.0 : 1.0);
+        // Screen derivatives recover dP/du, but source UV winding owns the bitangent sign.
+        sign = fallbackSign;
+    }
+
+    tangent -= sp.N * dot(sp.N, tangent);
+    if (dot(tangent, tangent) < 1e-12)
+    {
+        tangent = abs(sp.N.x) < 0.9 ? cross(sp.N, float3(1.0, 0.0, 0.0))
+                                  : cross(sp.N, float3(0.0, 1.0, 0.0));
+    }
+
+    sp.T = normalize(tangent);
+    sp.B = cross(sp.N, sp.T) * (sign < 0.0 ? -1.0 : 1.0);
+    return sp;
+}
+
 #endif

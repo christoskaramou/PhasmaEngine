@@ -23,12 +23,23 @@ struct PeSkinDraw
 //      NodeGpuData            -> sizeof(mat4) * 2  [worldMatrix, prevWorldMatrix]
 // --- ByteAddressBuffer data ---
 
+#ifdef PE_OPENPBR_FORWARD
+// OpenPBRForwardPass: material pass 2's lighting push constants and set-0 layout (MaterialForwardHead.slang). Own names:
+// the DX12 backend reads [[vk::binding]] by resource name from the unpreprocessed source, where both branches appear.
+[[vk::push_constant]] PushConstants_Lighting pc;
+[[vk::binding(16, 0)]] ByteAddressBuffer pe_frameData;
+[[vk::binding(17, 0)]] StructuredBuffer<Mesh_Constants> pe_constants;
+#define data pe_frameData
+#define constants pe_constants
+#else
 [[vk::push_constant]] PushConstants_GBuffer pc;
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
+#endif
 
 static const uint MATRIX_SIZE = 64u;
 static const uint MESH_DATA_SIZE = MATRIX_SIZE * 2u + 16u; // +16B: NodeGpuData render-visible/flags tail
+static const uint PE_EDITOR_FLAG_MATERIALX_FORWARD = 128u; // Scene::ComputeMeshConstants: MeshUsesOpenPBRForward
 
 float4x4 LoadMatrix(uint offset)
 {
@@ -65,6 +76,18 @@ VS_OUTPUT_Gbuffer mainVS(VS_INPUT_Gbuffer input)
 
     const uint id = input.id;
     output.id = id;
+
+#ifdef PE_OPENPBR_FORWARD
+    output.uvVertex = input.texCoord.xy;
+#elif defined(GBUFFER_TRANSPARENT)
+    // While OpenPBR is effective, the forward pass shades MaterialX alpha-blend and transmission meshes instead.
+    if (pc.openpbrForward != 0u && (constants[id].editorFlags & PE_EDITOR_FLAG_MATERIALX_FORWARD) != 0u)
+    {
+        output = (VS_OUTPUT_Gbuffer)0;
+        output.position = float4(0.0, 0.0, -1.0, 1.0);
+        return output;
+    }
+#endif
 
 #ifdef PE_DEFORMED_VERTEX
     const float weightSum = input.weights[0] + input.weights[1] + input.weights[2] + input.weights[3];

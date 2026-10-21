@@ -97,6 +97,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
 float3 pe_env_irradiance(float3 N)
 {
     float4 indirect = ProbeLighting(pe_P, N);
+#ifndef PE_FORWARD // screen probes describe the opaque surface behind a forward pixel
     if (cb_screenProbes != 0)
     {
         uint width, height;
@@ -108,6 +109,7 @@ float3 pe_env_irradiance(float3 N)
         indirect.rgb = weight > 0.0 ? lerp(indirect.rgb * indirect.a, screen.rgb, screen.a) / weight : 0.0.xxx;
         indirect.a = weight;
     }
+#endif
 
     const float indirectWeight = gi_intensity > 0.0 ? indirect.a : 0.0;
     float3 result = indirect.rgb * (gi_intensity * indirectWeight / PI) * (cb_screenProbes != 0 ? 1.0 : pe_ssao);
@@ -125,6 +127,7 @@ float3 pe_env_irradiance(float3 N)
 bool pe_traced_reflection(out float3 radiance)
 {
     radiance = float3(0.0, 0.0, 0.0);
+#ifndef PE_FORWARD // traced reflections describe the opaque surface behind a forward pixel
     if (cb_reflections != 0)
     {
         uint width, height;
@@ -138,6 +141,7 @@ bool pe_traced_reflection(out float3 radiance)
             return true;
         }
     }
+#endif
 
     return false;
 }

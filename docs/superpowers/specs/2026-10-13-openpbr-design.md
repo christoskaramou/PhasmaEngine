@@ -177,6 +177,11 @@ Empty-bin compaction is deferred to the performance phase.
     - Alpha-cut modules use the generated mask at any-hit.
     - Limits: texture LOD at hits is mip 0 (no ray cones); subsurface's curvature comes from the hit triangle, since hits have no derivatives (generated-module ABI 3); skinned meshes and sprites are still absent from the TLAS.
 - **Transparent / alpha-blend / transmission surfaces** (Phase 6): the generated code in a forward pixel shader, where hardware derivatives are native.
+  - *Amended 2026-10-21 (Phase 6 implemented, [plan](../plans/2026-10-21-openpbr-phase6.md)):* `OpenPBRForwardPass` draws MaterialX alpha-blend and transmission meshes after LightTransparent, far to near, with pass 2's lights and environment hooks (no screen probes or traced reflections).
+    - Alpha is the evaluated `geometry_opacity`: under `TRANSMISSION_REFRACTION` transmission goes to the colour, so a transmission mesh at opacity 1 is opaque glass refracting the environment only.
+    - The blend is MaterialX's own (`SRC_ALPHA` over a colour that already carries the opacity), the user's choice over a premultiplied blend.
+    - In Hybrid the forward meshes leave the TLAS transparent mask, so the transparent-only primary trace does not paint their legacy hit over the pass.
+    - Limits: per-mesh sorting (no OIT), no velocity, legacy hit groups in RT.
 - **Skinned meshes and sprites** (Phase 4): compute pre-skinning into current and previous vertex buffers (as Horizon Forbidden West does). These feed the visibility raster and the resolve.
 - **Alpha-cut:** a generated opacity-only `Mask()` in the visibility pixel shader.
 - **Android:** the legacy path only. This is a limit, not a plan.

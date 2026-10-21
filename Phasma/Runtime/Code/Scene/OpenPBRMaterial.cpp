@@ -330,6 +330,7 @@ namespace pe
                     module->shadeSource = dir + "MaterialShade.slang";
                     module->maskSource = dir + "MaterialMask.slang";
                     module->hitSource = dir + "MaterialHit.slang";
+                    module->forwardSource = dir + "MaterialForward.slang";
                 }
                 catch (const std::exception &error)
                 {
@@ -386,10 +387,12 @@ namespace pe
             module->shadeSource = cached + ".shade.slang";
             module->maskSource = cached + ".mask.slang";
             module->hitSource = cached + ".hit.slang";
+            module->forwardSource = cached + ".forward.slang";
             WriteWrapper(module->thinSource, modulePath, "MaterialThin");
             WriteWrapper(module->shadeSource, modulePath, "MaterialShade");
             WriteWrapper(module->maskSource, modulePath, "MaterialMask");
             WriteWrapper(module->hitSource, modulePath, "MaterialHit");
+            WriteWrapper(module->forwardSource, modulePath, "MaterialForward");
 
             registry.modules.push_back(module);
             return module;
@@ -676,14 +679,26 @@ namespace pe
         return standard && module.layout.valid;
     }
 
-    bool MeshUsesOpenPBR(const Mesh &mesh)
+    static bool MeshHasEligibleOpenPBR(const Mesh &mesh)
     {
         if (!mesh.material || !mesh.materialInstance || !mesh.materialInstance->GetOpenPBR())
             return false;
 
+        return OpenPBREligible(*mesh.material, *GetOpenPBRSource(*mesh.materialInstance).module);
+    }
+
+    bool MeshUsesOpenPBR(const Mesh &mesh)
+    {
         const RenderType type = mesh.renderType;
         const bool opaque = type == RenderType::Opaque || type == RenderType::AlphaCut;
-        return opaque && OpenPBREligible(*mesh.material, *GetOpenPBRSource(*mesh.materialInstance).module);
+        return opaque && MeshHasEligibleOpenPBR(mesh);
+    }
+
+    bool MeshUsesOpenPBRForward(const Mesh &mesh)
+    {
+        const RenderType type = mesh.renderType;
+        const bool blended = type == RenderType::AlphaBlend || type == RenderType::Transmission;
+        return blended && MeshHasEligibleOpenPBR(mesh);
     }
 
     static bool ValidateOpenPBRAssignment(Scene &scene, const Mesh &mesh,

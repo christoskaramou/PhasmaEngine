@@ -124,11 +124,12 @@ namespace pe
         void SyncModules(const std::vector<uint32_t> &modules);
         std::vector<PassInfo *> GetPassInfos() noexcept override;
 
-    private:
-        void BuildPipeline(PassInfo &info, uint32_t module);
+    protected:
+        virtual void BuildPipeline(PassInfo &info, uint32_t module);
+        virtual std::vector<Define> Defines() const;
+        virtual bool TargetsReady() const;
         void BindSceneDescriptors(PassInfo &info, uint32_t frame);
         void BindEnvironmentDescriptors(PassInfo &info, uint32_t frame);
-        std::vector<Define> Defines() const;
         void BindFrame(uint32_t frame);
 
         std::map<uint32_t, std::shared_ptr<PassInfo>> m_modulePassInfos;
@@ -142,5 +143,28 @@ namespace pe
         Image *m_shadowFallbackTexture = nullptr;
         Sampler *m_shadowFallbackSampler = nullptr;
         std::vector<ImageView *> m_shadowFallbackViews;
+    };
+
+    // OpenPBR forward pass (Phase 6): MaterialX alpha-blend and transmission meshes, shaded by their generated code
+    // in a pixel shader (GBufferVS.hlsl + MaterialForward*.slang) and blended over the lit scene far to near, after
+    // LightTransparent and Hybrid's ray-traced transparents (they write the viewport and see through these meshes).
+    // Material pass 2's bindings, module pipelines and lighting; only the raster pipeline and draws differ.
+    class OpenPBRForwardPass : public MaterialShadePass
+    {
+    public:
+        void Init() override;
+        void DeclareInputs(RGBuilder &builder) override;
+        void DeclareOutputs(RGBuilder &builder) override {}
+        void ExecutePass(CommandBuffer *cmd) override;
+        void Destroy() override;
+
+    protected:
+        void BuildPipeline(PassInfo &info, uint32_t module) override;
+        std::vector<Define> Defines() const override;
+        bool TargetsReady() const override;
+
+    private:
+        std::vector<Attachment> m_attachments;
+        Image *m_depthStencilRT = nullptr;
     };
 } // namespace pe

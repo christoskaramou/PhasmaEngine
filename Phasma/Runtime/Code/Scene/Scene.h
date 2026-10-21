@@ -556,6 +556,27 @@ namespace pe
         bool HasTransmissionMeshes() const { return m_hasTransmissionMeshes; }
         bool HasLinesMeshes() const { return m_hasLinesMeshes; }
 
+        // MaterialX modules of alpha-blend and transmission meshes, shaded by the forward pass (Phase 6).
+        const std::vector<uint32_t> &GetOpenPBRForwardModules() const { return m_openpbrForwardModules; }
+
+        struct OpenPBRForwardDraw
+        {
+            uint32_t module;
+            uint32_t slot; // Mesh_Constants and draw-id index (the mesh's indirect slot)
+            uint32_t indexCount;
+            uint32_t firstIndex;
+            int32_t vertexOffset;
+            float distance;
+        };
+
+        // The forward pass's draws, far to near by the distance from the camera to each mesh's world bounds centre
+        // (CullingCS's transparent sort key); hidden, pending and disabled nodes are skipped as culling skips them.
+        std::vector<OpenPBRForwardDraw> GetOpenPBRForwardDraws(const vec3 &cameraPosition) const;
+
+        // While OpenPBR is effective, forward meshes leave the TLAS transparent mask (0x80): Hybrid's transparent-only
+        // primary trace would paint their legacy hit over the forward pass. Other rays (0xFF) still hit them.
+        void SetOpenPBRForwardRaster(bool active);
+
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         bool CanUseOpenPBRImages(const OpenPBRMaterialSource &source, std::string &error) const;
         const std::vector<Sampler *> &GetOpenPBRSamplers() const { return m_openpbrSamplers; }
@@ -971,8 +992,10 @@ namespace pe
         Buffer *m_materialTable = nullptr;
         Buffer *m_materialByteBuffer = nullptr; // ByteAddressBuffer for shader-driven materials
         uint32_t m_materialByteBufferUsed = 0;  // current byte offset (append-only)
-        std::vector<uint32_t> m_openpbrModules; // OpenPBR modules with a record in m_materialByteBuffer (byte packing)
+        std::vector<uint32_t> m_openpbrModules; // visibility-path OpenPBR modules (material passes, RT hit groups)
         std::vector<uint32_t> m_openpbrMaskModules;
+        std::vector<uint32_t> m_openpbrForwardModules;
+        bool m_openpbrForwardRaster = false;
         Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;

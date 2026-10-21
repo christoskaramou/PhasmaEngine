@@ -20,6 +20,7 @@ namespace pe
         vec2 prevProjJitter;
         uint32_t passType;
         uint32_t linearColor;
+        uint32_t openpbrForward; // transparent pass: skip MaterialX meshes the forward pass shades (OpenPBR effective)
     };
 
     class GbufferOpaquePass : public IRenderPassComponent

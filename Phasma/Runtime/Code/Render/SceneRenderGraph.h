@@ -54,6 +54,7 @@ namespace pe
         MaterialThin,    // openpbr: material pass 1 (thin G-buffer)
         MaterialShade,   // openpbr: material pass 2 (MaterialX shading)
         OpenPBRSkinning,
+        OpenPBRForward, // openpbr: MaterialX alpha-blend and transmission meshes (forward pass)
         Count
     };
 
@@ -102,6 +103,7 @@ namespace pe
         IRenderPassComponent *materialThin = nullptr;
         IRenderPassComponent *materialShade = nullptr;
         IRenderPassComponent *openpbrSkinning = nullptr;
+        IRenderPassComponent *openpbrForward = nullptr;
     };
 
     using SceneRenderGraphPassCondition = std::function<bool(SceneRenderGraphPassId)>;

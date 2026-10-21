@@ -632,6 +632,15 @@ namespace pe
 
         m_passInfo->name = "gbuffer_transparent_pipeline";
         ApplyGBufferSurface(*m_passInfo, *transparent, writeVelocity, false, false);
+
+        // Only this variant skips the forward pass's MaterialX meshes, so the opaque G-buffer shader stays unchanged.
+        Shader *sharedVert = m_passInfo->pVertShader;
+        m_passInfo->pVertShader = Shader::Create({.sourcePath = Path::ResolveAsset(transparent->vertexShader),
+                                                  .entryPoint = "mainVS",
+                                                  .stage = PE_SHADER_STAGE_VERTEX,
+                                                  .defines = {Define{"GBUFFER_TRANSPARENT", "1"}}});
+        Shader::Destroy(sharedVert);
+
         m_passInfo->colorFormats = colorformats;
         m_passInfo->depthFormat = depthFormat;
         if (Settings::Get<SceneSettings>().reverse_depth)
@@ -797,6 +806,7 @@ namespace pe
         pushConstants.prevProjJitter = camera->GetPrevProjJitter();
         pushConstants.passType = 1u;
         pushConstants.linearColor = SceneUsesLinearColor() ? 1u : 0u;
+        pushConstants.openpbrForward = SceneUsesOpenPBR() ? 1u : 0u;
         uint32_t frame = RHII.GetFrameIndex();
 
         if (hasAlphaBlendMeshes)

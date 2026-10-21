@@ -109,6 +109,10 @@ struct PushConstants_Lighting
     uint bins_count;      // dword 24: byte offset of the module's tile count in pe_bins (MaterialClassify)
     uint bins_tiles;      // dword 25: byte offset of the module's tiles in pe_bins
 #endif
+#ifdef PE_OPENPBR_FORWARD
+    uint env_samples; // dword 21: OpenPBR filtered importance samples
+    uint jointsCount; // dword 22: GBufferVS's joint count (OpenPBRForwardPass)
+#endif
 };
 #endif
 
@@ -120,6 +124,7 @@ struct PushConstants_GBuffer
     float2 prevProjJitter;
     uint passType;
     uint linearColor; // linear_color: decode authored colours, store albedo sRGB-encoded
+    uint openpbrForward; // transparent pass: skip MaterialX meshes the forward pass shades (OpenPBR effective)
 };
 
 struct PushConstants_RayTracing
@@ -139,7 +144,7 @@ struct Mesh_Constants
     uint materialId;
     int meshImageIndex[5];
     uint materialByteOffset;
-    uint editorFlags;
+    uint editorFlags; // 128: MaterialX alpha-blend/transmission mesh (PE_EDITOR_FLAG_MATERIALX_FORWARD)
     uint renderType;
     float aabbMinX;
     float aabbMinY;
@@ -269,6 +274,9 @@ struct VS_OUTPUT_Gbuffer
     float spriteBlend : TEXCOORD7;
 #if defined(PE_DEFORMED_VERTEX) || defined(GBUFFER_GENERATED_MASK)
     nointerpolation uint maskEligible : TEXCOORD8;
+#endif
+#ifdef PE_OPENPBR_FORWARD
+    nointerpolation float2 uvVertex : TEXCOORD9; // per-vertex UVs for the forward pass's UV-winding tangent sign
 #endif
     float4 position : SV_POSITION;
 };
