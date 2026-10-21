@@ -1,5 +1,5 @@
 // Material passes 1 and 2: bins each 8x8-pixel visibility tile once per module it holds (bin layout: VisibilityCommon.slang
-// PeBinThread), so each module's passes dispatch over its own tiles instead of the whole visibility buffer.
+// PE_BIN_ROW_TILES), so each module's passes dispatch over its own tiles instead of the whole visibility buffer.
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 #include "VisibilityCommon.slang"

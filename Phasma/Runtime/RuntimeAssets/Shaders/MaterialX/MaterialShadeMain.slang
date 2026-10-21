@@ -53,9 +53,10 @@ void PeEvaluateTile(uint2 tile, uint2 local, uint2 size)
             const PeSurfacePoint sp = PeBeginPixel(vis, pixel, (pixel & ~1u) + lane, size);
             const PeSurfaceInputs p = pe_material_inputs(sp.nextUv, sp.spriteBlend);
 
-            // MaterialX's subsurface curvature (pe_curvature), on the forward-facing normal mx_subsurface_bsdf passes it.
+            // MaterialX's subsurface curvature (pe_curvature), on the normal mx_subsurface_bsdf passes it (mtlx_codegen.py
+            // check_shade_once_curvature pins that).
             const float3 V = normalize(pe_view_position() - sp.P);
-            const float3 N = dot(p.geometry_normal, V) < 0.0 ? -p.geometry_normal : p.geometry_normal;
+            const float3 N = mx_forward_facing_normal(p.geometry_normal, V);
             const float curvature = length(fwidth(N)) / length(fwidth(sp.P));
 
             if (writer)
