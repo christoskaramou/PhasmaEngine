@@ -99,7 +99,7 @@ namespace pe
                                            const std::unordered_map<ImageView *, uint32_t> &imageViewIndices);
 
     // Legacy fields follow the constant inputs, so every legacy consumer (openpbr off, Android, unsupported GPUs, RT
-    // hits, the raster G-buffer under the material passes) shows the same base colour, metalness, roughness, IOR and
-    // emission. A connected input has no constant: its legacy field keeps the material's own value.
+    // hits, the raster G-buffer under the material passes) shows the same base colour, opacity (its alpha), metalness,
+    // roughness, IOR and emission. A connected input has no constant: its legacy field keeps the material's own value.
     void MirrorOpenPBRToLegacy(MaterialInstance &instance);
 } // namespace pe

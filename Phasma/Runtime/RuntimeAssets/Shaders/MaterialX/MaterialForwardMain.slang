@@ -1,6 +1,14 @@
+struct PeForwardOutput
+{
+    float4 color : SV_TARGET0;
+#ifdef PE_FORWARD_VELOCITY
+    float4 velocity : SV_TARGET1; // xy as GBufferPS; w is the blend's source alpha
+#endif
+};
+
 // MaterialX's own transparent output: the surface colour already carries the opacity factor, and with
 // TRANSMISSION_REFRACTION its alpha, 1 - avg(transparency), is the evaluated geometry_opacity (HwSurfaceNode.cpp).
-float4 mainPS(VS_OUTPUT_Gbuffer input) : SV_TARGET0
+PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
 {
     const float fallbackSign = PeUvWindingSign(GetAttributeAtVertex(input.uvVertex, 0),
                                                GetAttributeAtVertex(input.uvVertex, 1),
@@ -44,5 +52,16 @@ float4 mainPS(VS_OUTPUT_Gbuffer input) : SV_TARGET0
     if (any(isnan(color)) || any(isinf(color)))
         color = float3(0.0, 0.0, 0.0);
 
-    return float4(color, alpha);
+    PeForwardOutput output;
+    output.color = float4(color, alpha);
+
+#ifdef PE_FORWARD_VELOCITY
+    // TAA reprojects with one velocity per pixel: the surface's own where it is at least half opaque, else what is
+    // behind stays (forward-gaps plan Decision 1 = A).
+    const float2 currentNDC = input.positionCS.xy / input.positionCS.w - pc.projJitter;
+    const float2 previousNDC = input.prevPositionCS.xy / input.prevPositionCS.w - pc.prevProjJitter;
+    output.velocity = float4(previousNDC - currentNDC, 0.0, alpha >= 0.5 ? 1.0 : 0.0);
+#endif
+
+    return output;
 }

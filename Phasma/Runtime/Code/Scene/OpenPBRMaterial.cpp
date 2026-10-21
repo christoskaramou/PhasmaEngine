@@ -879,6 +879,14 @@ namespace pe
             instance.SetBaseColorFactor(vec4(glm::convertLinearToSRGB(color), instance.GetBaseColorFactor().a));
         }
 
+        // RT hits, shadow rays and the off path take a transparent mesh's opacity from the base colour's alpha.
+        if (const auto opacity = ConstantInput<float>(instance, "geometry_opacity"))
+        {
+            vec4 color = instance.GetBaseColorFactor();
+            color.a = std::clamp(*opacity, 0.0f, 1.0f);
+            instance.SetBaseColorFactor(color);
+        }
+
         if (const auto value = ConstantInput<float>(instance, "base_metalness"))
             instance.SetMetallic(*value);
 

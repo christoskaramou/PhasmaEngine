@@ -217,6 +217,15 @@ namespace pe::imagecapture
                         const float g = HalfToFloat(ReadU16(p + 2));
                         const float b = HalfToFloat(ReadU16(p + 4));
                         const float a = format == PE_FORMAT_R16G16B16A16_SFLOAT ? HalfToFloat(ReadU16(p + 6)) : 1.0f;
+                        if (velocityView) // velocity_format rgba16f / rgba32f: xy is the motion, as in RG
+                        {
+                            d[0] = ToByte(r * 0.5f + 0.5f);
+                            d[1] = ToByte(g * 0.5f + 0.5f);
+                            d[2] = ToByte(glm::length(vec2(r, g)));
+                            d[3] = 255;
+                            break;
+                        }
+
                         d[0] = ToByte(normalView ? r * 0.5f + 0.5f : r);
                         d[1] = ToByte(normalView ? g * 0.5f + 0.5f : g);
                         d[2] = ToByte(normalView ? b * 0.5f + 0.5f : b);
@@ -249,6 +258,15 @@ namespace pe::imagecapture
                         const float g = ReadF32(p + 4);
                         const float b = ReadF32(p + 8);
                         const float a = format == PE_FORMAT_R32G32B32A32_SFLOAT ? ReadF32(p + 12) : 1.0f;
+                        if (velocityView) // velocity_format rgba16f / rgba32f: xy is the motion, as in RG
+                        {
+                            d[0] = ToByte(r * 0.5f + 0.5f);
+                            d[1] = ToByte(g * 0.5f + 0.5f);
+                            d[2] = ToByte(glm::length(vec2(r, g)));
+                            d[3] = 255;
+                            break;
+                        }
+
                         d[0] = ToByte(normalView ? r * 0.5f + 0.5f : r);
                         d[1] = ToByte(normalView ? g * 0.5f + 0.5f : g);
                         d[2] = ToByte(normalView ? b * 0.5f + 0.5f : b);

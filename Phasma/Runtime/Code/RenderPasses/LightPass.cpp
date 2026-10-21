@@ -1220,19 +1220,31 @@ namespace pe
         m_viewportRT = rs->GetRenderTarget("viewport");
         m_albedoRT = rs->GetRenderTarget("albedo");
         m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
+        m_velocityRT = rs->GetRenderTarget("velocity");
         m_boundFrames.assign(RHII.GetSwapchainImageCount(), false);
 
-        m_attachments.assign(2, {});
-        m_attachments[0].image = m_viewportRT;
-        m_attachments[0].loadOp = PE_LOAD_OP_LOAD;
-        m_attachments[1].image = m_depthStencilRT;
-        m_attachments[1].loadOp = PE_LOAD_OP_LOAD;
+        // Colours first (viewport, then velocity for TAA when the target exists), depth last.
+        m_attachments.clear();
+        for (Image *image : {m_viewportRT, m_velocityRT, m_depthStencilRT})
+        {
+            if (!image)
+                continue;
+
+            Attachment &attachment = m_attachments.emplace_back();
+            attachment.image = image;
+            attachment.loadOp = PE_LOAD_OP_LOAD;
+        }
     }
 
     std::vector<Define> OpenPBRForwardPass::Defines() const
     {
         std::vector<Define> defines = LightingDefines();
         defines.push_back(Define{"PE_OPENPBR_FORWARD", "1"});
+
+        // The format as the value: a velocity_format change alters the key, so Resize rebuilds the pipelines' formats.
+        if (m_velocityRT)
+            defines.push_back(Define{"PE_FORWARD_VELOCITY", std::to_string(static_cast<int>(m_velocityRT->GetFormat()))});
+
         // Unused by the shaders: a viewport format change alters the key, so Resize rebuilds the pipelines' formats.
         if (m_viewportRT && m_viewportRT->GetFormat() == PE_FORMAT_R8G8B8A8_UNORM)
             defines.push_back(Define{"PE_VIEWPORT_RGBA8", "1"});
@@ -1264,6 +1276,14 @@ namespace pe
         info.blendEnable = true;
         info.colorBlendAttachments = {BlendState::Default};
         info.colorFormats = {m_viewportRT->GetFormat()};
+
+        // The shader's velocity alpha is 1 (overwrite) or 0 (keep what is behind), so the same blend selects.
+        if (m_velocityRT)
+        {
+            info.colorBlendAttachments.push_back(BlendState::Default);
+            info.colorFormats.push_back(m_velocityRT->GetFormat());
+        }
+
         info.depthFormat = RHII.GetDepthFormat();
         info.Update();
     }
@@ -1301,6 +1321,8 @@ namespace pe
         const int envSamples = std::clamp(Settings::Get<SceneSettings>().openpbr_env_samples, 1, 512);
         cmd->SetConstantAt(21, static_cast<uint32_t>(envSamples));                // env_samples (PE_OPENPBR_FORWARD)
         cmd->SetConstantAt(22, static_cast<uint32_t>(scene->GetMaxJointCount())); // jointsCount
+        cmd->SetConstantAt(24, camera->GetProjJitter());                          // projJitter
+        cmd->SetConstantAt(26, camera->GetPrevProjJitter());                      // prevProjJitter
 
         cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "OpenPBRForwardPass");
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());

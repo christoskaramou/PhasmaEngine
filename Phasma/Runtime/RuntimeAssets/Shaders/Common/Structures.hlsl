@@ -112,6 +112,9 @@ struct PushConstants_Lighting
 #ifdef PE_OPENPBR_FORWARD
     uint env_samples; // dword 21: OpenPBR filtered importance samples
     uint jointsCount; // dword 22: GBufferVS's joint count (OpenPBRForwardPass)
+    uint forwardPad;  // dword 23: keeps the jitters 8-byte aligned (std430 and root-constant packing)
+    float2 projJitter;     // dwords 24-25: TAA jitter, removed from the velocity as GBufferPS does
+    float2 prevProjJitter; // dwords 26-27: last frame's
 #endif
 };
 #endif

@@ -166,5 +166,6 @@ namespace pe
     private:
         std::vector<Attachment> m_attachments;
         Image *m_depthStencilRT = nullptr;
+        Image *m_velocityRT = nullptr;
     };
 } // namespace pe

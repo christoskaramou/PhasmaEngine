@@ -578,11 +578,31 @@ Phase 6 forward pass (source verified 2026-10-21; [plan](../../superpowers/plans
 - **Limits.**
   - Refraction shows the environment only (the spec's reference).
   - Sorting is per mesh, with no OIT. A MaterialX transparent behind legacy glass is hidden by the legacy pass's depth write.
-  - Forward pixels write no velocity, so TAA can ghost moving transparents. SSR, DOF and motion blur see the surface behind.
-  - RT keeps legacy hit groups for forward meshes, so Full RT, reflections and GI see them at the legacy alpha, not `geometry_opacity`. Transparent shadow casting is unchanged.
+  - SSR and DOF see the surface behind. Since 2026-10-21, motion blur gets the forward layer's velocity (Decision A below) with the depth of the surface behind it.
+  - RT keeps legacy hit groups for forward meshes. Since 2026-10-21 they see a constant `geometry_opacity` through the mirrored legacy alpha, but a connected (textured or graph) opacity keeps the material's own alpha, and refraction is tinted by the mirrored base colour, not `transmission_color`. RT shadow rays (any-hit `1 - a`) see the mirrored alpha too; raster shadow-map casting is unchanged.
   - Lines (720) draw before the pass and write no depth, so a line in front of MaterialX glass is blended under it (legacy glass has the opposite case). Particles and the editor grid draw after it and over glass they are behind.
   - Limb normals are not bent (MaterialX's own dots).
   - Skinned and sprite forward meshes are checked by review only.
+- **Forward gaps (2026-10-21; [plan](../../superpowers/plans/2026-10-21-openpbr-forward-gaps.md)).**
+  - **Velocity.**
+    - `OpenPBRForwardPass` binds the `velocity` target between the viewport and depth.
+    - `MaterialForwardMain.slang` (`PE_FORWARD_VELOCITY`) writes `GBufferPS`'s jitter-corrected NDC motion from `positionCS` / `prevPositionCS`. The jitters are forward push-constant dwords 24-27; dword 23 pads them to 8 bytes.
+    - The user chose the dominant layer (Decision A). The velocity alpha is 1 where `geometry_opacity >= 0.5` and 0 below, through the `Default` blend, so TAA (which reads velocity at the pixel, `TAA/TAA.hlsl`) reprojects the layer carrying most of the pixel.
+  - **RT opacity.**
+    - `MirrorOpenPBRToLegacy` also copies a constant `geometry_opacity` into `baseColorFactor.a`. Full RT, reflections, GI and shadow rays (any-hit `1 - a`) see it through the legacy hit group.
+    - It runs on assignment, input edits and scene load, so saved scenes and Players pick it up without a re-export.
+    - With `openpbr` off, such meshes now show that opacity. `openpbr_forward.py`'s baseline is therefore recorded with `MtlxBlend`'s legacy alpha set by hand. The saved Sponza and mix scenes' off-identity is unchanged.
+  - **Verified (sandbox Release, 2560x1369; `openpbr_forward.py`).**
+    - `rt_opacity`: Full RT with only `geometry_opacity` 0.25 set is within 1.0/255 of the hand-set alpha. Before the fix it was 172/255 away, because the sphere was opaque.
+    - `velocity`: with TAA on, a sphere oscillating at opacity 0.8 has median |v| 10/255 (0 before the fix). One at 0.3 and a still one have 0.
+      - The jitter correction is checked by code only: it matches `GBufferPS.hlsl` and uses the same camera getters. The 8-bit |v| capture cannot resolve a jitter of under 1/width in NDC.
+    - `velocity_format`: switching the target to rgba16f under the built pipelines used to leave them on the old format (`VUID-vkCmdDrawIndexed-dynamicRenderingUnusedAttachments-08910`, |v| 0). The define now carries the format, so `Resize` rebuilds them.
+    - `identity` and `parity` are unchanged.
+    - Both parts and the DX12 run with the debug layer pass. No errors or validation messages.
+  - **Cost.**
+    - The forward pass on its fixture went 0.684 → 0.685 ms.
+    - Sponza with `openpbr` off went from 1033 to 1016 FPS (−1.5%, under the thresholds), with GPU time 0.651 → 0.654 ms.
+    - A side-by-side TAA viewport of oscillating spheres showed no visible trail in either build.
 
 Phase 7 performance (source verified 2026-10-21; [plan](../../superpowers/plans/2026-10-22-openpbr-phase7.md)):
 
