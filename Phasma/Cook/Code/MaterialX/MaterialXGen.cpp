@@ -90,7 +90,8 @@ namespace pe
         }
 
         // RT hit stages (PE_MATERIAL_HIT) have no derivatives: zero differentials there (mip 0, as legacy hits sample),
-        // the builtins everywhere else. Subsurface's curvature ratio would become 0/0, so hits read the hit triangle's.
+        // fine derivatives everywhere else, as MaterialX's GLSL reference gets them on our drivers (DXIL's plain ddx/fwidth
+        // are coarse). Subsurface's curvature ratio would become 0/0 in hits, so they read the hit triangle's.
         constexpr const char *kDerivativeSeams = R"(#ifdef PE_MATERIAL_HIT
 #define pe_ddx(x) ((x) * 0.0)
 #define pe_ddy(x) ((x) * 0.0)
@@ -104,9 +105,9 @@ float pe_curvature(float3 N, float3 P)
     return pe_hit_curvature;
 }
 #else
-#define pe_ddx(x) ddx(x)
-#define pe_ddy(x) ddy(x)
-#define pe_fwidth(x) fwidth(x)
+#define pe_ddx(x) ddx_fine(x)
+#define pe_ddy(x) ddy_fine(x)
+#define pe_fwidth(x) (abs(ddx_fine(x)) + abs(ddy_fine(x)))
 #define pe_ddx_fine(x) ddx_fine(x)
 #define pe_ddy_fine(x) ddy_fine(x)
 #define pe_ddx_coarse(x) ddx_coarse(x)
@@ -121,7 +122,7 @@ float pe_curvature(float3 N, float3 P)
 #else
 float pe_curvature(float3 N, float3 P)
 {
-    return length(fwidth(N)) / length(fwidth(P));
+    return length(pe_fwidth(N)) / length(pe_fwidth(P));
 }
 #endif
 #endif

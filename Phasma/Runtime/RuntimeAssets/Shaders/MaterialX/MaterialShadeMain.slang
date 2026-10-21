@@ -57,7 +57,7 @@ void PeEvaluateTile(uint2 tile, uint2 local, uint2 size)
             // check_shade_once_curvature pins that).
             const float3 V = normalize(pe_view_position() - sp.P);
             const float3 N = mx_forward_facing_normal(p.geometry_normal, V);
-            const float curvature = length(fwidth(N)) / length(fwidth(sp.P));
+            const float curvature = length(pe_fwidth(N)) / length(pe_fwidth(sp.P));
 
             if (writer)
             {
