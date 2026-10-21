@@ -25,13 +25,15 @@ namespace pe
         void SyncModules(const std::vector<uint32_t> &modules);
         std::vector<PassInfo *> GetPassInfos() noexcept override;
 
-        // The bins, filled this frame once BinsReady(): per bin uint4(group counts, tile count) at BinArgsOffset, its
-        // tiles at BinTilesOffset (VisibilityCommon.slang PeBinThread).
+        // The bins, filled this frame once BinsReady(): per bin pass 1's uint4(group counts, tile count) at
+        // BinThinArgsOffset, pass 2's group counts at BinShadeArgsOffset, its tiles at BinTilesOffset
+        // (VisibilityCommon.slang PeBinTile).
         Buffer *GetBins() const { return m_bins; }
         bool BinsReady() const;
         uint32_t BinSlot(uint32_t module) const;
-        uint32_t BinArgsOffset(uint32_t slot) const { return slot * 16u; }
-        uint32_t BinTilesOffset(uint32_t slot) const { return m_binSlots * 16u + slot * m_binCapacity * 4u; }
+        uint32_t BinThinArgsOffset(uint32_t slot) const { return slot * 32u; }
+        uint32_t BinShadeArgsOffset(uint32_t slot) const { return slot * 32u + 16u; }
+        uint32_t BinTilesOffset(uint32_t slot) const { return m_binSlots * 32u + slot * m_binCapacity * 4u; }
 
     private:
         void BuildPipeline(PassInfo &info, uint32_t module);

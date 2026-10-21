@@ -140,7 +140,7 @@ namespace pe
             m_binSlots = std::max(m_slotCount, 1u);
             m_binCapacity = capacity;
             m_bins = Buffer::Create({
-                .size = size_t(m_binSlots) * 16u + size_t(m_binSlots) * m_binCapacity * 4u,
+                .size = size_t(m_binSlots) * 32u + size_t(m_binSlots) * m_binCapacity * 4u,
                 .usage = PE_BUFFER_USAGE_STORAGE_BUFFER | PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_TRANSFER_DST,
                 .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
                 .name = "MaterialClassify_bins",
@@ -295,7 +295,7 @@ namespace pe
     void MaterialThinPass::Classify(CommandBuffer *cmd)
     {
         cmd->BeginDebugRegion("MaterialClassifyPass");
-        cmd->FillBuffer(m_bins, 0, BinArgsOffset(m_slotCount), 0);
+        cmd->FillBuffer(m_bins, 0, BinThinArgsOffset(m_slotCount), 0);
 
         BufferBarrierInfo barrier{};
         barrier.buffer = m_bins;
@@ -342,12 +342,12 @@ namespace pe
                 continue;
 
             pc.moduleIndex = module;
-            pc.binsCount = BinArgsOffset(slot) + 12u;
+            pc.binsCount = BinThinArgsOffset(slot) + 12u;
             pc.binsTiles = BinTilesOffset(slot);
             cmd->BindPipeline(*info);
             cmd->SetConstants(pc);
             cmd->PushConstants();
-            cmd->DispatchIndirect(m_bins, BinArgsOffset(slot));
+            cmd->DispatchIndirect(m_bins, BinThinArgsOffset(slot));
         }
 
         cmd->EndDebugRegion();

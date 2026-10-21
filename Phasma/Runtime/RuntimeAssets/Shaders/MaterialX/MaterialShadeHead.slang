@@ -1,6 +1,7 @@
 // Material pass 2: MaterialX's generated shading for visibility pixels of MaterialX materials, under PE's lights,
 // shadows and environment (PePrelude.slang over LightingPS's bindings), written over LightOpaque's result.
-// Quad-exact: each output pixel is evaluated by a 2x2 quad on its own triangle (see VisibilityDebug.slang).
+// Quad-exact: each output pixel's graph inputs are evaluated by a 2x2 quad on its own triangle (see VisibilityDebug.slang).
+#define PE_SHADE_ONCE 1 // the BSDF runs once per pixel, after the quads (MaterialShadeMain.slang)
 #include "../Gbuffer/Lighting.hlsl"
 #include "VisibilityCommon.slang"
 

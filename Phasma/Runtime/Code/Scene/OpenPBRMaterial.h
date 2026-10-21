@@ -4,7 +4,7 @@
 
 namespace pe
 {
-    inline constexpr uint32_t kOpenPBRModuleAbi = 3;
+    inline constexpr uint32_t kOpenPBRModuleAbi = 4;
 
     struct Mesh;
     class Scene;

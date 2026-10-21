@@ -26,24 +26,32 @@ bool PeMatchesModule(ByteAddressBuffer materials, Mesh_Constants mesh, uint modu
     return PeModuleOf(materials, mesh) == moduleIndex;
 }
 
-// MaterialClassify bins each module's 8x8-pixel tiles: per bin, uint4(group counts x, y, z, tile count), then the packed
-// tile coordinates. A tile is four 8x8-thread groups (two threads per pixel axis), and a row of the indirect grid holds
-// PE_BIN_ROW_TILES tiles, keeping both group counts far under the 65,535 per dimension D3D12 allows.
+// MaterialClassify bins each module's 8x8-pixel tiles: per bin, uint4(pass 1 group counts x, y, z, tile count) and
+// uint4(pass 2 group counts x, y, z, unused), then the packed tile coordinates. Pass 1 runs a tile as four 8x8-thread
+// groups (two threads per pixel axis), pass 2 as one. A row of either indirect grid holds PE_BIN_ROW_TILES tiles,
+// keeping both group counts far under the 65,535 per dimension D3D12 allows.
 static const uint PE_BIN_ROW_TILES = 64u;
 
-// The dispatch thread a binned group's thread stands for (the full-screen dispatch's SV_DispatchThreadID), or false
-// for the whole group past the bin's last tile.
-bool PeBinThread(ByteAddressBuffer bins, uint countOffset, uint tilesOffset, uint3 group, uint3 local, out uint2 tid)
+// The bin's tile at `index` in 8x8-pixel units, or false past its last tile.
+bool PeBinTile(ByteAddressBuffer bins, uint countOffset, uint tilesOffset, uint index, out uint2 tile)
 {
-    tid = uint2(0u, 0u);
-    const uint index = group.y * PE_BIN_ROW_TILES + (group.x >> 2u);
+    tile = uint2(0u, 0u);
     if (index >= bins.Load(countOffset))
         return false;
 
     const uint packed = bins.Load(tilesOffset + index * 4u);
-    const uint2 tile = uint2(packed & 0xffffu, packed >> 16u);
-    tid = tile * 16u + uint2(group.x & 1u, (group.x >> 1u) & 1u) * 8u + local.xy;
+    tile = uint2(packed & 0xffffu, packed >> 16u);
     return true;
+}
+
+// The dispatch thread a binned pass 1 group's thread stands for (the full-screen dispatch's SV_DispatchThreadID), or
+// false for the whole group past the bin's last tile.
+bool PeBinThread(ByteAddressBuffer bins, uint countOffset, uint tilesOffset, uint3 group, uint3 local, out uint2 tid)
+{
+    uint2 tile;
+    const bool binned = PeBinTile(bins, countOffset, tilesOffset, group.y * PE_BIN_ROW_TILES + (group.x >> 2u), tile);
+    tid = tile * 16u + uint2(group.x & 1u, (group.x >> 1u) & 1u) * 8u + local.xy;
+    return binned;
 }
 
 struct PeSurfacePoint

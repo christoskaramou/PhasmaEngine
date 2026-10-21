@@ -9,7 +9,7 @@ struct PushConstants_MaterialClassify
     uint slotCount;   // bins, one per module of the scene
     uint mapSize;     // entries of pe_moduleSlots
     uint capacity;    // tiles per bin: every tile of the visibility buffer
-    uint tilesOffset; // byte offset of bin 0's tiles, after every bin's uint4
+    uint tilesOffset; // byte offset of bin 0's tiles, after every bin's two uint4s
 };
 
 [[vk::push_constant]] PushConstants_MaterialClassify pc;
@@ -42,8 +42,10 @@ void mainCS(uint3 group : SV_GroupID, uint3 local : SV_GroupThreadID, uint index
     {
         for (uint s = index; s < pc.slotCount; s += 64u)
         {
-            pe_bins.Store(s * 16u, PE_BIN_ROW_TILES * 4u);
-            pe_bins.Store(s * 16u + 8u, 1u);
+            pe_bins.Store(s * 32u, PE_BIN_ROW_TILES * 4u);
+            pe_bins.Store(s * 32u + 8u, 1u);
+            pe_bins.Store(s * 32u + 16u, PE_BIN_ROW_TILES);
+            pe_bins.Store(s * 32u + 24u, 1u);
         }
     }
 
@@ -62,8 +64,11 @@ void mainCS(uint3 group : SV_GroupID, uint3 local : SV_GroupThreadID, uint index
         return;
 
     uint tile;
-    pe_bins.InterlockedAdd(slot * 16u + 12u, 1u, tile);
+    pe_bins.InterlockedAdd(slot * 32u + 12u, 1u, tile);
     pe_bins.Store(pc.tilesOffset + (slot * pc.capacity + tile) * 4u, group.x | (group.y << 16u));
     if (tile % PE_BIN_ROW_TILES == 0u)
-        pe_bins.InterlockedAdd(slot * 16u + 4u, 1u);
+    {
+        pe_bins.InterlockedAdd(slot * 32u + 4u, 1u);
+        pe_bins.InterlockedAdd(slot * 32u + 20u, 1u);
+    }
 }

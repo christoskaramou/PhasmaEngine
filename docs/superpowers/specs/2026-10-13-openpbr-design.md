@@ -239,6 +239,7 @@ The 100-plane workload uses separate 1 m default OpenPBR tiles in a 10x10 grid, 
 5. **RT per-material hit groups** (reflections and GI hits run the graph).
 6. **Transparent/transmission** forward pass with the generated code.
 7. **Performance:** empty-bin compaction, software VRS, skipping legacy work for visibility pixels; Android stays legacy.
+   - *Amended 2026-10-21 (Phase 7, [plan](../plans/2026-10-22-openpbr-phase7.md)):* the user chose shading once per pixel over software VRS. Pass 2 evaluates the graph inputs quad-mapped into groupshared and runs the BSDF once per pixel (all-MaterialX Sponza byte-identical to before, the parity cases within their tolerances on Vulkan and DX12); subsurface curvature moves into the input stage (module ABI 4). Empty-bin compaction (not measurable above noise) and skipping legacy work (at most about 0.2 ms) were measured and left out.
 
 ## Carried over from revision 1
 

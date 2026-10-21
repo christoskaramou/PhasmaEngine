@@ -111,10 +111,19 @@ float pe_curvature(float3 N, float3 P)
 #define pe_ddy_fine(x) ddy_fine(x)
 #define pe_ddx_coarse(x) ddx_coarse(x)
 #define pe_ddy_coarse(x) ddy_coarse(x)
+#ifdef PE_SHADE_ONCE
+// Material pass 2 shades once per pixel: its quad-mapped stage 1 computes this curvature before the BSDF stage.
+static float pe_shade_curvature;
+float pe_curvature(float3 N, float3 P)
+{
+    return pe_shade_curvature;
+}
+#else
 float pe_curvature(float3 N, float3 P)
 {
     return length(fwidth(N)) / length(fwidth(P));
 }
+#endif
 #endif
 )";
 

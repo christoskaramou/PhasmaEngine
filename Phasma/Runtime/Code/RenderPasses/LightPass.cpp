@@ -1172,12 +1172,12 @@ namespace pe
             if (slot == UINT32_MAX)
                 continue;
 
-            cmd->SetConstantAt(23, module);                          // module_index (PE_OPENPBR_SHADE)
-            cmd->SetConstantAt(24, thin->BinArgsOffset(slot) + 12u); // bins_count
-            cmd->SetConstantAt(25, thin->BinTilesOffset(slot));      // bins_tiles
+            cmd->SetConstantAt(23, module);                              // module_index (PE_OPENPBR_SHADE)
+            cmd->SetConstantAt(24, thin->BinThinArgsOffset(slot) + 12u); // bins_count
+            cmd->SetConstantAt(25, thin->BinTilesOffset(slot));          // bins_tiles
             cmd->BindPipeline(*info);
             cmd->PushConstants();
-            cmd->DispatchIndirect(thin->GetBins(), thin->BinArgsOffset(slot));
+            cmd->DispatchIndirect(thin->GetBins(), thin->BinShadeArgsOffset(slot));
         }
 
         cmd->EndDebugRegion();
