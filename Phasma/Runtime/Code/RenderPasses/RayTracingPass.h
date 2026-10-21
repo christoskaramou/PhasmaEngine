@@ -39,8 +39,16 @@ namespace pe
 
         void SetScene(Scene *scene) { m_scene = scene; }
 
-        // One hit group per MaterialX module after the legacy group, in Scene::GetRTHitModules order (OpenPBR).
+        // One hit group per MaterialX module after the legacy group, in m_hitModules order (OpenPBR). SyncHitModules
+        // rebuilds at once; PrepareHitBuild returns a build that touches no pass state, for a worker thread, and
+        // AdoptHitBuild swaps its result in unless the pass was rebuilt or released since it was prepared.
         void SyncHitModules(const std::vector<uint32_t> &modules);
+        std::function<std::shared_ptr<PassInfo>()> PrepareHitBuild(const std::vector<uint32_t> &modules) const;
+        bool AdoptHitBuild(const std::shared_ptr<PassInfo> &info,
+                           const std::vector<uint32_t> &modules,
+                           uint64_t generation);
+        const std::vector<uint32_t> &GetHitModules() const { return m_hitModules; }
+        uint64_t GetHitGeneration() const { return m_hitGeneration; }
 
     protected:
         void BuildTracePipeline();
@@ -58,6 +66,7 @@ namespace pe
         std::vector<Buffer *> m_uniforms;
         uint64_t m_lastGeometryVersion = 0;
         std::vector<uint32_t> m_hitModules;     // MaterialX modules with a hit group, in SBT order after the legacy group
+        uint64_t m_hitGeneration = 0;           // bumped by every rebuild and release: older prepared builds are stale
         Buffer *m_boundMaterialBytes = nullptr; // the hit groups' bindings follow a repacked buffer or a rebuilt sky
         Image *m_boundEnvRadiance = nullptr;
     };

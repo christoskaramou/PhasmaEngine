@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-Status: implemented and verified, uncommitted, 2026-10-20 (user chose Decision 1 = B and Native execution). Starting point: `63488b84` on `master`. Results and open items are in the wiki's "Phase 5 RT hit groups" section and the ledger `.superpowers/sdd/2026-10-20-openpbr-phase5/progress.md`. The user approved the loosened lifecycle/identity test bounds (2026-10-20). Open: the RT pipeline build stall (482 s for 4 modules on Vulkan), now its own session. No commit is authorized.
+Status: implemented and verified, uncommitted, 2026-10-20 (user chose Decision 1 = B and Native execution). Starting point: `63488b84` on `master`. Results and open items are in the wiki's "Phase 5 RT hit groups" section and the ledger `.superpowers/sdd/2026-10-20-openpbr-phase5/progress.md`. The user approved the loosened lifecycle/identity test bounds (2026-10-20). RT pipeline build stall: the 482 s was measured with Vulkan validation on. The RT part now builds on a worker (2026-10-21, uncommitted; wiki "Background builds"). The raster thin/shade compile of a new module still blocks the main thread. No commit is authorized.
 
 **Goal:** When a ray hits a mesh with a MaterialX material, its hit shader runs that material's generated graph. This covers reflection rays, GI rays, screen-probe rays and full-RT primary rays. Hits then show textures, connected inputs and the coat, fuzz, thin-film and subsurface lobes, not the legacy mirror.
 

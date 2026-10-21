@@ -19,6 +19,108 @@
 
 namespace pe
 {
+    namespace
+    {
+        // What a trace pipeline build reads from its pass, copied so a worker thread can build it.
+        struct TraceDesc
+        {
+            std::string name;
+            std::vector<Define> defines;
+            std::vector<Define> hitDefines;
+            std::vector<std::string> hitSources;
+        };
+
+        TraceDesc MakeTraceDesc(bool hdr,
+                                bool probeTracing,
+                                bool screenProbes,
+                                bool reflections,
+                                const std::vector<uint32_t> &modules)
+        {
+            TraceDesc desc;
+            if (hdr)
+                desc.defines.push_back({"HDR_SCENE", "1"});
+            if (probeTracing)
+                desc.defines.push_back({"GI_PROBES", "1"});
+            else
+                desc.defines.push_back({"GI_SHADING", "1"});
+            if (screenProbes)
+                desc.defines.push_back({"SCREEN_PROBES", "1"});
+            if (reflections)
+                desc.defines.push_back({"REFLECTIONS", "1"});
+
+            if (screenProbes)
+                desc.name = "SP_ProbeTracing";
+            else if (reflections)
+                desc.name = "LR_Tracing";
+            else
+                desc.name = probeTracing ? "GI_ProbeTracing" : "RayTracingPipeline";
+
+            // Each MaterialX module runs its graph at the hit; instances select a group by their SBT offset
+            // (WriteRTInstances). Module hits read only these defines, so passes that agree on them share one compiled
+            // shader (a closest-hit compiles cold in about 4 s to DXIL and 22 s to SPIR-V, 2026-10-21); every pass shares
+            // the any-hit. SCREEN_PROBES and REFLECTIONS also select this frame's probe atlas (ProbeVolume.hlsl
+            // GI_AFTER_UPDATE), as their legacy hits do.
+            desc.hitDefines = {{"PE_MATERIAL_HIT", "1"}, {probeTracing ? "GI_PROBES" : "GI_SHADING", "1"}};
+            if (screenProbes)
+                desc.hitDefines.push_back({"SCREEN_PROBES", "1"});
+
+            if (reflections)
+                desc.hitDefines.push_back({"REFLECTIONS", "1"});
+
+            for (uint32_t module : modules)
+                desc.hitSources.push_back(GetOpenPBRModule(module).hitSource);
+
+            return desc;
+        }
+
+        void BuildTracePassInfo(PassInfo &info, const TraceDesc &desc)
+        {
+            const std::string rayTrace = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl";
+            auto legacy = [&](const char *entry, PeShaderStageFlags stage)
+            {
+                return Shader::Create({.sourcePath = rayTrace,
+                                       .entryPoint = entry,
+                                       .stage = stage,
+                                       .defines = desc.defines});
+            };
+            Shader *rayGen = legacy("raygeneration", PE_SHADER_STAGE_RAYGEN_KHR);
+            Shader *closestHit = legacy("closesthit", PE_SHADER_STAGE_CLOSEST_HIT_KHR);
+            Shader *anyHit = legacy("anyhit", PE_SHADER_STAGE_ANY_HIT_KHR);
+            Shader *miss = legacy("miss", PE_SHADER_STAGE_MISS_KHR);
+
+            info.name = desc.name;
+            info.acceleration.rayGen = rayGen;
+            info.acceleration.miss = {miss};
+            info.acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
+
+            const std::vector<Define> maskDefines = {{"PE_MATERIAL_HIT", "1"}, {"GI_PROBES", "1"}};
+            for (const std::string &source : desc.hitSources)
+            {
+                Shader *moduleHit = Shader::Create({.sourcePath = source,
+                                                    .entryPoint = "pe_hit_closest",
+                                                    .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR,
+                                                    .defines = desc.hitDefines});
+                Shader *moduleMask = Shader::Create({.sourcePath = source,
+                                                     .entryPoint = "pe_hit_any",
+                                                     .stage = PE_SHADER_STAGE_ANY_HIT_KHR,
+                                                     .defines = maskDefines});
+                info.acceleration.hitGroups.push_back({.closestHit = moduleHit, .anyHit = moduleMask});
+            }
+
+            info.acceleration.maxRecursionDepth = 4;
+            info.Update();
+        }
+
+        // In-flight frames still use the old pipeline and its descriptor sets: retire both with the frame, as module
+        // passes do. A later list with the same shaders must build a pipeline of its own, not reuse one that
+        // references the retired pass info.
+        void RetirePassInfo(const std::shared_ptr<PassInfo> &info)
+        {
+            CommandBuffer::RetirePipelines(*info);
+            RHII.AddToDeletionQueue([retired = info] {});
+        }
+    } // namespace
+
     void RayTracingPass::Init()
     {
         m_scene = nullptr;
@@ -37,72 +139,56 @@ namespace pe
 
     void RayTracingPass::BuildTracePipeline()
     {
-        std::vector<Define> defines;
-        if (m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT)
-            defines.push_back({"HDR_SCENE", "1"});
-        if (m_probeTracing)
-            defines.push_back({"GI_PROBES", "1"});
-        else
-            defines.push_back({"GI_SHADING", "1"});
-        if (m_screenProbes)
-            defines.push_back({"SCREEN_PROBES", "1"});
-        if (m_reflections)
-            defines.push_back({"REFLECTIONS", "1"});
-
-        // Shaders
-        Shader *rayGen = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "raygeneration", .stage = PE_SHADER_STAGE_RAYGEN_KHR, .defines = defines});
-        Shader *closestHit = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "closesthit", .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR, .defines = defines});
-        Shader *anyHit = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "anyhit", .stage = PE_SHADER_STAGE_ANY_HIT_KHR, .defines = defines});
-        Shader *miss = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl", .entryPoint = "miss", .stage = PE_SHADER_STAGE_MISS_KHR, .defines = defines});
-
-        m_passInfo->name = m_screenProbes ? "SP_ProbeTracing" : m_reflections ? "LR_Tracing"
-                                                                              : (m_probeTracing ? "GI_ProbeTracing" : "RayTracingPipeline");
-        m_passInfo->acceleration.rayGen = rayGen;
-        m_passInfo->acceleration.miss = {miss};
-        m_passInfo->acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
-
-        // Each MaterialX module runs its graph at the hit; instances select a group by their SBT offset (WriteRTInstances).
-        // Module hits read only these defines, so passes that agree on them share one compiled shader (about 4 s cold
-        // per closest-hit); every pass shares the any-hit. SCREEN_PROBES and REFLECTIONS also select this frame's probe
-        // atlas (ProbeVolume.hlsl GI_AFTER_UPDATE), as their legacy hits do.
-        std::vector<Define> hitDefines = {{"PE_MATERIAL_HIT", "1"}, {m_probeTracing ? "GI_PROBES" : "GI_SHADING", "1"}};
-        if (m_screenProbes)
-            hitDefines.push_back({"SCREEN_PROBES", "1"});
-
-        if (m_reflections)
-            hitDefines.push_back({"REFLECTIONS", "1"});
-
-        const std::vector<Define> maskDefines = {{"PE_MATERIAL_HIT", "1"}, {"GI_PROBES", "1"}};
-        for (uint32_t module : m_hitModules)
-        {
-            const std::string &source = GetOpenPBRModule(module).hitSource;
-            Shader *moduleHit = Shader::Create({.sourcePath = source,
-                                                .entryPoint = "pe_hit_closest",
-                                                .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR,
-                                                .defines = hitDefines});
-            Shader *moduleMask = Shader::Create({.sourcePath = source,
-                                                 .entryPoint = "pe_hit_any",
-                                                 .stage = PE_SHADER_STAGE_ANY_HIT_KHR,
-                                                 .defines = maskDefines});
-            m_passInfo->acceleration.hitGroups.push_back({.closestHit = moduleHit, .anyHit = moduleMask});
-        }
-
-        m_passInfo->acceleration.maxRecursionDepth = 4;
-        m_passInfo->Update();
+        m_hitGeneration++;
+        const bool hdr = m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT;
+        const TraceDesc desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, m_hitModules);
+        BuildTracePassInfo(*m_passInfo, desc);
     }
 
     void RayTracingPass::SyncHitModules(const std::vector<uint32_t> &modules)
     {
+        m_hitGeneration++; // a build prepared for another list is stale now
         if (modules == m_hitModules)
             return;
 
         m_hitModules = modules;
-
-        // In-flight frames still use the old pipeline's descriptor sets: retire them with the frame, as module passes do.
-        RHII.AddToDeletionQueue([retired = m_passInfo] {});
+        RetirePassInfo(m_passInfo);
         m_passInfo = std::make_shared<PassInfo>();
         BuildTracePipeline();
         UpdateDescriptorSets();
+    }
+
+    std::function<std::shared_ptr<PassInfo>()>
+    RayTracingPass::PrepareHitBuild(const std::vector<uint32_t> &modules) const
+    {
+        const bool hdr = m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT;
+        return [desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, modules)]
+        {
+            auto info = std::make_shared<PassInfo>();
+            BuildTracePassInfo(*info, desc);
+
+            // Ray tracing binds outside render passes: the frame's bind finds this pipeline in the cache.
+            CommandBuffer::GetPipeline(nullptr, *info);
+            return info;
+        };
+    }
+
+    bool RayTracingPass::AdoptHitBuild(const std::shared_ptr<PassInfo> &info,
+                                       const std::vector<uint32_t> &modules,
+                                       uint64_t generation)
+    {
+        if (generation != m_hitGeneration)
+        {
+            RetirePassInfo(info);
+            return false;
+        }
+
+        RetirePassInfo(m_passInfo);
+        m_passInfo = info;
+        m_hitModules = modules;
+        m_hitGeneration++;
+        UpdateDescriptorSets();
+        return true;
     }
 
     void RayTracingPass::CreateUniforms(CommandBuffer *cmd)
@@ -399,8 +485,9 @@ namespace pe
 
         m_rtDepth = nullptr;
 
-        // A released pass re-initializes legacy-only; the frame's SyncHitModules adds the modules back.
+        // A released pass re-initializes legacy-only; SceneRendererCore::SyncRTHitModules builds the modules back.
         m_hitModules.clear();
+        m_hitGeneration++;
         m_boundMaterialBytes = nullptr;
         m_boundEnvRadiance = nullptr;
     }

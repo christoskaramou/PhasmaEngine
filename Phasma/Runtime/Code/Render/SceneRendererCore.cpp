@@ -184,6 +184,13 @@ namespace pe
 
     void SceneRendererCore::DestroyRenderPassComponents()
     {
+        // The worker creates pipelines on the device: let it stop after its current pass first.
+        if (m_rtHitBuild.done.valid())
+        {
+            m_rtHitBuild.cancel->store(true);
+            FinishRTHitBuild();
+        }
+
         DestroyInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized);
         DestroyScenePerception();
     }
@@ -236,9 +243,33 @@ namespace pe
         SyncRTHitModules();
     }
 
-    // RT hit groups and the TLAS offsets that select them follow the scene's modules while OpenPBR is effective and its
-    // sky (bound by module hits) exists, in the same frame; the first RT pass to trace refits the instances before any
-    // ray reads them.
+    namespace
+    {
+        // TLAS hit-group offsets are 1 + an index into the scene's list: only a prefix of every pass's list selects the
+        // same group in all of them.
+        std::vector<uint32_t> ReadyHitPrefix(const std::vector<RayTracingPass *> &passes)
+        {
+            if (passes.empty())
+                return {};
+
+            std::vector<uint32_t> prefix = passes.front()->GetHitModules();
+            for (const RayTracingPass *pass : passes)
+            {
+                const std::vector<uint32_t> &ready = pass->GetHitModules();
+                const auto diverged = std::mismatch(prefix.begin(), prefix.end(), ready.begin(), ready.end()).first;
+                prefix.erase(diverged, prefix.end());
+            }
+
+            return prefix;
+        }
+    } // namespace
+
+    // RT hit groups follow the scene's modules while OpenPBR is effective and its sky (bound by module hits) exists.
+    // A new list builds the RT passes' pipelines on a worker: cold slangc and driver compiles took 90 s for four modules
+    // on DX12 and 410 s on Vulkan (2026-10-21), all of it on the main thread before. Instances select module groups only
+    // within the list prefix every pass has ready, so they keep the legacy hit until then. Without modules the groups go
+    // at once (legacy-only pipelines are cheap, and module groups bind the sky). The first RT pass to trace refits the
+    // instances before any ray reads them.
     void SceneRendererCore::SyncRTHitModules()
     {
         static const std::vector<uint32_t> noModules;
@@ -246,8 +277,6 @@ namespace pe
         const bool openpbrSky = m_skyBox.GetOpenPBRRadiance() && m_skyBox.GetOpenPBRIrradiance();
         const std::vector<uint32_t> &modules = SceneUsesOpenPBR() && openpbrSky && scene ? scene->GetOpenPBRModules()
                                                                                          : noModules;
-        if (scene)
-            scene->SetRTHitModules(modules);
 
         const std::pair<SceneRenderGraphPassId, IRenderPassComponent *> rayTracers[] = {
             {SceneRenderGraphPassId::RayTracing, m_scenePasses.rayTracing},
@@ -255,11 +284,81 @@ namespace pe
             {SceneRenderGraphPassId::ScreenProbes, m_scenePasses.screenProbes},
             {SceneRenderGraphPassId::Reflections, m_scenePasses.reflections},
         };
+        std::vector<RayTracingPass *> passes;
         for (const auto &[id, pass] : rayTracers)
         {
             if (pass && m_renderGraphPassInitialized[static_cast<size_t>(id)])
-                static_cast<RayTracingPass *>(pass)->SyncHitModules(modules);
+                passes.push_back(static_cast<RayTracingPass *>(pass));
         }
+
+        // Before adopting: a build still in flight is stale once its passes drop their groups.
+        if (modules.empty())
+        {
+            for (RayTracingPass *pass : passes)
+                pass->SyncHitModules(noModules);
+        }
+
+        const bool buildDone = m_rtHitBuild.done.valid() &&
+                               m_rtHitBuild.done.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        if (buildDone)
+            FinishRTHitBuild();
+
+        if (!modules.empty() && !m_rtHitBuild.done.valid())
+            StartRTHitBuild(passes, modules);
+
+        if (scene)
+            scene->SetRTHitModules(ReadyHitPrefix(passes));
+    }
+
+    void SceneRendererCore::StartRTHitBuild(const std::vector<RayTracingPass *> &passes,
+                                            const std::vector<uint32_t> &modules)
+    {
+        RTHitBuild build;
+        std::vector<std::function<std::shared_ptr<PassInfo>()>> prepared;
+        for (RayTracingPass *pass : passes)
+        {
+            if (pass->GetHitModules() == modules)
+                continue;
+
+            build.passes.push_back(pass);
+            build.generations.push_back(pass->GetHitGeneration());
+            prepared.push_back(pass->PrepareHitBuild(modules));
+        }
+
+        if (prepared.empty())
+            return;
+
+        // One worker builds the passes in turn, so the any-hit they share compiles once.
+        build.modules = modules;
+        build.cancel = std::make_shared<std::atomic<bool>>(false);
+        auto buildAll = [prepared = std::move(prepared), cancel = build.cancel]
+        {
+            std::vector<std::shared_ptr<PassInfo>> infos;
+            for (const auto &buildPass : prepared)
+                infos.push_back(cancel->load() ? nullptr : buildPass());
+
+            return infos;
+        };
+        build.done = ThreadPool::General.Enqueue(std::move(buildAll));
+        PE_INFO("[RT] hit group build started: %zu MaterialX modules, %zu passes",
+                modules.size(),
+                build.passes.size());
+        m_rtHitBuild = std::move(build);
+    }
+
+    void SceneRendererCore::FinishRTHitBuild()
+    {
+        const RTHitBuild &build = m_rtHitBuild;
+        const std::vector<std::shared_ptr<PassInfo>> &infos = build.done.get();
+        size_t adopted = 0;
+        for (size_t i = 0; i < infos.size(); i++)
+        {
+            if (infos[i] && build.passes[i]->AdoptHitBuild(infos[i], build.modules, build.generations[i]))
+                adopted++;
+        }
+
+        PE_INFO("[RT] hit group build finished: %zu of %zu passes adopted", adopted, infos.size());
+        m_rtHitBuild = {};
     }
 
     bool SceneRendererCore::IsPassEnabled(SceneRenderGraphPassId passId) const

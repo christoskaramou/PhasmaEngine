@@ -11,6 +11,8 @@ namespace pe
     class Buffer;
     class CommandBuffer;
     class Image;
+    class PassInfo;
+    class RayTracingPass;
     class Scene;
     class Semaphore;
 
@@ -98,7 +100,19 @@ namespace pe
         void DestroyScreenshotBuffer();
 
     private:
+        // RT pipelines with hit groups for a new module list, built on a worker thread (SyncRTHitModules).
+        struct RTHitBuild
+        {
+            std::shared_future<std::vector<std::shared_ptr<PassInfo>>> done;
+            std::vector<uint32_t> modules;
+            std::vector<RayTracingPass *> passes;
+            std::vector<uint64_t> generations;
+            std::shared_ptr<std::atomic<bool>> cancel;
+        };
+
         void SyncRTHitModules();
+        void StartRTHitBuild(const std::vector<RayTracingPass *> &passes, const std::vector<uint32_t> &modules);
+        void FinishRTHitBuild();
 
         void InitEnabledRenderPassComponents(CommandBuffer *cmd);
 
@@ -127,6 +141,7 @@ namespace pe
         std::array<bool, kSceneRenderGraphPassCount> m_renderGraphPassInitialized{};
         std::array<uint32_t, kSceneRenderGraphPassCount> m_renderGraphPassLastEnabledFrame{}; // RHI frame counter
         SceneRenderGraphPassComponents m_scenePasses{};
+        RTHitBuild m_rtHitBuild;
         float m_renderTargetScale = 0.0f;
         bool m_hdr = false;
         bool m_colorFormatChanged = false;

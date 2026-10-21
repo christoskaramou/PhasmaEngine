@@ -479,7 +479,23 @@ Phase 3.5 MaterialX inspector (source verified 2026-10-17):
 
 Phase 5 RT hit groups (source verified 2026-10-20; [plan](../../superpowers/plans/2026-10-20-openpbr-phase5.md)):
 - **Hit groups and offsets.** Every RT pipeline (`RayTracingPass` and its GI, screen-probe and reflection subclasses) builds its hit groups as `[legacy, module…]` from `m_hitModules` ([RayTracingPass.cpp](../../../Phasma/Runtime/Code/RenderPasses/RayTracingPass.cpp) `BuildTracePipeline`). [SceneRayTracing.cpp](../../../Phasma/Runtime/Code/Scene/SceneRayTracing.cpp) `WriteRTInstances` writes each MaterialX instance's SBT record offset (Vulkan) / `InstanceContributionToHitGroupIndex` (DX12) as 1 + its module's slot in `Scene::GetRTHitModules()`, and 0 otherwise. Every `TraceRay` passes contribution and multiplier 0, so the offset alone selects the group. With openpbr off the list is empty: one hit group, every offset 0, and the legacy RT shaders compile to the same DXIL and SPIR-V as before (names excepted; DXC, all four RT define sets, 2026-10-20).
-- **Same-frame consistency.** `SceneRendererCore::SyncRTHitModules` ([SceneRendererCore.cpp](../../../Phasma/Runtime/Code/Render/SceneRendererCore.cpp)) sets the scene's list and syncs the four passes. It runs in `UpdateRenderGraphPassStates` and at the start of `ResizeRenderPassComponents`. A changed list, or a material byte repack while modules are in use ([SceneBuffers.cpp](../../../Phasma/Runtime/Code/Scene/SceneBuffers.cpp)), sets `m_tlasMasksDirty`, so the first RT pass to trace refits every instance before any ray reads it. `SyncHitModules` swaps in a fresh `PassInfo` and retires the old one through the deletion queue (descriptor destruction is immediate). `Init` clears the list, so a re-initialized pass starts legacy-only until the frame's sync.
+- **Background builds (2026-10-21).** `SceneRendererCore::SyncRTHitModules` ([SceneRendererCore.cpp](../../../Phasma/Runtime/Code/Render/SceneRendererCore.cpp)) runs once per frame in `UpdateRenderGraphPassStates` (not in `ResizeRenderPassComponents`). When the scene's module list differs from what a pass has, it starts one job on `ThreadPool::General`:
+  - The job builds a complete `PassInfo` for each pass that lacks the list, in turn, so the shared any-hit compiles once. That covers the slangc compiles, reflection and the driver pipeline, created through `CommandBuffer::GetPipeline(nullptr, …)`, the key the RT bind uses.
+  - `RayTracingPass::PrepareHitBuild` copies everything the build reads on the main thread, so the worker touches no pass state.
+  - A later frame swaps the results in with `AdoptHitBuild`, all passes in one step, unless the pass was rebuilt or released in between. A per-pass generation counter, bumped by `BuildTracePipeline`, `SyncHitModules` and `Destroy`, rejects stale results.
+  - The log shows `[RT] hit group build started` / `finished`. `openpbr_vis.wait_for_slangc` waits for both, because the driver step runs with no slangc process.
+  - One build runs at a time. A list that changes mid-build starts a new build after this one is adopted.
+  - `DestroyRenderPassComponents` cancels the remaining passes and joins the job.
+  - Verified 2026-10-21 on the sandbox Release build:
+    - `openpbr_rt_hits.py` passes all six parts on Vulkan and DX12. DX12 state objects were created off the main thread.
+    - The local pool test `openpbr-rt-async-build` (`openpbr_rt_async_build.py`, Vulkan, validation on) toggles openpbr off and on mid-build. Builds finished as `0 of 4`, then `4 of 4`, with a worst MCP round trip of 0.03 s.
+    - `openpbr_rt_lifecycle.py` was not rerun. Its Player phase now waits on the Player's own log.
+- **Same-frame consistency.**
+  - The scene's list, which `WriteRTInstances` turns into SBT offsets, is the longest prefix common to every initialized pass's ready list. Group 0 is legacy everywhere, and offsets within that prefix select the same group in every pass. Instances of a module that is still building keep the legacy hit.
+  - A changed list, or a material byte repack while modules are in use ([SceneBuffers.cpp](../../../Phasma/Runtime/Code/Scene/SceneBuffers.cpp)), sets `m_tlasMasksDirty`, so the first RT pass to trace refits every instance before any ray reads it.
+  - An empty list (openpbr off, or the sky missing) still rebuilds legacy-only at once with `SyncHitModules`. Those pipelines are cheap, and module groups bind the sky.
+  - Every swap retires the old `PassInfo` and its cached pipelines (`CommandBuffer::RetirePipelines`) through the deletion queue. Before that, a list that came back could hit a cached pipeline that still referenced the freed `PassInfo` (pipelines hold `PassInfo &`; code reading, not reproduced).
+  - `Destroy` clears the list, so a re-initialized pass starts legacy-only until its background build lands.
 - **Pitfall: rebuilds can outrun the sync (fixed 2026-10-20).** Two editor crashes came from a rebuild that ran before the frame's sync, with a stale module list, while the OpenPBR sky was gone:
   - openpbr off in Full RT: `ApplyPendingOptionalRTSync` destroys the sky and rebuilds the passes first;
   - re-enabling a reflection pass that was released during Full RT, after openpbr went off: the subclasses' `Init` does not call the base `Init`.
@@ -507,7 +523,13 @@ Phase 5 RT hit groups (source verified 2026-10-20; [plan](../../superpowers/plan
   - Texture LOD at hits is mip 0 (no ray cones).
   - Skinned meshes and sprites are still absent from the TLAS (pre-existing).
   - The area-light seam's specular representative point uses the geometric normal.
-  - A new module compiles one closest-hit per active RT pass plus the shared any-hit on the editor's main thread (3.5–4.1 s per closest-hit cold). The driver then rebuilds every RT pipeline (see Performance).
+  - A new module compiles one closest-hit per active RT pass plus the shared any-hit, and every RT pipeline is rebuilt with all modules' groups. Since 2026-10-21 this runs on a worker (Background builds above); module instances use the legacy hit until it lands.
+    - A cold closest-hit takes about 4 s to DXIL and 21–39 s to SPIR-V; the GI_SHADING and REFLECTIONS variants are separate compiles.
+    - The driver re-pays every earlier module's group on each rebuild. On Vulkan a full-shade pipeline with 5 groups takes 24–25 s on every launch, because the NVIDIA cache never hits it; DX12 warm takes 0.2 s.
+    - Pipeline libraries / state-object collections would end the re-pay; not done.
+  - Still on the main thread:
+    - The raster `thin`/`shade` compiles (Phase 3), about 24 s per module on Vulkan cold and 5 s on DX12.
+    - A `RayTrace.hlsl` reload or an HDR switch: `UpdatePassInfo` rebuilds the ready groups in place. If one lands while a background build runs, both may compile the same hit shader, and the shader cache writes its file directly.
   - Hot reload covers `RayTrace.hlsl` only. The file watcher tracks each shader's top-level source, so edits to `RTCommon.hlsl` or the MaterialHit includes need a manual Recompile All. Includes were never tracked; the split moved most RT code into one.
 - **Harness pitfall: timeouts land on the next call.** The stall lands in the frame after the call that added the module, so it is the next call that times out. The Phase 5 gates go through `openpbr_rt_baseline.py`'s `lua_patient` (mutations, never re-sent), `lua_query` / `tool_patient` (idempotent, re-sent once the editor answers) and `session_log_problems` (drops only the timeout lines of tools that were waited out).
 - **Gates (2026-10-20, RTX 4080 SUPER, Release sandbox build):**
@@ -537,7 +559,22 @@ Phase 5 RT hit groups (source verified 2026-10-20; [plan](../../superpowers/plan
     | 4 modules | 13.2 ms | 2.6 ms | 2.0 ms |
 
     `LightTransparentPass` also read 2.6 ms with 4 modules (unexplained).
-  - **Pipeline build stall (open).** From a new module's assignment until the editor answered again: 37 s for the first module, 482 s for three more. Slangc compiled only 42 shaders in the whole run (a closest-hit is 3.5–4.1 s cold, an any-hit 0.3–0.4 s). The longest stalls logged no compiles at all, which points at the driver building the RT pipelines (unverified). Every module-set change rebuilds all four RT pipelines with every module's hit group.
+  - **Pipeline build stall (RT part fixed 2026-10-21).** The 2026-10-20 figures, 37 s for the first module and 482 s for three more, were taken with Vulkan validation and sync validation on: `pe_editor.py` defaults `PE_VULKAN_VALIDATION=1`, and the tables above were measured the same way.
+    - **Cause, measured with validation off.** Timing probes covered slangc, the driver call and the sync, on the main thread. 100 spheres, 1 then 4 modules, RTX 4080 SUPER; runs in `pe-p4-sandbox/.testpool/runs/claude-p5/stall/`:
+
+      | Run | 1 module | 4 modules | Where the 4-module time went |
+      |---|---|---|---|
+      | Vulkan cold, 100-node graphs | 91 s | 410 s | slangc 346 s (raster shade 110, RT hits 233), RT pipelines 56 s |
+      | Vulkan warm | 18 s | 61 s | RT pipelines 53.5 s |
+      | DX12 cold, short graphs | 30 s | 90 s | RT slangc 31 s, RT state objects 37 s, raster 16 s |
+      | DX12 warm | 1.3 s | 2.6 s | 0.2 s per state object |
+
+      There was one sync per pass per change, so no rebuild storm.
+    - **After the fix.** Vulkan cold, short fresh graphs, validation off (`openpbr_rt_stall_probe.py`, sandbox scratch):
+      - The editor answered after 26 s and 78 s. That is the raster compile, still on the main thread.
+      - The worst MCP round trip during the background build was 0.16 s / 0.22 s.
+      - Module groups were adopted at 87 s and 262 s.
+      - No `pe_hit_*` compile and no multi-group RT pipeline creation ran on the main thread.
 
 Phase 6 forward pass (source verified 2026-10-21; [plan](../../superpowers/plans/2026-10-21-openpbr-phase6.md)):
 
