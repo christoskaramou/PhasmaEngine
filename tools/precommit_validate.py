@@ -32,12 +32,7 @@ DEFAULT_SCENE_ASSET_PATH = "Assets/Scenes/sponza.pescene"
 DEFAULT_SCENE_LUA_PATH = "Scenes/sponza.pescene"
 DEFAULT_SCENE = DEFAULT_SCENE_ASSET_PATH
 REPORT_ROOT = ROOT / "reports" / "precommit_validation"
-INSTRUCTION_SYNC_FILES = (
-    ROOT / "AGENTS.md",
-    ROOT / "CLAUDE.md",
-    ROOT / "GEMINI.md",
-    ROOT / ".github" / "copilot-instructions.md",
-)
+INSTRUCTION_FILE = ROOT / "PhasmaHarness.md"
 
 # Committed, per-machine record of the last measured average FPS (keyed by scene@api). Each commit
 # profile run compares the current average against this and fails on a >5% AND >1 fps drop (the
@@ -250,7 +245,7 @@ def git_status_step(v: Validator) -> None:
 
 def hygiene_steps(v: Validator) -> None:
     v.run_cmd("git diff whitespace", ["git", "diff", "--check"], log_name="git_diff_check")
-    instruction_sync_step(v)
+    project_instructions_step(v)
     repository_path_boundary_step(v)
     clang_format_dry_run_step(v)
 
@@ -270,37 +265,48 @@ def hygiene_steps(v: Validator) -> None:
     )
     v.run_cmd("python syntax", [python_executable(), "-c", code], log_name="python_syntax")
 
-    wiki_lint = ROOT / "docs" / "wiki" / "tools" / "lint.sh"
-    if wiki_lint.exists():
+    wiki = workspace_wiki()
+    linters = sorted(wiki.rglob("tools/lint.sh")) if wiki.is_dir() else []
+    if not linters:
+        v.add("wiki lint", "SKIP", f"No managed wiki linter at {wiki}")
+    for index, linter in enumerate(linters):
         if shutil.which("bash"):
-            v.run_cmd("wiki lint", ["bash", "docs/wiki/tools/lint.sh"], log_name="wiki_lint")
+            v.run_cmd("wiki lint", ["bash", str(linter)], log_name=f"wiki_lint_{index}")
         else:
-            python_wiki_lint(v)
-    else:
-        v.add("wiki lint", "SKIP", "docs/wiki/tools/lint.sh not found")
+            python_wiki_lint(v, linter.parent.parent)
 
 
-def instruction_sync_step(v: Validator) -> None:
+def workspace_wiki() -> Path:
+    # Match Harness WikiStore.location, including registered isolated project copies.
+    store = Path(os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "Phasma Harness" / "Wikis"
+    identity = str(ROOT.resolve())
+    if os.name == "nt":
+        identity = identity.lower()
+    locations = store / "locations.json"
+    saved = json.loads(locations.read_text(encoding="utf-8")) if locations.exists() else {}
+    registered = saved.get(identity)
+    if isinstance(registered, dict) and registered.get("copy") is True:
+        return Path(registered["root"])
+    name = re.sub(r"[^a-zA-Z0-9_-]", "-", ROOT.resolve().name)[:48] or "workspace"
+    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
+    return store / f"{name}-{digest}" / "wiki"
+
+
+def project_instructions_step(v: Validator) -> None:
     start = time.monotonic()
-    missing = [rel(path) for path in INSTRUCTION_SYNC_FILES if not path.exists()]
-    if missing:
-        v.add("instruction sync", "FAIL", "missing:\n" + "\n".join(missing), time.monotonic() - start)
-        raise RuntimeError("instruction sync")
+    try:
+        if not INSTRUCTION_FILE.is_file() or INSTRUCTION_FILE.is_symlink() or INSTRUCTION_FILE.stat().st_nlink != 1:
+            raise ValueError("PhasmaHarness.md must be an ordinary, unlinked file")
+        body = INSTRUCTION_FILE.read_bytes()
+        if not body.strip() or len(body) > 64 * 1024 or b"\0" in body:
+            raise ValueError("PhasmaHarness.md must contain text under 64 KiB")
+        body.decode("utf-8")
+    except (OSError, UnicodeError, ValueError) as error:
+        v.add("project instructions", "FAIL", str(error), time.monotonic() - start)
+        raise RuntimeError("project instructions") from error
 
-    contents = {
-        path: path.read_text(encoding="utf-8", errors="replace").replace("\r\n", "\n")
-        for path in INSTRUCTION_SYNC_FILES
-    }
-    base_path = INSTRUCTION_SYNC_FILES[0]
-    base = contents[base_path]
-    drift = [path for path, text in contents.items() if text != base]
-    if drift:
-        detail = "Instruction files must match AGENTS.md:\n" + "\n".join(rel(path) for path in drift)
-        v.add("instruction sync", "FAIL", detail, time.monotonic() - start)
-        raise RuntimeError("instruction sync")
-
-    digest = hashlib.sha256(base.encode("utf-8")).hexdigest()[:12]
-    v.add("instruction sync", "PASS", f"{len(INSTRUCTION_SYNC_FILES)} files match; sha256={digest}", time.monotonic() - start)
+    digest = hashlib.sha256(body).hexdigest()[:12]
+    v.add("project instructions", "PASS", f"PhasmaHarness.md; sha256={digest}", time.monotonic() - start)
 
 
 def changed_cpp_headers() -> list[Path]:
@@ -400,9 +406,8 @@ def clang_format_dry_run_step(v: Validator) -> None:
     v.add("clang-format", "PASS", f"checked {len(paths)} file(s)", time.monotonic() - start)
 
 
-def python_wiki_lint(v: Validator) -> None:
+def python_wiki_lint(v: Validator, wiki: Path) -> None:
     start = time.monotonic()
-    wiki = ROOT / "docs" / "wiki"
     required = [
         wiki / "README.md",
         wiki / "index.md",
@@ -1436,7 +1441,7 @@ def save_fps_baseline(data: dict) -> None:
 
 def sample_average_fps(v: Validator, count: int, interval: float) -> list[float]:
     # get_metrics().fps is the instantaneous 1/dt, so sample across frames and average. Re-apply
-    # immediate present every sample because the first toggle does not always stick (per CLAUDE.md).
+    # immediate present every sample because the first toggle does not always stick (per PhasmaHarness.md).
     code = (
         'rhi.change_present_mode("immediate")\n'
         'local m = engine.get_metrics()\n'
