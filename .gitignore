@@ -347,6 +347,7 @@ Phasma/Editor/Agent/
 Projects/*/Assets/Agent/
 
 # Agent instruction and wiki files
+!/PhasmaHarness.md
 !/INSTRUCTIONS.md
 !/AGENTS.md
 !/CLAUDE.md
