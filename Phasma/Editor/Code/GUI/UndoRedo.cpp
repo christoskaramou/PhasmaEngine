@@ -373,6 +373,18 @@ namespace pe
         m_mergeNode = nullptr;
     }
 
+    void UndoRedo::RestoreHistory(std::deque<HistoryEntry> undo, std::deque<HistoryEntry> redo)
+    {
+        Clear();
+
+        // Push* drop empty entries and enforce MAX_HISTORY.
+        for (HistoryEntry &entry : undo)
+            PushUndo(std::move(entry));
+
+        for (HistoryEntry &entry : redo)
+            PushRedo(std::move(entry));
+    }
+
     void UndoRedo::PushUndo(HistoryEntry entry)
     {
         if (entry.snapshot.empty())

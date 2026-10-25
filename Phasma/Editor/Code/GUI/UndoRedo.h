@@ -42,6 +42,9 @@ namespace pe
 
         void Clear();
 
+        // Hot reload: replaces both stacks with the history the previous module saved.
+        void RestoreHistory(std::deque<HistoryEntry> undo, std::deque<HistoryEntry> redo);
+
     private:
         UndoRedo() = default;
 

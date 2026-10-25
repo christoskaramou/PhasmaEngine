@@ -57,6 +57,35 @@ namespace pe
             return RHII.UsesDozenVulkan();
         }
 
+        nlohmann::json HistoryToJson(const std::deque<HistoryEntry> &stack)
+        {
+            nlohmann::json entries = nlohmann::json::array();
+            for (const HistoryEntry &entry : stack)
+                entries.push_back({{"snapshot", entry.snapshot}, {"label", entry.label}});
+
+            return entries;
+        }
+
+        std::deque<HistoryEntry> HistoryFromJson(const nlohmann::json &root, const char *key)
+        {
+            std::deque<HistoryEntry> stack;
+            const auto entries = root.find(key);
+            if (entries == root.end() || !entries->is_array())
+                return stack;
+
+            for (const nlohmann::json &entry : *entries)
+            {
+                const auto snapshot = entry.find("snapshot");
+                const auto label = entry.find("label");
+                const bool hasSnapshot = snapshot != entry.end() && snapshot->is_string();
+                const bool hasLabel = label != entry.end() && label->is_string();
+                if (hasSnapshot && hasLabel)
+                    stack.push_back({snapshot->get<std::string>(), label->get<std::string>()});
+            }
+
+            return stack;
+        }
+
         bool NeedsWslDozenFifoPacing()
         {
             if (!UsesWslDozenVulkan() || !RHII.GetSwapchain())
@@ -461,6 +490,8 @@ namespace pe
             hotReloadSnapshot.assign(std::istreambuf_iterator<char>(f), std::istreambuf_iterator<char>());
         }
         const bool shouldRestoreHotReloadSnapshot = hasHotReloadSnapshot && !hotReloadSnapshot.empty();
+        std::deque<HistoryEntry> undoHistory;
+        std::deque<HistoryEntry> redoHistory;
 
         // Restore hot-reload state after the warm-up frames but before normal Run().
         if (shouldRestoreHotReloadSnapshot)
@@ -488,6 +519,10 @@ namespace pe
                         cam->SetPosition(vec3(c[0].get<float>(), c[1].get<float>(), c[2].get<float>()));
                         cam->SetEuler(vec3(c[3].get<float>(), c[4].get<float>(), c[5].get<float>()));
                     }
+
+                    undoHistory = HistoryFromJson(root, "undo");
+                    redoHistory = HistoryFromJson(root, "redo");
+                    PE_INFO("[HotReload] Undo history: %zu undo, %zu redo steps", undoHistory.size(), redoHistory.size());
                 }
                 else
                 {
@@ -519,8 +554,9 @@ namespace pe
         }
 
         // Reset undo/redo after all initialization (scripts, auto-loads, hot-reload restore, etc.)
-        // so the final post-startup state is the clean baseline.
-        UndoRedo::Instance().Clear();
+        // so the final post-startup state is the clean baseline. A hot reload keeps the history the
+        // old module saved; its entries are plain scene snapshots, so they outlive the old DLL.
+        UndoRedo::Instance().RestoreHistory(std::move(undoHistory), std::move(redoHistory));
 
 #ifdef NDEBUG
         SplashScreen::Destroy(m_splashScreen);
@@ -547,6 +583,8 @@ namespace pe
                 const auto &scenePath = rs->GetScene().GetScenePath();
                 root["scene_path"] = scenePath.empty() ? "" : scenePath.generic_string();
                 root["ui"] = rs->GetGUI().TakeUISnapshot();
+                root["undo"] = HistoryToJson(UndoRedo::Instance().GetUndoStack());
+                root["redo"] = HistoryToJson(UndoRedo::Instance().GetRedoStack());
                 if (!rs->GetScene().GetCameras().empty())
                 {
                     const Camera *cam = rs->GetScene().GetActiveCamera();

@@ -56,7 +56,7 @@ Hold the **right mouse button** in the view to look. While it is held, **WASD** 
 | **Load Scene...** | Open a `.pescene`. |
 | **Save Scene...** | Save (`Ctrl+S`). |
 | **Save Scene As...** | Save to a new `.pescene` path. Overwriting an existing file asks first. |
-| **Reload Module** | Hot-reload `PhasmaEditorModule`. The scene and the layout stay. If PhasmaCore itself was rebuilt, restart the editor instead. |
+| **Reload Module** | Hot-reload `PhasmaEditorModule`. The scene, the layout and the undo history stay. If PhasmaCore itself was rebuilt, restart the editor instead. |
 | **Exit** | Quit. |
 
 ### Edit
