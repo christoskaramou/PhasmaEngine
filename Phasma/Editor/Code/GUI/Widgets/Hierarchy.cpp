@@ -841,10 +841,6 @@ namespace pe
 
                 // Auto-expand parents
                 const bool expandRequested = m_nodesToExpand.find(node) != m_nodesToExpand.end();
-                if (expandRequested)
-                {
-                    ImGui::SetNextItemOpen(true);
-                }
 
                 bool isLeaf = !hasChildren;
 
@@ -939,6 +935,11 @@ namespace pe
 
                 if (!hierarchyEnabled)
                     ImGui::PushStyleColor(ImGuiCol_Text, HierarchyStyle::TextDisabled);
+
+                // SetNextItemOpen applies to the next item only, so it must follow the checkbox.
+                if (expandRequested)
+                    ImGui::SetNextItemOpen(true);
+
                 bool nodeOpen = ImGui::TreeNodeEx((void *)uniqueId, nodeFlags, "%s  %s%s%s", icon, nodeName.c_str(), mainCameraSuffix,
                                                   scriptError ? "  " ICON_FA_TRIANGLE_EXCLAMATION : "");
                 const bool nodeHovered = ImGui::IsItemHovered(ImGuiHoveredFlags_DelayShort);
