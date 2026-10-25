@@ -429,38 +429,65 @@ namespace pe
             return ResourceHandle<Image>(shared);
         }
 
+        // MaterialX's renderer samples an image it cannot load as a 1x1 8-bit texture of the image node's "default"
+        // (ImageHandler::acquireImage with mapValueToColor: a float fills red, vectors and colours fill rgb, alpha 1).
+        ResourceHandle<Image> LoadOpenPBRDefaultImage(CommandBuffer *cmd, const OpenPBRMaterialSource &source, const std::string &identity)
+        {
+            vec4 color(0.0f, 0.0f, 0.0f, 1.0f);
+            const auto it = source.defaults.find(identity.substr(0, identity.rfind('.')) + ".default");
+            if (it != source.defaults.end())
+            {
+                if (const float *value = std::get_if<float>(&it->second))
+                    color.x = *value;
+                else if (const vec2 *value2 = std::get_if<vec2>(&it->second))
+                    color = vec4(*value2, 0.0f, 1.0f);
+                else if (const vec3 *value3 = std::get_if<vec3>(&it->second))
+                    color = vec4(*value3, 1.0f);
+                else if (const vec4 *value4 = std::get_if<vec4>(&it->second))
+                    color = *value4;
+            }
+
+            std::array<uint8_t, 4> texel{};
+            for (int c = 0; c < 4; ++c)
+                texel[c] = static_cast<uint8_t>(std::round(std::clamp(color[c], 0.0f, 1.0f) * 255.0f));
+
+            Image *image = Image::LoadRawFromMemory(cmd, texel.data(), 1, 1, PE_FORMAT_R8G8B8A8_UNORM, "OpenPBR_default_" + identity);
+            std::shared_ptr<Image> shared(image, [](Image *resident)
+                                          { RHII.AddToDeletionQueue([resident]
+                                                                    {
+                    Image *retired = resident;
+                    Image::Destroy(retired); }); });
+            return ResourceHandle<Image>(shared);
+        }
+
         void LoadSourceImages(OpenPBRMaterialSource &source)
         {
             if (source.textures.empty())
                 return;
 
-            for (const auto &[identity, texture] : source.textures)
-            {
-                if (!AssetFileExists(texture.file))
-                    throw std::runtime_error("cannot load image '" + texture.file + "' (" + identity + ")");
-            }
-
             Queue *queue = RHII.GetMainQueue();
             CommandBuffer *cmd = queue->AcquireCommandBuffer();
             cmd->Begin();
 
-            std::string failed;
             for (auto &[identity, texture] : source.textures)
             {
-                texture.image = LoadOpenPBRImage(cmd, texture.file);
-                if (!texture.image)
-                {
-                    failed = "cannot load image '" + texture.file + "' (" + identity + ")";
-                    break;
-                }
+                if (AssetFileExists(texture.file))
+                    texture.image = LoadOpenPBRImage(cmd, texture.file);
+
+                if (texture.image)
+                    continue;
+
+                PE_WARN("[OpenPBR] %s: cannot load image '%s' (%s); it samples as its default value, as in MaterialX",
+                        source.path.c_str(),
+                        texture.file.c_str(),
+                        identity.c_str());
+                texture.image = LoadOpenPBRDefaultImage(cmd, source, identity);
             }
 
             cmd->End();
             queue->Submit(1, &cmd, nullptr, nullptr);
             cmd->Wait();
             queue->ReturnCommandBuffer(cmd);
-            if (!failed.empty())
-                throw std::runtime_error(failed);
         }
 
         std::string CookSourceFiles(const std::string &json, const std::string &code, const std::string &cooked)
