@@ -79,7 +79,7 @@ namespace pe
             uint32_t dxRegister = InvalidSlot;
             uint32_t dxSpace = 0;
             std::vector<uint32_t> cbvSrvUavSlots{};
-            std::vector<uint32_t> samplerSlots{};
+            std::vector<uint32_t> samplerSlots{}; // offsets into the space's sampler table
         };
 
         struct TableSlots
@@ -89,6 +89,8 @@ namespace pe
             uint32_t cbvSrvUavCount = 0;
             uint32_t samplerBaseSlot = InvalidSlot;
             uint32_t samplerCount = 0;
+            std::vector<Sampler *> samplers{};              // what each sampler slot holds
+            const std::vector<float> *samplerKey = nullptr; // the shared table holding them, by content
         };
 
         BindingSlots *FindSlots(uint32_t binding);
@@ -97,6 +99,8 @@ namespace pe
         const TableSlots *FindTable(uint32_t dxSpace) const;
         void AllocateTables();
         void FreeTables();
+        bool SetSampler(const BindingSlots &slots, uint32_t element, Sampler *sampler);
+        void ShareSamplerTable(TableSlots &table);
 
         std::vector<BindingSlots> m_slots{};
         std::vector<TableSlots> m_tables{};

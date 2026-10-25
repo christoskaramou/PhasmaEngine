@@ -304,6 +304,79 @@ namespace pe
                 device->CreateUnorderedAccessView(bufferImpl->GetResource(), nullptr, &uav, dst);
             }
         }
+
+        // Sampler tables are shared by content: every MaterialX pipeline binds the same OpenPBR samplers once per
+        // frame in flight, and D3D12 caps the shader-visible sampler heap at 2048, about 11 materials' worth of copies.
+        struct SharedSamplerTable
+        {
+            uint32_t baseSlot = Dx12DescriptorImpl::InvalidSlot;
+            uint32_t count = 0;
+            uint32_t refs = 0;
+        };
+
+        struct SamplerTables
+        {
+            std::mutex mutex;
+            std::map<std::vector<float>, SharedSamplerTable> tables;
+        };
+
+        // Never destroyed, so descriptors released during static destruction still find it.
+        SamplerTables &SharedSamplerTables()
+        {
+            static auto *tables = new SamplerTables();
+            return *tables;
+        }
+
+        // By description, not by pointer: a destroyed sampler's address can come back holding other state.
+        std::vector<float> SamplerTableKey(const std::vector<Sampler *> &samplers)
+        {
+            std::vector<float> key;
+            key.reserve(samplers.size() * 16);
+            for (const Sampler *sampler : samplers)
+            {
+                if (!sampler)
+                {
+                    key.push_back(0.0f);
+                    continue;
+                }
+
+                const SamplerDesc &desc = sampler->GetDesc();
+                key.insert(key.end(),
+                           {1.0f,
+                            static_cast<float>(desc.magFilter),
+                            static_cast<float>(desc.minFilter),
+                            static_cast<float>(desc.mipmapMode),
+                            static_cast<float>(desc.addressModeU),
+                            static_cast<float>(desc.addressModeV),
+                            static_cast<float>(desc.addressModeW),
+                            desc.mipLodBias,
+                            desc.anisotropyEnable ? 1.0f : 0.0f,
+                            desc.maxAnisotropy,
+                            desc.compareEnable ? 1.0f : 0.0f,
+                            static_cast<float>(desc.compareOp),
+                            desc.minLod,
+                            desc.maxLod,
+                            static_cast<float>(desc.borderColor),
+                            desc.unnormalizedCoordinates ? 1.0f : 0.0f});
+            }
+            return key;
+        }
+
+        void ReleaseSamplerTableLocked(SamplerTables &shared, const std::vector<float> *&key)
+        {
+            if (!key)
+                return;
+
+            auto it = shared.tables.find(*key);
+            key = nullptr;
+            if (it == shared.tables.end() || --it->second.refs > 0)
+                return;
+
+            auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+            if (rhi && rhi->GetSamplerHeap())
+                rhi->GetSamplerHeap()->FreeRange(it->second.baseSlot, it->second.count);
+            shared.tables.erase(it);
+        }
     } // namespace
 
     Dx12DescriptorPoolImpl::Dx12DescriptorPoolImpl(DescriptorPool *owner, const DescriptorPoolDesc &desc)
@@ -407,15 +480,12 @@ namespace pe
                 table.cbvSrvUavCount = required.cbvSrvUavCount;
             }
 
-            if (required.samplerCount > 0)
-            {
-                table.samplerBaseSlot = rhi->GetSamplerHeap()->TryAllocateRange(required.samplerCount);
-                table.samplerCount = required.samplerCount;
-            }
+            // The sampler range comes from the shared tables once Update knows what the samplers are.
+            table.samplerCount = required.samplerCount;
+            table.samplers.resize(required.samplerCount);
 
             // Growing a bindless array may not fit; the caller keeps the previous descriptor instead of failing.
-            const bool exhausted = (required.cbvSrvUavCount > 0 && table.cbvSrvUavBaseSlot == InvalidSlot) ||
-                                   (required.samplerCount > 0 && table.samplerBaseSlot == InvalidSlot);
+            const bool exhausted = required.cbvSrvUavCount > 0 && table.cbvSrvUavBaseSlot == InvalidSlot;
             if (exhausted)
             {
                 FreeTables();
@@ -446,7 +516,7 @@ namespace pe
             {
                 slots.samplerSlots.resize(capacity);
                 for (uint32_t element = 0; element < capacity; ++element)
-                    slots.samplerSlots[element] = table->samplerBaseSlot + info.dxRegister + element;
+                    slots.samplerSlots[element] = info.dxRegister + element;
             }
             m_slots.push_back(std::move(slots));
         }
@@ -458,15 +528,75 @@ namespace pe
         if (!rhi)
             return;
 
+        SamplerTables &shared = SharedSamplerTables();
+        std::lock_guard<std::mutex> lock(shared.mutex);
         for (TableSlots &table : m_tables)
         {
             if (table.cbvSrvUavBaseSlot != InvalidSlot && table.cbvSrvUavCount > 0 && rhi->GetCbvSrvUavHeap())
                 rhi->GetCbvSrvUavHeap()->FreeRange(table.cbvSrvUavBaseSlot, table.cbvSrvUavCount);
-            if (table.samplerBaseSlot != InvalidSlot && table.samplerCount > 0 && rhi->GetSamplerHeap())
-                rhi->GetSamplerHeap()->FreeRange(table.samplerBaseSlot, table.samplerCount);
+
+            ReleaseSamplerTableLocked(shared, table.samplerKey);
         }
         m_tables.clear();
         m_slots.clear();
+    }
+
+    // Records the sampler; the table is re-shared after the update when its contents changed.
+    bool Dx12DescriptorImpl::SetSampler(const BindingSlots &slots, uint32_t element, Sampler *sampler)
+    {
+        PE_ERROR_IF(element >= slots.samplerSlots.size(), "Dx12DescriptorImpl: sampler descriptor array exceeds reflected count");
+        TableSlots *table = FindTable(slots.dxSpace);
+        PE_ERROR_IF(!table, "DX12 descriptor table was not allocated");
+
+        Sampler *&held = table->samplers[slots.samplerSlots[element]];
+        Sampler *wanted = Dx12SamplerImpl::TryFrom(sampler) ? sampler : nullptr;
+        if (held == wanted)
+            return false;
+
+        held = wanted;
+        return true;
+    }
+
+    void Dx12DescriptorImpl::ShareSamplerTable(TableSlots &table)
+    {
+        std::vector<float> key = SamplerTableKey(table.samplers);
+        SamplerTables &shared = SharedSamplerTables();
+        std::lock_guard<std::mutex> lock(shared.mutex);
+        if (table.samplerKey && *table.samplerKey == key)
+            return;
+
+        ReleaseSamplerTableLocked(shared, table.samplerKey);
+        table.samplerBaseSlot = InvalidSlot;
+
+        auto [it, inserted] = shared.tables.try_emplace(std::move(key));
+        SharedSamplerTable &entry = it->second;
+        if (inserted)
+        {
+            auto *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
+            entry.count = table.samplerCount;
+            entry.baseSlot = rhi->GetSamplerHeap()->TryAllocateRange(entry.count);
+            if (entry.baseSlot == InvalidSlot)
+            {
+                shared.tables.erase(it);
+                PE_ERROR("DX12 shader-visible sampler heap has no free range of %u", table.samplerCount);
+            }
+
+            // Shared tables never change after this: a new content gets a new table.
+            for (uint32_t i = 0; i < entry.count; ++i)
+            {
+                if (!table.samplers[i])
+                    continue;
+
+                rhi->GetDevice()->CopyDescriptorsSimple(1,
+                                                        rhi->GetSamplerHeap()->GetCpuHandle(entry.baseSlot + i),
+                                                        Dx12SamplerImpl::From(table.samplers[i])->GetCpuHandle(),
+                                                        D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
+            }
+        }
+
+        ++entry.refs;
+        table.samplerKey = &it->first;
+        table.samplerBaseSlot = entry.baseSlot;
     }
 
     uint32_t Dx12DescriptorImpl::GetCbvSrvUavSlot(uint32_t binding, uint32_t arrayIndex) const
@@ -480,9 +610,10 @@ namespace pe
     uint32_t Dx12DescriptorImpl::GetSamplerSlot(uint32_t binding, uint32_t arrayIndex) const
     {
         const BindingSlots *slots = FindSlots(binding);
-        if (!slots || arrayIndex >= slots->samplerSlots.size())
+        const TableSlots *table = slots ? FindTable(slots->dxSpace) : nullptr;
+        if (!table || table->samplerBaseSlot == InvalidSlot || arrayIndex >= slots->samplerSlots.size())
             return InvalidSlot;
-        return slots->samplerSlots[arrayIndex];
+        return table->samplerBaseSlot + slots->samplerSlots[arrayIndex];
     }
 
     bool Dx12DescriptorImpl::GetCbvSrvUavTableInfo(uint32_t dxSpace, uint32_t &baseSlot, uint32_t &count) const
@@ -660,6 +791,7 @@ namespace pe
 
         ID3D12Device *device = rhi->GetDevice();
         Dx12DescriptorHeap *cbvSrvUavHeap = rhi->GetCbvSrvUavHeap();
+        bool samplersChanged = false;
 
         for (uint32_t i = 0; i < updateInfos.size(); i++)
         {
@@ -692,17 +824,7 @@ namespace pe
                 if (bindingInfo.type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                 {
                     for (uint32_t j = 0; j < updateInfo.samplers.size(); j++)
-                    {
-                        PE_ERROR_IF(j >= slots->samplerSlots.size(), "Dx12DescriptorImpl: sampler descriptor array exceeds reflected count");
-                        const Dx12SamplerImpl *sampler = Dx12SamplerImpl::TryFrom(updateInfo.samplers[j]);
-                        if (sampler)
-                        {
-                            device->CopyDescriptorsSimple(1,
-                                                          rhi->GetSamplerHeap()->GetCpuHandle(slots->samplerSlots[j]),
-                                                          sampler->GetCpuHandle(),
-                                                          D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
-                        }
-                    }
+                        samplersChanged |= SetSampler(*slots, j, updateInfo.samplers[j]);
                 }
             }
             else if (!updateInfo.buffers.empty())
@@ -756,17 +878,7 @@ namespace pe
             else if (!updateInfo.samplers.empty() && bindingInfo.type != PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
             {
                 for (uint32_t j = 0; j < updateInfo.samplers.size(); j++)
-                {
-                    PE_ERROR_IF(j >= slots->samplerSlots.size(), "Dx12DescriptorImpl: sampler descriptor array exceeds reflected count");
-                    const Dx12SamplerImpl *sampler = Dx12SamplerImpl::TryFrom(updateInfo.samplers[j]);
-                    if (sampler)
-                    {
-                        device->CopyDescriptorsSimple(1,
-                                                      rhi->GetSamplerHeap()->GetCpuHandle(slots->samplerSlots[j]),
-                                                      sampler->GetCpuHandle(),
-                                                      D3D12_DESCRIPTOR_HEAP_TYPE_SAMPLER);
-                    }
-                }
+                    samplersChanged |= SetSampler(*slots, j, updateInfo.samplers[j]);
             }
             else if (!updateInfo.accelerationStructures.empty())
             {
@@ -787,6 +899,15 @@ namespace pe
                     device->CreateShaderResourceView(nullptr, &srv, cbvSrvUavHeap->GetCpuHandle(slots->cbvSrvUavSlots[j]));
                 }
             }
+        }
+
+        if (!samplersChanged)
+            return;
+
+        for (TableSlots &table : m_tables)
+        {
+            if (table.samplerCount > 0)
+                ShareSamplerTable(table);
         }
     }
 } // namespace pe
