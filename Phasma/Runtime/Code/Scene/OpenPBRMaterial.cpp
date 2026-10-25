@@ -784,6 +784,21 @@ namespace pe
         return true;
     }
 
+    bool SelectOpenPBRRenderType(Mesh &mesh)
+    {
+        if (!mesh.materialInstance || mesh.renderType != RenderType::Opaque)
+            return false;
+
+        // A connected weight has no constant (and no layout input): see the header for why it keeps the render type.
+        const auto weight = ConstantInput<float>(*mesh.materialInstance, "transmission_weight");
+        if (!weight || *weight <= 0.0f)
+            return false;
+
+        mesh.renderType = RenderType::Transmission;
+        mesh.materialInstance->SetRenderType(RenderType::Transmission);
+        return true;
+    }
+
     bool AssignOpenPBRMaterial(Scene &scene, Mesh &mesh,
                                std::shared_ptr<const OpenPBRMaterialSource> source, std::string &error)
     {
@@ -793,7 +808,9 @@ namespace pe
         MaterialInstance &instance = *scene.CreateMaterialInstance(mesh);
         instance.SetOpenPBRMaterialSource(std::move(source));
         MirrorOpenPBRToLegacy(instance);
-        scene.SetTexturesDirty(); // layout and editorFlags need a full material-table + mesh-constant rebuild
+        if (SelectOpenPBRRenderType(mesh))
+            scene.SetInstancesDirty(); // the mesh leaves the visibility path for the forward pass
+        scene.SetTexturesDirty();      // layout and editorFlags need a full material-table + mesh-constant rebuild
         scene.SetMaterialDirty();
         return true;
     }

@@ -789,7 +789,10 @@ namespace pe
             mesh.lodEnabled = !mesh.skinned; // Skinned assets opt in after validating their animated silhouettes.
 
             if (mesh.material && mesh.material->openpbrSource)
+            {
                 CreateMaterialInstance(mesh)->SetOpenPBRMaterialSource(mesh.material->openpbrSource);
+                SelectOpenPBRRenderType(mesh);
+            }
 
             // Build discrete LODs: meshopt_simplify yields reduced index sets that index the SAME
             // vertices (subset), so every level shares mesh.vertexOffset; we append each to the shared

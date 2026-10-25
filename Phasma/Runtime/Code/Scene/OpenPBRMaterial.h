@@ -97,6 +97,15 @@ namespace pe
     // The forward pass (Phase 6): an eligible MaterialX mesh whose render type is alpha-blend or transmission.
     bool MeshUsesOpenPBRForward(const Mesh &mesh);
 
+    // MaterialX draws a surface with transmission as transparent, refracting the environment. On the visibility path
+    // the traced-reflection override answers the refraction lobe too, so glass renders as chrome. When a document is
+    // assigned (AssignOpenPBRMaterial, a cooked model's own document), an opaque mesh whose instance has a constant
+    // transmission_weight > 0 moves to the transmission render type, mesh and instance, as set_render_type does. A
+    // graph-driven weight keeps the render type: MaterialX counts it as transparent, but the forward pass writes no
+    // depth, which would break a mostly opaque textured mesh's self-occlusion. Other render types, later
+    // set_render_type calls, set_openpbr edits and scene restores are left alone. Returns whether the routing changed.
+    bool SelectOpenPBRRenderType(Mesh &mesh);
+
     // Production mutations shared by scripts and the inspector; failed validation preserves the instance.
     bool AssignOpenPBRMaterial(Scene &scene, Mesh &mesh,
                                std::shared_ptr<const OpenPBRMaterialSource> source, std::string &error);
