@@ -344,6 +344,18 @@ float pe_curvature(float3 N, float3 P)
             writer.String(filename.c_str(), static_cast<rapidjson::SizeType>(filename.size()));
             return buffer.GetString();
         }
+
+        // SlangSyntaxFromGlsl rewrites mix/fract/dFdx/dFdy to Slang intrinsics after naming, so an identifier spelled
+        // like either side (stdlib NG_overlay's "mix" input) would shadow the intrinsic its function calls.
+        class PeSlangShaderGenerator : public mx::SlangShaderGenerator
+        {
+        public:
+            PeSlangShaderGenerator()
+                : mx::SlangShaderGenerator(mx::TypeSystem::create())
+            {
+                _syntax->registerReservedWords({"mix", "fract", "dFdx", "dFdy", "lerp", "frac", "ddx", "ddy"});
+            }
+        };
     } // namespace
 
     bool GenerateMaterialXSlang(const std::filesystem::path &mtlx, const std::filesystem::path &outDir, std::string &error)
@@ -367,7 +379,7 @@ float pe_curvature(float3 N, float3 P)
                 return false;
             }
 
-            mx::ShaderGeneratorPtr gen = mx::SlangShaderGenerator::create();
+            mx::ShaderGeneratorPtr gen = std::make_shared<PeSlangShaderGenerator>();
             gen->registerImplementation("IM_surface_" + mx::SlangShaderGenerator::TARGET, PeSurfaceNodeSlang::create);
             mx::GenContext ctx(gen);
 
