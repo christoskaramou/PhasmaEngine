@@ -594,11 +594,13 @@ namespace pe
             {
                 std::vector<uint8_t> bytes;
                 std::string log;
+                // The log goes into the exception: a MaterialX module rejected for it names its first error.
                 if (CompileWithSlang(owner, stage, shaderCode, globalDefines, localDefines, "sm_6_6", bytes, log) !=
                     SlangCompileStatus::Ok)
                 {
-                    PE_INFO("[Shader] slangc (--shader-compiler slang; --shader-compiler dxc uses DXC): %s", log.c_str());
-                    return false;
+                    PE_ERROR("Failed to compile DXIL shader: %s (slangc; --shader-compiler dxc uses DXC): %s",
+                             owner->GetCache().GetSourcePath().c_str(),
+                             log.c_str());
                 }
                 Microsoft::WRL::ComPtr<IDxcBlobEncoding> slangObject;
                 hr = utils->CreateBlob(bytes.data(), static_cast<uint32_t>(bytes.size()), 0, &slangObject);

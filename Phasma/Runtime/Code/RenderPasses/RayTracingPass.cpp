@@ -27,7 +27,7 @@ namespace pe
             std::string name;
             std::vector<Define> defines;
             std::vector<Define> hitDefines;
-            std::vector<std::string> hitSources;
+            std::vector<const OpenPBRModule *> hitModules; // the registry never frees a module
         };
 
         TraceDesc MakeTraceDesc(bool hdr,
@@ -68,12 +68,13 @@ namespace pe
                 desc.hitDefines.push_back({"REFLECTIONS", "1"});
 
             for (uint32_t module : modules)
-                desc.hitSources.push_back(GetOpenPBRModule(module).hitSource);
+                desc.hitModules.push_back(&GetOpenPBRModule(module));
 
             return desc;
         }
 
-        void BuildTracePassInfo(PassInfo &info, const TraceDesc &desc)
+        // False, with `info` left unbuilt, when a module's hits do not compile: the module is rejected.
+        bool BuildTracePassInfo(PassInfo &info, const TraceDesc &desc)
         {
             const std::string rayTrace = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl";
             auto legacy = [&](const char *entry, PeShaderStageFlags stage)
@@ -94,21 +95,32 @@ namespace pe
             info.acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
 
             const std::vector<Define> maskDefines = {{"PE_MATERIAL_HIT", "1"}, {"GI_PROBES", "1"}};
-            for (const std::string &source : desc.hitSources)
+            // Not skipped when another pass rejected the module: an adopted module's hits still compile (from the cache)
+            // when a resize rebuilds this pipeline in place, before the scene's next list drops it.
+            for (const OpenPBRModule *module : desc.hitModules)
             {
-                Shader *moduleHit = Shader::Create({.sourcePath = source,
-                                                    .entryPoint = "pe_hit_closest",
-                                                    .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR,
-                                                    .defines = desc.hitDefines});
-                Shader *moduleMask = Shader::Create({.sourcePath = source,
-                                                     .entryPoint = "pe_hit_any",
-                                                     .stage = PE_SHADER_STAGE_ANY_HIT_KHR,
-                                                     .defines = maskDefines});
-                info.acceleration.hitGroups.push_back({.closestHit = moduleHit, .anyHit = moduleMask});
+                HitGroup &group = info.acceleration.hitGroups.emplace_back(); // info frees what compiled
+                try
+                {
+                    group.closestHit = Shader::Create({.sourcePath = module->hitSource,
+                                                       .entryPoint = "pe_hit_closest",
+                                                       .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR,
+                                                       .defines = desc.hitDefines});
+                    group.anyHit = Shader::Create({.sourcePath = module->hitSource,
+                                                   .entryPoint = "pe_hit_any",
+                                                   .stage = PE_SHADER_STAGE_ANY_HIT_KHR,
+                                                   .defines = maskDefines});
+                }
+                catch (const std::exception &failure)
+                {
+                    RejectOpenPBRModule(*module, failure.what());
+                    return false;
+                }
             }
 
             info.acceleration.maxRecursionDepth = 4;
             info.Update();
+            return true;
         }
 
         // In-flight frames still use the old pipeline and its descriptor sets: retire both with the frame, as module
@@ -142,7 +154,8 @@ namespace pe
         m_hitGeneration++;
         const bool hdr = m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT;
         const TraceDesc desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, m_hitModules);
-        BuildTracePassInfo(*m_passInfo, desc);
+        // Throws so shader hot reload restores the previous pipeline.
+        PE_ERROR_IF(!BuildTracePassInfo(*m_passInfo, desc), "[RT] %s: a MaterialX module was rejected", desc.name.c_str());
     }
 
     void RayTracingPass::SyncHitModules(const std::vector<uint32_t> &modules)
@@ -164,8 +177,10 @@ namespace pe
         const bool hdr = m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT;
         return [desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, modules)]
         {
+            // Not adopted: the scene drops a rejected module at its next material repack, and that list builds anew.
             auto info = std::make_shared<PassInfo>();
-            BuildTracePassInfo(*info, desc);
+            if (!BuildTracePassInfo(*info, desc))
+                return std::shared_ptr<PassInfo>();
 
             // Ray tracing binds outside render passes: the frame's bind finds this pipeline in the cache.
             CommandBuffer::GetPipeline(nullptr, *info);

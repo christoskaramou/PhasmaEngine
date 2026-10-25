@@ -232,8 +232,10 @@ namespace pe
             if (CompileWithSlang(owner, stage, owner->GetCache().GetShaderCode(), globalDefines, localDefines,
                                  SlangSpirvProfile(), bytes, log) != SlangCompileStatus::Ok)
             {
-                PE_INFO("[Shader] slangc (--shader-compiler slang; --shader-compiler dxc uses DXC): %s", log.c_str());
-                return false;
+                // The log goes into the exception: a MaterialX module rejected for it names its first error.
+                PE_ERROR("Failed to compile shader: %s (slangc; --shader-compiler dxc uses DXC): %s",
+                         owner->GetCache().GetSourcePath().c_str(),
+                         log.c_str());
             }
             outSpirv.resize(bytes.size() / sizeof(uint32_t));
             memcpy(outSpirv.data(), bytes.data(), outSpirv.size() * sizeof(uint32_t));

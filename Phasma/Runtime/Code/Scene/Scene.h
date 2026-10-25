@@ -1087,6 +1087,7 @@ namespace pe
         bool m_instancesDirty = false;          // Pending raster instance data rebuild (mesh refs changed, no new geometry)
         bool m_materialDirty = false;           // Pending material table update
         bool m_texturesDirty = false;           // Pending image view update
+        uint32_t m_openpbrRejections = 0;       // OpenPBRRejectionCount() the material bytes were packed after
         bool m_linearColorViews = false;        // linear_color the image views were built for
         uint32_t m_tlasRefitFrame = UINT32_MAX; // frame counter of the last in-place TLAS refit
 

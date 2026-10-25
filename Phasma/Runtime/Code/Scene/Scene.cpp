@@ -3,6 +3,7 @@
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/MeshLod.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "Scene/SceneRuntimeHooks.h"
 #include "Render/SceneSky.h"
 #include "Script/ScriptRuntimeHooks.h"
@@ -2301,6 +2302,14 @@ namespace pe
             m_tlasDirty = false;
         }
         const bool rtSupport = RtBuildsWanted();
+
+        // A rejected MaterialX module (maybe on a worker) repacks like an OpenPBR toggle: its meshes go legacy.
+        if (const uint32_t rejections = OpenPBRRejectionCount(); rejections != m_openpbrRejections)
+        {
+            m_openpbrRejections = rejections;
+            m_texturesDirty = true;
+            m_materialDirty = true;
+        }
 
         const bool anyDirty = m_geometryDirty || m_instancesDirty || m_materialDirty ||
                               m_texturesDirty || (rtSupport && (m_blasDirty || m_tlasDirty));

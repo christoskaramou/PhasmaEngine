@@ -42,6 +42,9 @@ namespace pe
         std::string maskSource;
         std::string hitSource;     // RT closest-hit wrapper (MaterialHit*.slang)
         std::string forwardSource; // forward pixel shader for alpha-blend/transmission (MaterialForward*.slang)
+        std::string document;      // the first document with this code, named by its compile warning
+        // Runtime only: see RejectOpenPBRModule.
+        mutable std::atomic<bool> rejected = false;
     };
 
     struct OpenPBRTexture
@@ -79,6 +82,14 @@ namespace pe
     // The material can be shaded by the module: the module is valid and the material is standard PBR (no pass, or
     // standard_pbr.pass, whose byte record is MaterialGpuData). Shader-driven materials own their bytes.
     bool OpenPBREligible(Material &material, const OpenPBRModule &module);
+
+    // A module whose pass pipelines failed to build (a generated shader that does not compile) is rejected instead of
+    // ending the editor: one "[OpenPBR] <document>: shader compile failed: <first error line>" warning, and the mesh
+    // predicates below then refuse it, so the next material repack drops it and its meshes render legacy. Scene restores
+    // and saves keep the assignment (OpenPBREligible ignores it). Lasts the session. Thread-safe (RT hit builds call it on
+    // a worker).
+    void RejectOpenPBRModule(const OpenPBRModule &module, const std::string &error);
+    uint32_t OpenPBRRejectionCount(); // bumped by each rejection: Scene::Update repacks when it changes
 
     // The visibility path: also requires an opaque or alpha-cut mesh.
     bool MeshUsesOpenPBR(const Mesh &mesh);

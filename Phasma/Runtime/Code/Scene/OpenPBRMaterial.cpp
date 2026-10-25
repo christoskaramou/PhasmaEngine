@@ -319,6 +319,7 @@ namespace pe
                 source->module = module;
                 const std::string dir = Path::RuntimeAssetsPath() + "Shaders/MaterialX/";
                 source->path = dir + "Generated/PeOpenPBRDefault.json";
+                module->document = source->path;
 
                 try
                 {
@@ -360,7 +361,8 @@ namespace pe
             }
         }
 
-        std::shared_ptr<const OpenPBRModule> RegisterModule(const std::string &modulePath,
+        std::shared_ptr<const OpenPBRModule> RegisterModule(const std::string &document,
+                                                            const std::string &modulePath,
                                                             const std::string &code,
                                                             OpenPBRLayout layout)
         {
@@ -382,6 +384,7 @@ namespace pe
             auto module = std::make_shared<OpenPBRModule>();
             module->hash = hash;
             module->index = static_cast<uint32_t>(registry.modules.size());
+            module->document = document;
             module->layout = std::move(layout);
             module->thinSource = cached + ".thin.slang";
             module->shadeSource = cached + ".shade.slang";
@@ -545,7 +548,7 @@ namespace pe
             source->material = material;
             OpenPBRLayout layout = ReadLayout(json, code, *source);
             LoadSourceImages(*source);
-            source->module = RegisterModule(module, code, std::move(layout));
+            source->module = RegisterModule(path, module, code, std::move(layout));
             return source;
         }
 
@@ -582,7 +585,7 @@ namespace pe
                 OpenPBRLayout layout = ReadLayout(json, code, *source);
                 LoadSourceImages(*source);
                 const std::string module = CookSourceFiles(json, code, cooked);
-                source->module = RegisterModule(module, code, std::move(layout));
+                source->module = RegisterModule(path, module, code, std::move(layout));
             }
             catch (...)
             {
@@ -706,12 +709,47 @@ namespace pe
         return standard && module.layout.valid;
     }
 
+    static std::atomic<uint32_t> s_openpbrRejections = 0;
+
+    uint32_t OpenPBRRejectionCount()
+    {
+        return s_openpbrRejections.load();
+    }
+
+    void RejectOpenPBRModule(const OpenPBRModule &module, const std::string &error)
+    {
+        if (module.rejected.exchange(true))
+            return;
+
+        s_openpbrRejections.fetch_add(1);
+
+        // Compiler output follows a summary ("slangc exit 1:") and may open with warnings that quote source lines, so
+        // take a diagnostic: slangc's "error[E30015]: ..." or DXC's "file:line:col: error: ...". Without one, the
+        // failure's own first line.
+        std::string line = error.substr(0, error.find('\n'));
+        std::istringstream lines(error);
+        for (std::string next; std::getline(lines, next);)
+        {
+            if (next.starts_with("error") || next.find(": error") != std::string::npos)
+            {
+                line = next;
+                break;
+            }
+        }
+
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+
+        PE_WARN("[OpenPBR] %s: shader compile failed: %s", module.document.c_str(), line.c_str());
+    }
+
     static bool MeshHasEligibleOpenPBR(const Mesh &mesh)
     {
         if (!mesh.material || !mesh.materialInstance || !mesh.materialInstance->GetOpenPBR())
             return false;
 
-        return OpenPBREligible(*mesh.material, *GetOpenPBRSource(*mesh.materialInstance).module);
+        const OpenPBRModule &module = *GetOpenPBRSource(*mesh.materialInstance).module;
+        return !module.rejected && OpenPBREligible(*mesh.material, module);
     }
 
     bool MeshUsesOpenPBR(const Mesh &mesh)
