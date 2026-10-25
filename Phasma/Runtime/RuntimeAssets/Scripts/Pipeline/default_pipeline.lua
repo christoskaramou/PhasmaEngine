@@ -62,8 +62,7 @@ exposed {
     bloom_strength = 1.0,
     bloom_range = 1.0,
     dof = false,
-    dof_focus_scale = 15.0,
-    dof_blur_range = 5.0,
+    dof_blur_range = 32.0,
     motion_blur = true,
     motion_blur_strength = 1.0,
     motion_blur_samples = 16,
@@ -106,7 +105,7 @@ under("ssao", {"ssao_radius", "ssao_bias", "ssao_intensity", "ssao_power", "ssao
 under("taa", {"cas_sharpening"}) -- sharpening runs only after TAA
 under("cas_sharpening", {"cas_sharpness"})
 under("bloom", {"bloom_strength", "bloom_range"})
-under("dof", {"dof_focus_scale", "dof_blur_range"})
+under("dof", {"dof_blur_range"})
 under("motion_blur", {"motion_blur_strength", "motion_blur_samples"})
 under("color_grading", {"color_grading_lift_r", "color_grading_lift_g", "color_grading_lift_b", "color_grading_gamma_r",
                         "color_grading_gamma_g", "color_grading_gamma_b", "color_grading_gain_r", "color_grading_gain_g",

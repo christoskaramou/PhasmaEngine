@@ -72,6 +72,13 @@ namespace pe
         inline CameraProjectionMode GetProjectionMode() const { return m_projectionMode; }
         inline bool IsOrthographic() const { return m_projectionMode == CameraProjectionMode::Orthographic; }
         inline float GetOrthographicSize() const { return m_orthographicSize; }
+        // Lens, for depth of field: the focal length follows from the vertical field of view and the sensor height.
+        inline float GetFStop() const { return m_fStop; }
+        inline float GetFocusDistance() const { return m_focusDistance; } // metres; 0 focuses on the screen centre
+        inline float GetSensorHeight() const { return m_sensorHeight; }   // millimetres
+        inline void SetFStop(float fStop) { m_fStop = std::max(0.5f, fStop); }
+        inline void SetFocusDistance(float distance) { m_focusDistance = std::max(0.0f, distance); }
+        inline void SetSensorHeight(float millimetres) { m_sensorHeight = std::max(1.0f, millimetres); }
         inline bool IsDirty() const { return m_dirty; }
         inline void SetPosition(const vec3 &position)
         {
@@ -149,6 +156,9 @@ namespace pe
         float m_nearPlane, m_farPlane, m_fovx, m_rotationSpeed, m_speed;
         CameraProjectionMode m_projectionMode = CameraProjectionMode::Perspective;
         float m_orthographicSize = 10.0f;
+        float m_fStop = 2.8f;
+        float m_focusDistance = 0.0f;
+        float m_sensorHeight = 24.0f; // full-frame 35 mm
         std::array<Plane, 6> m_frustum{};
         vec2 m_projJitter;
         vec2 m_prevProjJitter;

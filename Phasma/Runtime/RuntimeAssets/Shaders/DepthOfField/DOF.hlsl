@@ -1,58 +1,46 @@
 #ifndef DOF_H_
 #define DOF_H_
 
-#include "../Common/Common.hlsl"
-
-// ----- Bokeh Depth of Field ----
-static const float GOLDEN_ANGLE = 2.39996323;
-static const float RAD_SCALE = 0.5;
-static const float FAR_PLANE = 100.0;
-
-// Sample a wide pixel average depth
-float depth_average_wide(Texture2D depthTex, SamplerState sampler_depthTex, float2 texCoord, float pixel_range)
+// Thin-lens depth of field, gathered in one pass (Gustafsson's scatter-as-gather, "Bokeh depth of field in a single
+// pass", 2018): a sample spreads over this pixel when its own circle of confusion reaches it. DOFPrepassCS packs each
+// pixel's colour with its inverse depth and finds every tile's largest blur, DOFTileDilateCS spreads that over the
+// blur cap, and DOFPS gathers only as far as it reaches.
+struct DOFParams
 {
-    float3 texDim = TextureSize(0, depthTex);
-    float dx = pixel_range * texDim.x;
-    float dy = pixel_range * texDim.y;
+    float maxRadius;     // largest blur radius, pixels (post-process dof_blur_range)
+    float blend;
+    float focusDistance; // metres along the view direction; 0 focuses on the screen centre
+    float nearPlane;
+    float fStop;
+    float focalLength;   // metres, from the vertical field of view and the sensor height
+    float sensorHeight;  // metres
+    float imageHeight;   // pixels
+    uint flags;          // DOF_PERSPECTIVE, DOF_TRANSPARENT_DEPTH
+};
 
-    float tl = depthTex.Sample(sampler_depthTex, texCoord + float2(-dx, -dy)).r;
-    float tr = depthTex.Sample(sampler_depthTex, texCoord + float2(+dx, -dy)).r;
-    float bl = depthTex.Sample(sampler_depthTex, texCoord + float2(-dx, +dy)).r;
-    float br = depthTex.Sample(sampler_depthTex, texCoord + float2(+dx, +dy)).r;
-    float ce = depthTex.Sample(sampler_depthTex, texCoord).r;
+static const uint DOF_PERSPECTIVE = 1u;
+static const uint DOF_TRANSPARENT_DEPTH = 2u; // the MaterialX forward pass's surface depth is valid this frame
 
-    return (tl + tr + bl + br + ce) * 0.2;
+#define DOF_TILE 16 // pixels per tile side, DOFPass kTileSize
+
+// The focus as an inverse depth: the camera's focus distance, or the screen centre's depth when that is 0.
+float InverseFocus(float centreInverseDepth, DOFParams p)
+{
+    return p.focusDistance > 0.0 ? 1.0 / p.focusDistance : centreInverseDepth;
 }
 
-float getBlurSize(float depth, float center_depth, float focus_scale, float blur_range)
+// Circle of confusion radius in pixels per unit of |1/z - 1/z_focus|: the diameter on the sensor is
+// f^2 * z_focus * |1/z_focus - 1/z| / (N * (z_focus - f)), halved and scaled from the sensor to the image.
+float BlurPerInverseDepth(float inverseFocus, DOFParams p)
 {
-    float coc = abs(center_depth - depth) * focus_scale * FAR_PLANE;
-    return clamp(coc, 0.0, blur_range);
+    const float f = p.focalLength;
+    const float zf = max(1.0 / max(inverseFocus, 1.0e-6), 1.001 * f);
+    return 0.5 * f * f * zf / (p.fStop * (zf - f)) / p.sensorHeight * p.imageHeight;
 }
 
-float3 depthOfField(Texture2D colorTex, SamplerState sampler_colorTex, Texture2D depthTex, SamplerState sampler_depthTex, float2 tex_coord, float focus_scale, float blur_range)
+float BlurRadius(float inverseDepth, float inverseFocus, float scale, DOFParams p)
 {
-    float center_depth = depth_average_wide(depthTex, sampler_depthTex, float2(0.5, 0.5), 20.0);
-    float3 color = colorTex.Sample(sampler_colorTex, tex_coord).rgb;
-    float tot = 1.0;
-
-    float2 pixel_size = TexelSize(0, colorTex);
-
-    float radius = RAD_SCALE;
-    for (float ang = 0.0; radius < blur_range; ang += GOLDEN_ANGLE)
-    {
-        float2 tc = tex_coord + float2(cos(ang), sin(ang)) * pixel_size * radius;
-
-        float3 sample_color = colorTex.Sample(sampler_colorTex, tc).rgb;
-        float sample_depth = depthTex.Sample(sampler_depthTex, tc).r;
-        float sample_size = getBlurSize(sample_depth, center_depth, focus_scale, blur_range);
-
-        float m = smoothstep(radius-0.5, radius+0.5, sample_size);
-        color += lerp(color / tot, sample_color, m);
-        tot += 1.0;
-        radius += RAD_SCALE / radius;
-    }
-    return color /= tot;
+    return min(abs(inverseDepth - inverseFocus) * scale, p.maxRadius);
 }
 
 #endif

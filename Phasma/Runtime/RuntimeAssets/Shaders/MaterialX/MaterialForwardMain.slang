@@ -4,6 +4,11 @@ struct PeForwardOutput
 #ifdef PE_FORWARD_VELOCITY
     float4 velocity : SV_TARGET1; // xy as GBufferPS; w is the blend's source alpha
 #endif
+#if defined(PE_FORWARD_DOF_DEPTH) && defined(PE_FORWARD_VELOCITY)
+    float dofDepth : SV_TARGET2; // max-blended: the nearest surface that hides what is behind it, 0 for none
+#elif defined(PE_FORWARD_DOF_DEPTH)
+    float dofDepth : SV_TARGET1;
+#endif
 };
 
 // MaterialX's own transparent output: the surface colour already carries the opacity factor, and with
@@ -61,6 +66,13 @@ PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
     const float2 currentNDC = input.positionCS.xy / input.positionCS.w - pc.projJitter;
     const float2 previousNDC = input.prevPositionCS.xy / input.prevPositionCS.w - pc.prevProjJitter;
     output.velocity = float4(previousNDC - currentNDC, 0.0, alpha >= 0.5 ? 1.0 : 0.0);
+#endif
+
+#ifdef PE_FORWARD_DOF_DEPTH
+    // Depth of field blurs a surface by its own depth where it hides what is behind it: at least half opaque, and not
+    // a thin-walled pane that shows the scene behind at that scene's own depth.
+    const bool hides = alpha >= 0.5 && !(inputs.transmission_weight > 0.0 && inputs.geometry_thin_walled);
+    output.dofDepth = hides ? input.position.z : 0.0;
 #endif
 
     return output;

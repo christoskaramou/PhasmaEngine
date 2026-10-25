@@ -242,7 +242,6 @@ namespace pe
                         {"color_grading_saturation", &PostProcessProfile::color_grading_saturation},
                         {"color_grading_contrast", &PostProcessProfile::color_grading_contrast},
                         {"color_grading_intensity", &PostProcessProfile::color_grading_intensity},
-                        {"dof_focus_scale", &PostProcessProfile::dof_focus_scale},
                         {"dof_blur_range", &PostProcessProfile::dof_blur_range},
                         {"bloom_strength", &PostProcessProfile::bloom_strength},
                         {"bloom_range", &PostProcessProfile::bloom_range},

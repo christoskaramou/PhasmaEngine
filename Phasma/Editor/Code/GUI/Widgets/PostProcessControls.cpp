@@ -81,8 +81,8 @@ namespace pe
         if (pp.dof)
         {
             ImGui::Indent(16.0f);
-            T(ImGui::DragFloat(ui::LabelAbove("Scale##DOF"), &pp.dof_focus_scale, 0.05f, 0.5f));
-            T(ImGui::DragFloat(ui::LabelAbove("Range##DOF"), &pp.dof_blur_range, 0.05f, 0.5f));
+            T(ImGui::DragFloat(ui::LabelAbove("Max Blur Radius (px)##DOF"), &pp.dof_blur_range, 0.1f, 0.5f, 256.0f));
+            ImGui::TextDisabled("Aperture and focus: the camera's Lens.");
             ImGui::Unindent(16.0f);
         }
 

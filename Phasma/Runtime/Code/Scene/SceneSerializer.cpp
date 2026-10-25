@@ -30,6 +30,24 @@ namespace pe
     {
         constexpr float kInfiniteAttenuationDistanceSentinel = -1.0f;
 
+        // The camera's lens (depth of field): every camera writer and reader goes through these two.
+        void WriteCameraLens(rapidjson::Value &camObj, const Camera &camera, rapidjson::Document::AllocatorType &allocator)
+        {
+            camObj.AddMember("f_stop", camera.GetFStop(), allocator);
+            camObj.AddMember("focus_distance", camera.GetFocusDistance(), allocator);
+            camObj.AddMember("sensor_height", camera.GetSensorHeight(), allocator);
+        }
+
+        void ReadCameraLens(const rapidjson::Value &camObj, Camera &camera)
+        {
+            if (camObj.HasMember("f_stop") && camObj["f_stop"].IsNumber())
+                camera.SetFStop(camObj["f_stop"].GetFloat());
+            if (camObj.HasMember("focus_distance") && camObj["focus_distance"].IsNumber())
+                camera.SetFocusDistance(camObj["focus_distance"].GetFloat());
+            if (camObj.HasMember("sensor_height") && camObj["sensor_height"].IsNumber())
+                camera.SetSensorHeight(camObj["sensor_height"].GetFloat());
+        }
+
         void EncodeMaterialFactorsForPersistence(RenderType renderType, mat4 &f0, mat4 &f1)
         {
             (void)f0;
@@ -179,7 +197,6 @@ namespace pe
             v.AddMember("color_grading_intensity", p.color_grading_intensity, alloc);
             v.AddMember("color_grading_mask", rapidjson::Value(p.color_grading_mask.c_str(), alloc), alloc);
             v.AddMember("dof", p.dof, alloc);
-            v.AddMember("dof_focus_scale", p.dof_focus_scale, alloc);
             v.AddMember("dof_blur_range", p.dof_blur_range, alloc);
             v.AddMember("bloom", p.bloom, alloc);
             v.AddMember("bloom_strength", p.bloom_strength, alloc);
@@ -227,7 +244,6 @@ namespace pe
             if (v.HasMember("color_grading_mask") && v["color_grading_mask"].IsString())
                 p.color_grading_mask = v["color_grading_mask"].GetString();
             B("dof", p.dof);
-            F("dof_focus_scale", p.dof_focus_scale);
             F("dof_blur_range", p.dof_blur_range);
             B("bloom", p.bloom);
             F("bloom_strength", p.bloom_strength);
@@ -2250,6 +2266,7 @@ namespace pe
                         camObj.AddMember("near_plane", cam->GetNearPlane(), allocator);
                         camObj.AddMember("far_plane", cam->GetFarPlane(), allocator);
                         camObj.AddMember("speed", cam->GetSpeed(), allocator);
+                        WriteCameraLens(camObj, *cam, allocator);
                         rapidjson::Value eul;
                         SetVec3(eul, cam->GetEuler());
                         camObj.AddMember("euler", eul.Move(), allocator);
@@ -2811,6 +2828,7 @@ namespace pe
                 camObj.AddMember("near_plane", camera->GetNearPlane(), allocator);
                 camObj.AddMember("far_plane", camera->GetFarPlane(), allocator);
                 camObj.AddMember("speed", camera->GetSpeed(), allocator);
+                WriteCameraLens(camObj, *camera, allocator);
 
                 NodeId *camNode = camera->GetNodeId();
                 if (camNode)
@@ -3571,6 +3589,7 @@ namespace pe
                             cam->SetFarPlane(cv["far_plane"].GetFloat());
                         if (cv.HasMember("speed"))
                             cam->SetSpeed(cv["speed"].GetFloat());
+                        ReadCameraLens(cv, *cam);
                         cam->SetNodeId(node);
                         if (m_nodeComponentCache[node->index].camera)
                             m_nodeComponentCache[node->index].camera->camera = cam;
@@ -3907,6 +3926,7 @@ namespace pe
                     cam->SetFarPlane(cVal["far_plane"].GetFloat());
                 if (cVal.HasMember("speed"))
                     cam->SetSpeed(cVal["speed"].GetFloat());
+                ReadCameraLens(cVal, *cam);
             }
         }
 
@@ -4378,6 +4398,7 @@ namespace pe
                     cam->SetFarPlane(cv["far_plane"].GetFloat());
                 if (cv.HasMember("speed"))
                     cam->SetSpeed(cv["speed"].GetFloat());
+                ReadCameraLens(cv, *cam);
                 cam->SetNodeId(node);
                 m_cameras.push_back(cam);
                 if (m_nodeComponentCache[node->index].camera)
@@ -4891,6 +4912,7 @@ namespace pe
                                 cam->SetFarPlane(cv["far_plane"].GetFloat());
                             if (cv.HasMember("speed"))
                                 cam->SetSpeed(cv["speed"].GetFloat());
+                            ReadCameraLens(cv, *cam);
                             const mat4 &lm = GetLocalMatrix(node);
                             cam->SetPosition(vec3(lm[3]));
                             if (cv.HasMember("euler"))
@@ -5333,6 +5355,7 @@ namespace pe
                             cam->SetFarPlane(cv["far_plane"].GetFloat());
                         if (cv.HasMember("speed"))
                             cam->SetSpeed(cv["speed"].GetFloat());
+                        ReadCameraLens(cv, *cam);
                         cam->SetNodeId(node);
                         if (m_nodeComponentCache[node->index].camera)
                             m_nodeComponentCache[node->index].camera->camera = cam;
@@ -5563,6 +5586,7 @@ namespace pe
                     cam->SetFarPlane(cv["far_plane"].GetFloat());
                 if (cv.HasMember("speed"))
                     cam->SetSpeed(cv["speed"].GetFloat());
+                ReadCameraLens(cv, *cam);
             }
 
             if (d.HasMember("active_camera"))

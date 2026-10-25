@@ -66,7 +66,6 @@ namespace pe
         {"cluster_error_pixels", &SceneSettings::cluster_error_pixels},
         {"shadow_lod_bias", &SceneSettings::shadow_lod_bias},
         {"cas_sharpness", &SceneSettings::cas_sharpness},
-        {"dof_focus_scale", &SceneSettings::dof_focus_scale},
         {"dof_blur_range", &SceneSettings::dof_blur_range},
         {"bloom_strength", &SceneSettings::bloom_strength},
         {"bloom_range", &SceneSettings::bloom_range},

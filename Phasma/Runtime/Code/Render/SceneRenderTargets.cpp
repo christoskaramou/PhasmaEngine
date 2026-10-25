@@ -104,6 +104,13 @@ namespace pe
         return (byte(c.r) << 24) | (byte(c.g) << 16) | (byte(c.b) << 8) | (rgba8 & 0xFFu);
     }
 
+    // The MaterialX forward pass's surface depth (reverse-Z, MAX-blended; 0 = none) where a transparent surface hides
+    // what is behind it: depth of field reads it, since that pass writes no depth. R16F blends on every device.
+    static void CreateTransparentDepthTarget(SceneRenderTargetMap &renderTargets)
+    {
+        CreateSceneRenderTarget(renderTargets, "transparentDepth", PE_FORMAT_R16_SFLOAT, PE_IMAGE_USAGE_TRANSFER_DST, true, false, Color::Black);
+    }
+
     bool SceneNeedsVelocityRT(bool hasRayTracingGeometry)
     {
         const auto &pp = ActivePostProcessProfile();
@@ -347,7 +354,10 @@ namespace pe
         CreateSceneRenderTarget(renderTargets, "transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
 
         if (SceneUsesOpenPBR())
+        {
             CreateSceneRenderTarget(renderTargets, "visibility", PE_FORMAT_R32G32B32A32_UINT);
+            CreateTransparentDepthTarget(renderTargets);
+        }
         if (SceneUsesOpenPBRDebug())
             CreateSceneRenderTarget(renderTargets, "visibility_debug", PE_FORMAT_R8G8B8A8_UNORM, PE_IMAGE_USAGE_TRANSFER_SRC);
 
@@ -390,9 +400,15 @@ namespace pe
         if (visibilityChanged)
         {
             if (visibility)
+            {
                 DestroySceneRenderTarget(renderTargets, "visibility");
+                DestroySceneRenderTarget(renderTargets, "transparentDepth");
+            }
             else
+            {
                 CreateSceneRenderTarget(renderTargets, "visibility", PE_FORMAT_R32G32B32A32_UINT);
+                CreateTransparentDepthTarget(renderTargets);
+            }
         }
 
         if (visibilityDebugChanged)

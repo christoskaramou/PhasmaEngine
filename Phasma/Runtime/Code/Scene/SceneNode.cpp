@@ -782,8 +782,8 @@ namespace pe
             &PostProcessProfile::color_grading_gamma_b, &PostProcessProfile::color_grading_gain_r,
             &PostProcessProfile::color_grading_gain_g, &PostProcessProfile::color_grading_gain_b,
             &PostProcessProfile::color_grading_saturation, &PostProcessProfile::color_grading_contrast,
-            &PostProcessProfile::color_grading_intensity, &PostProcessProfile::dof_focus_scale,
-            &PostProcessProfile::dof_blur_range, &PostProcessProfile::bloom_strength,
+            &PostProcessProfile::color_grading_intensity, &PostProcessProfile::dof_blur_range,
+            &PostProcessProfile::bloom_strength,
             &PostProcessProfile::bloom_range, &PostProcessProfile::motion_blur_strength,
             &PostProcessProfile::IBL_intensity};
         for (auto m : kF)

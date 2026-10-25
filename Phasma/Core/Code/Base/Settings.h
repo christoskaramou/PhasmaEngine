@@ -121,8 +121,7 @@ namespace pe
         // whole effect per pixel by the texture's red channel. Empty = uniform full strength.
         std::string color_grading_mask{};
         bool dof = false;
-        float dof_focus_scale = 15.0f;
-        float dof_blur_range = 5.0f;
+        float dof_blur_range = 32.0f; // largest blur radius in pixels; the lens itself is the camera's
         bool bloom = false;
         float bloom_strength = 1.0f;
         float bloom_range = 1.0f;

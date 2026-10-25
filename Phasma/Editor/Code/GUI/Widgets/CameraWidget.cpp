@@ -76,6 +76,29 @@ namespace pe
                 camera->SetFarPlane(farPlane);
         }
 
+        if (!camera->IsOrthographic())
+        {
+            const bool lensOpen = ImGui::CollapsingHeader("Lens");
+            ui::ItemTooltip("Depth of field: blur follows this lens while Depth of Field is on in the post-process settings.");
+            if (lensOpen)
+            {
+                float fStop = camera->GetFStop();
+                DrawFloatControl(ICON_FA_VIDEO "  f-stop", fStop, "Aperture: lower numbers blur more out of focus.", 0.05f, 0.5f, 64.0f, "f/%.1f");
+                if (fStop != camera->GetFStop())
+                    camera->SetFStop(fStop);
+
+                float focus = camera->GetFocusDistance();
+                DrawFloatControl(ICON_FA_LOCATION_ARROW "  Focus", focus, "Focus distance in metres along the view direction; 0 focuses on the screen centre.", 0.01f, 0.0f, 100000.0f, "%.2f m");
+                if (focus != camera->GetFocusDistance())
+                    camera->SetFocusDistance(focus);
+
+                float sensor = camera->GetSensorHeight();
+                DrawFloatControl(ICON_FA_RULER_HORIZONTAL "  Sensor", sensor, "Sensor height in millimetres (24 = full frame); with the field of view it sets the focal length.", 0.1f, 1.0f, 100.0f, "%.1f mm");
+                if (sensor != camera->GetSensorHeight())
+                    camera->SetSensorHeight(sensor);
+            }
+        }
+
         const bool controlOpen = ImGui::CollapsingHeader("Control");
         ui::ItemTooltip("Editor movement speeds for this camera.");
         if (controlOpen)

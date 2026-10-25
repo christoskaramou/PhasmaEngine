@@ -158,6 +158,10 @@ namespace pe
         void ExecutePass(CommandBuffer *cmd) override;
         void Destroy() override;
 
+        // The depth of the surfaces that hide what is behind them, when this pass wrote it in the render graph
+        // execution under way (it is disabled in scenes without forward meshes); else nullptr.
+        Image *GetTransparentDepth() const;
+
     protected:
         void BuildPipeline(PassInfo &info, uint32_t module) override;
         std::vector<Define> Defines() const override;
@@ -167,5 +171,7 @@ namespace pe
         std::vector<Attachment> m_attachments;
         Image *m_depthStencilRT = nullptr;
         Image *m_velocityRT = nullptr;
+        Image *m_transparentDepthRT = nullptr;
+        uint64_t m_transparentDepthFrame = UINT64_MAX; // SceneRendererHost::GetRenderedFrames() when last written
     };
 } // namespace pe

@@ -1221,18 +1221,19 @@ namespace pe
         m_albedoRT = rs->GetRenderTarget("albedo");
         m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
         m_velocityRT = rs->GetRenderTarget("velocity");
+        m_transparentDepthRT = rs->GetRenderTarget("transparentDepth");
         m_boundFrames.assign(RHII.GetSwapchainImageCount(), false);
 
-        // Colours first (viewport, then velocity for TAA when the target exists), depth last.
+        // Colours first (viewport, velocity for TAA, transparent depth for DOF, when the targets exist), depth last.
         m_attachments.clear();
-        for (Image *image : {m_viewportRT, m_velocityRT, m_depthStencilRT})
+        for (Image *image : {m_viewportRT, m_velocityRT, m_transparentDepthRT, m_depthStencilRT})
         {
             if (!image)
                 continue;
 
             Attachment &attachment = m_attachments.emplace_back();
             attachment.image = image;
-            attachment.loadOp = PE_LOAD_OP_LOAD;
+            attachment.loadOp = image == m_transparentDepthRT ? PE_LOAD_OP_CLEAR : PE_LOAD_OP_LOAD;
         }
     }
 
@@ -1244,6 +1245,9 @@ namespace pe
         // The format as the value: a velocity_format change alters the key, so Resize rebuilds the pipelines' formats.
         if (m_velocityRT)
             defines.push_back(Define{"PE_FORWARD_VELOCITY", std::to_string(static_cast<int>(m_velocityRT->GetFormat()))});
+
+        if (m_transparentDepthRT)
+            defines.push_back(Define{"PE_FORWARD_DOF_DEPTH", "1"});
 
         // Unused by the shaders: a viewport format change alters the key, so Resize rebuilds the pipelines' formats.
         if (m_viewportRT && m_viewportRT->GetFormat() == PE_FORMAT_R8G8B8A8_UNORM)
@@ -1284,6 +1288,15 @@ namespace pe
             info.colorFormats.push_back(m_velocityRT->GetFormat());
         }
 
+        // The nearest surface wins: reverse-Z depth is larger nearer, and 0 (the clear) means none.
+        if (m_transparentDepthRT)
+        {
+            info.colorBlendAttachments.push_back(BlendState(true, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ONE, PE_BLEND_OP_MAX,
+                                                            PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ONE, PE_BLEND_OP_MAX,
+                                                            PE_COLOR_COMPONENT_R));
+            info.colorFormats.push_back(m_transparentDepthRT->GetFormat());
+        }
+
         info.depthFormat = RHII.GetDepthFormat();
         info.Update();
     }
@@ -1310,12 +1323,16 @@ namespace pe
         Scene *scene = GetActiveScene();
         Camera *camera = scene ? scene->GetActiveCamera() : nullptr;
         const uint32_t frame = RHII.GetFrameIndex();
-        if (!camera || frame >= m_boundFrames.size() || !m_boundFrames[frame])
-            return;
-
-        const std::vector<Scene::OpenPBRForwardDraw> draws = scene->GetOpenPBRForwardDraws(camera->GetPosition());
+        m_transparentDepthFrame = RequireActiveSceneRendererHost().GetRenderedFrames();
+        const std::vector<Scene::OpenPBRForwardDraw> draws =
+            camera && frame < m_boundFrames.size() && m_boundFrames[frame] ? scene->GetOpenPBRForwardDraws(camera->GetPosition())
+                                                                           : std::vector<Scene::OpenPBRForwardDraw>{};
         if (draws.empty())
+        {
+            if (m_transparentDepthRT)
+                cmd->ClearColors({m_transparentDepthRT});
             return;
+        }
 
         SetLightingPushConstants(cmd, m_viewportRT, 1u);
         const int envSamples = std::clamp(Settings::Get<SceneSettings>().openpbr_env_samples, 1, 512);
@@ -1351,10 +1368,16 @@ namespace pe
         cmd->EndPass();
     }
 
+    Image *OpenPBRForwardPass::GetTransparentDepth() const
+    {
+        const bool written = m_transparentDepthFrame == RequireActiveSceneRendererHost().GetRenderedFrames();
+        return written ? m_transparentDepthRT : nullptr;
+    }
+
     void OpenPBRForwardPass::Destroy()
     {
         MaterialShadePass::Destroy();
         m_attachments.clear();
-        m_depthStencilRT = nullptr;
+        m_depthStencilRT = m_transparentDepthRT = nullptr;
     }
 } // namespace pe
