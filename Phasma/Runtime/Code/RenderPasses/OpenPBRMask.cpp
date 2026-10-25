@@ -34,8 +34,8 @@ namespace pe
             defines.push_back({"PE_MASK_SHADOW", "1"});
 
         info.name = "OpenPBRMask_" + std::to_string(module) + (m_shadow ? "_shadow" : "_depth");
-        // Rebuild reuses the PassInfo, so release the shaders it already holds.
-        info.DestroyShaders();
+        // The old shaders are the caller's: every rebuild path destroys them through GetPassInfos() before
+        // UpdatePassInfo, except hot reload, which destroys the ones it replaced afterwards.
         info.pVertShader = Shader::Create({
             .sourcePath = Path::RuntimeAssets + "Shaders/MaterialX/MaterialMaskVS.hlsl",
             .entryPoint = "mainVS",
