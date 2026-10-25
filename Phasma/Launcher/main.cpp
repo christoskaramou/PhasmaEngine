@@ -1146,6 +1146,51 @@ namespace
         return true;
     }
 
+    // proc.start only runs binaries inside the project Assets tree. When a project
+    // ships Scripts/jev_boot.lua, copy the engine's game driver in beside it so
+    // Play from this launcher can start Jev without a separate run.ps1.
+    void StageJevDriver(const std::filesystem::path &assetsRoot)
+    {
+        std::error_code ec;
+        const std::filesystem::path hook = assetsRoot / "Scripts" / "jev_boot.lua";
+        if (!std::filesystem::exists(hook, ec))
+            return;
+
+        std::filesystem::path probe = std::filesystem::path(pe::Path::Root).lexically_normal();
+        std::filesystem::path driver;
+        for (int i = 0; i < 6 && !probe.empty(); ++i)
+        {
+            const std::filesystem::path candidate = probe / "build-game-driver" / "Release" / "PhasmaGameDriver.exe";
+            if (std::filesystem::exists(candidate, ec))
+            {
+                driver = candidate;
+                break;
+            }
+
+            const std::filesystem::path parent = probe.parent_path();
+            if (parent == probe)
+                break;
+
+            probe = parent;
+        }
+
+        if (driver.empty())
+        {
+            pe::Log::Error("Jev driver not found. Build Phasma/GameDriver/build.ps1.");
+            return;
+        }
+
+        const std::filesystem::path bots = assetsRoot / "Bots";
+        std::filesystem::create_directories(bots, ec);
+        if (ec)
+            return;
+
+        const std::filesystem::path destination = bots / "PhasmaGameDriver.exe";
+        std::filesystem::copy_file(driver, destination, std::filesystem::copy_options::overwrite_existing, ec);
+        if (ec)
+            pe::Log::Error("Could not copy the Jev driver to " + destination.string() + ": " + ec.message());
+    }
+
     // Locate tools/new_game.py by walking up from the launcher executable. Dev
     // builds live at <repo>/build*/<config>/PhasmaLauncher, so the engine tools/
     // dir is a couple of levels up. Returns an empty path if not found.
@@ -3043,6 +3088,8 @@ namespace
             pe::Log::Error("No launch target selected");
             return 1;
         }
+
+        StageJevDriver(ProjectAssetsRoot(profile.projectPath));
 
         if (!LaunchExternalTarget(targets[targetIndex],
                                   selectedApi,
