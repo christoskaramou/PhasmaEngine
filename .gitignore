@@ -346,18 +346,19 @@ Phasma/Editor/EditorAssets/Temp/
 Phasma/Editor/Agent/
 Projects/*/Assets/Agent/
 
-# Agent instruction and wiki files
-!/PhasmaHarness.md
-!/INSTRUCTIONS.md
-!/AGENTS.md
-!/CLAUDE.md
-!/GEMINI.md
-!/HERMES.md
+# Agent instruction, plan and wiki files: local only, not pushed (rules in AGENTS.md, which CLAUDE.md and GEMINI.md import; the wiki, plans and specs in docs/wiki)
+/PhasmaHarness.md
+/INSTRUCTIONS.md
+/AGENTS.md
+/CLAUDE.md
+/GEMINI.md
+/HERMES.md
 !/.github/
-!/.github/copilot-instructions.md
+/.github/copilot-instructions.md
 !/docs/
-!/docs/wiki/
-!/docs/wiki/**
+/docs/wiki/
+/docs/superpowers/
+/docs/ANIMATOR_AUTHORING_*.md
 
 # Tracked validation and MCP tools
 !/tools/

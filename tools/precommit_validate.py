@@ -32,7 +32,7 @@ DEFAULT_SCENE_ASSET_PATH = "Assets/Scenes/sponza.pescene"
 DEFAULT_SCENE_LUA_PATH = "Scenes/sponza.pescene"
 DEFAULT_SCENE = DEFAULT_SCENE_ASSET_PATH
 REPORT_ROOT = ROOT / "reports" / "precommit_validation"
-INSTRUCTION_FILE = ROOT / "PhasmaHarness.md"
+INSTRUCTION_FILE = ROOT / "AGENTS.md"
 
 # Committed, per-machine record of the last measured average FPS (keyed by scene@api). Each commit
 # profile run compares the current average against this and fails on a >5% AND >1 fps drop (the
@@ -265,48 +265,32 @@ def hygiene_steps(v: Validator) -> None:
     )
     v.run_cmd("python syntax", [python_executable(), "-c", code], log_name="python_syntax")
 
-    wiki = workspace_wiki()
-    linters = sorted(wiki.rglob("tools/lint.sh")) if wiki.is_dir() else []
-    if not linters:
-        v.add("wiki lint", "SKIP", f"No managed wiki linter at {wiki}")
-    for index, linter in enumerate(linters):
-        if shutil.which("bash"):
-            v.run_cmd("wiki lint", ["bash", str(linter)], log_name=f"wiki_lint_{index}")
-        else:
-            python_wiki_lint(v, linter.parent.parent)
-
-
-def workspace_wiki() -> Path:
-    # Match Harness WikiStore.location, including registered isolated project copies.
-    store = Path(os.environ.get("APPDATA") or os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "Phasma Harness" / "Wikis"
-    identity = str(ROOT.resolve())
-    if os.name == "nt":
-        identity = identity.lower()
-    locations = store / "locations.json"
-    saved = json.loads(locations.read_text(encoding="utf-8")) if locations.exists() else {}
-    registered = saved.get(identity)
-    if isinstance(registered, dict) and registered.get("copy") is True:
-        return Path(registered["root"])
-    name = re.sub(r"[^a-zA-Z0-9_-]", "-", ROOT.resolve().name)[:48] or "workspace"
-    digest = hashlib.sha256(identity.encode("utf-8")).hexdigest()[:20]
-    return store / f"{name}-{digest}" / "wiki"
+    wiki = ROOT / "docs" / "wiki"
+    linter = wiki / "tools" / "lint.sh"
+    if not linter.exists():
+        v.add("wiki lint", "SKIP", f"No wiki linter at {linter}")
+    elif shutil.which("bash"):
+        v.run_cmd("wiki lint", ["bash", str(linter)], log_name="wiki_lint")
+    else:
+        python_wiki_lint(v, wiki)
 
 
 def project_instructions_step(v: Validator) -> None:
     start = time.monotonic()
     try:
         if not INSTRUCTION_FILE.is_file() or INSTRUCTION_FILE.is_symlink() or INSTRUCTION_FILE.stat().st_nlink != 1:
-            raise ValueError("PhasmaHarness.md must be an ordinary, unlinked file")
+            raise ValueError("AGENTS.md must be an ordinary, unlinked file")
         body = INSTRUCTION_FILE.read_bytes()
-        if not body.strip() or len(body) > 64 * 1024 or b"\0" in body:
-            raise ValueError("PhasmaHarness.md must contain text under 64 KiB")
+        # Codex silently truncates AGENTS.md past its default 32 KiB project_doc_max_bytes.
+        if not body.strip() or len(body) > 32 * 1024 or b"\0" in body:
+            raise ValueError("AGENTS.md must contain text under 32 KiB")
         body.decode("utf-8")
     except (OSError, UnicodeError, ValueError) as error:
         v.add("project instructions", "FAIL", str(error), time.monotonic() - start)
         raise RuntimeError("project instructions") from error
 
     digest = hashlib.sha256(body).hexdigest()[:12]
-    v.add("project instructions", "PASS", f"PhasmaHarness.md; sha256={digest}", time.monotonic() - start)
+    v.add("project instructions", "PASS", f"AGENTS.md; sha256={digest}", time.monotonic() - start)
 
 
 def changed_cpp_headers() -> list[Path]:
@@ -1441,7 +1425,7 @@ def save_fps_baseline(data: dict) -> None:
 
 def sample_average_fps(v: Validator, count: int, interval: float) -> list[float]:
     # get_metrics().fps is the instantaneous 1/dt, so sample across frames and average. Re-apply
-    # immediate present every sample because the first toggle does not always stick (per PhasmaHarness.md).
+    # immediate present every sample because the first toggle does not always stick (per AGENTS.md).
     code = (
         'rhi.change_present_mode("immediate")\n'
         'local m = engine.get_metrics()\n'
