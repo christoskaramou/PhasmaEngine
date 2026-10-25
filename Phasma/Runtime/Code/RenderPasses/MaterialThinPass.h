@@ -1,5 +1,7 @@
 #pragma once
 
+#include "RenderPasses/ModulePipelines.h"
+
 namespace pe
 {
     class Buffer;
@@ -9,7 +11,7 @@ namespace pe
     // Material pass 1 (desktop OpenPBR): writes MaterialX's normal, albedo, roughness and metalness into the G-buffer
     // for visibility pixels of MaterialX materials, before SSAO/GI/reflections read it. It first bins the visibility
     // buffer's 8x8-pixel tiles per module (MaterialClassify.slang); passes 1 and 2 dispatch each module over its bin.
-    class MaterialThinPass : public IRenderPassComponent
+    class MaterialThinPass : public IRenderPassComponent, public ModulePipelines
     {
     public:
         void Init() override;
@@ -24,6 +26,9 @@ namespace pe
         void Destroy() override;
         void SyncModules(const std::vector<uint32_t> &modules);
         std::vector<PassInfo *> GetPassInfos() noexcept override;
+        std::vector<std::function<void(PassInfo &)>> ModuleBuilders(uint32_t module) const override;
+        void AdoptModule(uint32_t module, const std::vector<std::shared_ptr<PassInfo>> &infos) override;
+        bool HasModule(uint32_t module) const override { return m_modulePassInfos.contains(module); }
 
         // The bins, filled this frame once BinsReady(): per bin pass 1's uint4(group counts, tile count) at
         // BinThinArgsOffset, pass 2's group counts at BinShadeArgsOffset, its tiles at BinTilesOffset
@@ -36,7 +41,7 @@ namespace pe
         uint32_t BinTilesOffset(uint32_t slot) const { return m_binSlots * 32u + slot * m_binCapacity * 4u; }
 
     private:
-        void BuildPipeline(PassInfo &info, uint32_t module);
+        std::function<void(PassInfo &)> PipelineBuilder(uint32_t module) const;
         void BindFrame(PassInfo &info, uint32_t frame);
         void SyncBins(const std::vector<uint32_t> &modules);
         void BindClassify(uint32_t frame);

@@ -62,7 +62,7 @@ namespace pe
         m_emissive = rs->GetRenderTarget("emissive");
     }
 
-    void MaterialThinPass::BuildPipeline(PassInfo &info, uint32_t module)
+    std::function<void(PassInfo &)> MaterialThinPass::PipelineBuilder(uint32_t module) const
     {
         std::vector<Define> defines;
         if (m_builtNormalFormat == PE_FORMAT_R32G32B32A32_SFLOAT)
@@ -71,16 +71,30 @@ namespace pe
         if (m_builtEmissiveFormat == PE_FORMAT_R8G8B8A8_UNORM)
             defines.push_back(Define{"PE_EMISSIVE_RGBA8", "1"});
 
-        info.name = "MaterialThin_pipeline_" + std::to_string(module);
-        info.pCompShader = Shader::Create({.sourcePath = GetOpenPBRModule(module).thinSource,
-                                           .entryPoint = "mainCS",
-                                           .stage = PE_SHADER_STAGE_COMPUTE,
-                                           .defines = defines});
-        info.Update();
+        return [module, defines, source = GetOpenPBRModule(module).thinSource](PassInfo &info)
+        {
+            info.name = "MaterialThin_pipeline_" + std::to_string(module);
+            info.pCompShader = Shader::Create({.sourcePath = source,
+                                               .entryPoint = "mainCS",
+                                               .stage = PE_SHADER_STAGE_COMPUTE,
+                                               .defines = defines});
+            info.Update();
+        };
+    }
+
+    std::vector<std::function<void(PassInfo &)>> MaterialThinPass::ModuleBuilders(uint32_t module) const
+    {
+        return {PipelineBuilder(module)};
+    }
+
+    void MaterialThinPass::AdoptModule(uint32_t module, const std::vector<std::shared_ptr<PassInfo>> &infos)
+    {
+        m_modulePassInfos.emplace(module, infos.front());
     }
 
     void MaterialThinPass::UpdatePassInfo()
     {
+        m_moduleGeneration++; // a module build prepared with the old formats is stale
         m_builtNormalFormat = m_normal ? m_normal->GetFormat() : PE_FORMAT_UNDEFINED;
         m_builtEmissiveFormat = m_emissive ? m_emissive->GetFormat() : PE_FORMAT_UNDEFINED;
 
@@ -92,9 +106,10 @@ namespace pe
         m_passInfo->Update();
 
         for (const auto &[module, info] : m_modulePassInfos)
-            BuildPipeline(*info, module);
+            PipelineBuilder(module)(*info);
     }
 
+    // Drops modules the scene no longer uses; new ones arrive through AdoptModule (SceneRendererCore::SyncModulePipelines).
     void MaterialThinPass::SyncModules(const std::vector<uint32_t> &modules)
     {
         for (auto it = m_modulePassInfos.begin(); it != m_modulePassInfos.end();)
@@ -105,18 +120,8 @@ namespace pe
                 continue;
             }
 
-            RHII.AddToDeletionQueue([retired = it->second] {});
+            RetireModulePassInfo(it->second);
             it = m_modulePassInfos.erase(it);
-        }
-
-        for (uint32_t module : modules)
-        {
-            if (m_modulePassInfos.contains(module))
-                continue;
-
-            auto info = std::make_shared<PassInfo>();
-            BuildPipeline(*info, module);
-            m_modulePassInfos.emplace(module, std::move(info));
         }
 
         SyncBins(modules);
@@ -374,6 +379,7 @@ namespace pe
 
     void MaterialThinPass::Destroy()
     {
+        m_moduleGeneration++;
         m_modulePassInfos.clear();
         if (m_passInfo)
             Shader::Destroy(m_passInfo->pCompShader);

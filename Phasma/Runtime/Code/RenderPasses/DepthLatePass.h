@@ -40,6 +40,7 @@ namespace pe
         }
 
         void SetScene(Scene *scene) { m_scene = scene; }
+        OpenPBRMask &GetMasks() { return m_masks; }
         void SyncMaskModules(Scene &scene, bool enabled)
         {
             // Mask pipelines write the visibility target: build them only while this pass has it.

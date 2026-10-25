@@ -3,6 +3,7 @@
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Image.h"
+#include "API/Pipeline.h"
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Render/RenderPassShaderReload.h"
@@ -11,11 +12,15 @@
 #include "Render/SceneRendererHost.h"
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/MaterialReflection.h"
+#include "Scene/OpenPBRMaterial.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "RenderPasses/RayTracingPass.h"
 #include "RenderPasses/MaterialThinPass.h"
 #include "RenderPasses/LightPass.h"
+#include "RenderPasses/DepthPass.h"
+#include "RenderPasses/DepthLatePass.h"
+#include "RenderPasses/ShadowPass.h"
 
 namespace pe
 {
@@ -191,6 +196,13 @@ namespace pe
             FinishRTHitBuild();
         }
 
+        // No owners: the build is dropped and its PassInfos retired.
+        if (m_moduleBuild.done.valid())
+        {
+            m_moduleBuild.cancel->store(true);
+            FinishModuleBuild({});
+        }
+
         DestroyInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized);
         DestroyScenePerception();
     }
@@ -240,7 +252,198 @@ namespace pe
             static_cast<OpenPBRForwardPass *>(m_scenePasses.openpbrForward)->SyncModules(forward);
         }
 
+        SyncModulePipelines();
         SyncRTHitModules();
+    }
+
+    namespace
+    {
+        // Changes when any owner rebuilds or releases its module pipelines, or the owners change.
+        uint64_t GenerationSum(const std::vector<std::pair<ModulePipelines *, const std::vector<uint32_t> *>> &owners)
+        {
+            uint64_t sum = 0;
+            for (const auto &[owner, modules] : owners)
+                sum += owner->GetModuleGeneration() + 1;
+
+            return sum;
+        }
+    } // namespace
+
+    SceneRendererCore::ModuleOwners SceneRendererCore::GetModuleOwners() const
+    {
+        const Scene *scene = GetActiveScene();
+        if (!SceneUsesOpenPBR() || !scene)
+            return {};
+
+        auto initialized = [this](SceneRenderGraphPassId id)
+        { return m_renderGraphPassInitialized[static_cast<size_t>(id)]; };
+
+        ModuleOwners owners;
+        if (initialized(SceneRenderGraphPassId::MaterialThin))
+            owners.push_back({static_cast<MaterialThinPass *>(m_scenePasses.materialThin), &scene->GetOpenPBRModules()});
+        if (initialized(SceneRenderGraphPassId::MaterialShade))
+            owners.push_back({static_cast<MaterialShadePass *>(m_scenePasses.materialShade), &scene->GetOpenPBRModules()});
+        if (initialized(SceneRenderGraphPassId::OpenPBRForward))
+        {
+            owners.push_back({static_cast<OpenPBRForwardPass *>(m_scenePasses.openpbrForward),
+                              &scene->GetOpenPBRForwardModules()});
+        }
+
+        // The mask owners sync later in the frame (UpdateSceneRenderGraphPassComponents); those that did last frame want
+        // the scene's mask modules.
+        OpenPBRMask *masks[] = {
+            m_scenePasses.depth ? &static_cast<DepthPass *>(m_scenePasses.depth)->GetMasks() : nullptr,
+            m_scenePasses.depthLate ? &static_cast<DepthLatePass *>(m_scenePasses.depthLate)->GetMasks() : nullptr,
+            m_scenePasses.shadow ? &static_cast<ShadowPass *>(m_scenePasses.shadow)->GetMasks() : nullptr,
+        };
+        for (OpenPBRMask *mask : masks)
+        {
+            if (mask && mask->IsActive())
+                owners.push_back({mask, &scene->GetOpenPBRMaskModules()});
+        }
+
+        return owners;
+    }
+
+    // A new MaterialX module's raster pipelines (thin, shade, forward, masks) build on a worker: cold, they took about 5 s
+    // per module on DX12 and 24 s on Vulkan, all on the main thread before (2026-10-25). One job runs at a time and builds
+    // one module, so the shader cache never compiles a file twice at once and modules appear one by one. Every pass takes
+    // a module in the same frame or none does: until then its opaque meshes keep the legacy G-buffer and lighting, and
+    // its alpha-cut and forward meshes do not draw.
+    void SceneRendererCore::SyncModulePipelines()
+    {
+        const ModuleOwners owners = GetModuleOwners();
+        const bool buildDone = m_moduleBuild.done.valid() &&
+                               m_moduleBuild.done.wait_for(std::chrono::seconds(0)) == std::future_status::ready;
+        if (buildDone)
+            FinishModuleBuild(owners);
+
+        if (!m_moduleBuild.done.valid())
+            StartModuleBuild(owners);
+    }
+
+    void SceneRendererCore::StartModuleBuild(const ModuleOwners &owners)
+    {
+        // The first module some pass lacks; a failed one waits until a pass rebuilds, and a rejected one (here or by
+        // the RT hit build) until the scene's repack drops it.
+        const uint64_t generations = GenerationSum(owners);
+        std::optional<uint32_t> next;
+        for (const auto &[owner, modules] : owners)
+        {
+            for (uint32_t module : *modules)
+            {
+                const auto failed = m_failedModules.find(module);
+                const bool retry = failed == m_failedModules.end() || failed->second != generations;
+                if (!next && !owner->HasModule(module) && retry && !GetOpenPBRModule(module).rejected)
+                    next = module;
+            }
+        }
+
+        if (!next)
+            return;
+
+        ModuleBuild build;
+        build.module = *next;
+        std::vector<std::function<void(PassInfo &)>> builders;
+        for (const auto &[owner, modules] : owners)
+        {
+            if (owner->HasModule(build.module) || std::find(modules->begin(), modules->end(), build.module) == modules->end())
+                continue;
+
+            std::vector<std::function<void(PassInfo &)>> ownerBuilders = owner->ModuleBuilders(build.module);
+            build.owners.push_back(owner);
+            build.generations.push_back(owner->GetModuleGeneration());
+            build.counts.push_back(ownerBuilders.size());
+            builders.insert(builders.end(), ownerBuilders.begin(), ownerBuilders.end());
+        }
+
+        // Compute pipelines bind outside render passes, and graphics ones do under dynamic rendering (always on DX12):
+        // then the frame's bind finds them in the cache.
+        const bool nullPassKey = RHII.GetApi() == PE_GRAPHICS_API_DX12 ||
+                                 (RHII.GetCaps().dynamicRendering && Settings::Get<SceneSettings>().dynamic_rendering);
+        build.cancel = std::make_shared<std::atomic<bool>>(false);
+        auto buildAll = [builders = std::move(builders), cancel = build.cancel, nullPassKey]
+        {
+            ModuleBuild::Result result;
+            try
+            {
+                for (const auto &builder : builders)
+                {
+                    if (cancel->load())
+                        break;
+
+                    // Held before building, so the main thread retires a failed build's partial PassInfo too.
+                    PassInfo &info = *result.infos.emplace_back(std::make_shared<PassInfo>());
+                    builder(info);
+                    if (info.pCompShader || nullPassKey)
+                        CommandBuffer::GetPipeline(nullptr, info);
+                }
+            }
+            catch (const std::exception &e)
+            {
+                result.error = e.what();
+            }
+            catch (...)
+            {
+                result.error = "unknown error";
+            }
+
+            return result;
+        };
+        build.done = ThreadPool::General.Enqueue(std::move(buildAll));
+        PE_INFO("[OpenPBR] module pipelines queued: module %u, %zu passes", build.module, build.owners.size());
+        m_moduleBuild = std::move(build);
+    }
+
+    void SceneRendererCore::FinishModuleBuild(const ModuleOwners &owners)
+    {
+        const ModuleBuild &build = m_moduleBuild;
+        const ModuleBuild::Result &result = build.done.get();
+        bool current = result.error.empty() &&
+                       result.infos.size() == std::accumulate(build.counts.begin(), build.counts.end(), size_t(0));
+        for (size_t i = 0; current && i < build.owners.size(); i++)
+        {
+            const auto wanted = std::find_if(owners.begin(), owners.end(), [&](const auto &owner)
+                                             { return owner.first == build.owners[i]; });
+            current = wanted != owners.end() &&
+                      std::find(wanted->second->begin(), wanted->second->end(), build.module) != wanted->second->end() &&
+                      build.owners[i]->GetModuleGeneration() == build.generations[i] &&
+                      !build.owners[i]->HasModule(build.module);
+        }
+
+        if (current)
+        {
+            auto first = result.infos.begin();
+            for (size_t i = 0; i < build.owners.size(); i++)
+            {
+                build.owners[i]->AdoptModule(build.module, {first, first + build.counts[i]});
+                first += build.counts[i];
+            }
+
+            PE_INFO("[OpenPBR] module pipelines adopted: module %u", build.module);
+        }
+        else
+        {
+            // A stale build is queued again by this frame's sync; a failed one only after a pass rebuilds.
+            for (const auto &info : result.infos)
+                RetireModulePassInfo(info);
+
+            if (result.error.empty())
+            {
+                PE_INFO("[OpenPBR] module pipelines dropped: module %u (stale)", build.module);
+            }
+            else
+            {
+                // Warns once and sends the module's meshes to legacy shading; the scene's next repack drops it.
+                m_failedModules[build.module] = GenerationSum(owners);
+                RejectOpenPBRModule(GetOpenPBRModule(build.module), result.error);
+
+                // Every "queued" line ends in one "adopted" or "dropped": test harnesses wait on the count.
+                PE_INFO("[OpenPBR] module pipelines dropped: module %u (compile failed)", build.module);
+            }
+        }
+
+        m_moduleBuild = {};
     }
 
     namespace

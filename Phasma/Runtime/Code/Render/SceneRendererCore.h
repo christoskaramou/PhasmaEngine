@@ -11,6 +11,7 @@ namespace pe
     class Buffer;
     class CommandBuffer;
     class Image;
+    class ModulePipelines;
     class PassInfo;
     class RayTracingPass;
     class Scene;
@@ -114,6 +115,31 @@ namespace pe
         void StartRTHitBuild(const std::vector<RayTracingPass *> &passes, const std::vector<uint32_t> &modules);
         void FinishRTHitBuild();
 
+        // The raster pipelines one MaterialX module lacks in some passes, built on a worker thread (SyncModulePipelines).
+        struct ModuleBuild
+        {
+            struct Result
+            {
+                std::vector<std::shared_ptr<PassInfo>> infos; // the owners' in order, counts[i] each
+                std::string error;
+            };
+
+            uint32_t module = 0;
+            std::vector<ModulePipelines *> owners;
+            std::vector<uint64_t> generations;
+            std::vector<size_t> counts;
+            std::shared_future<Result> done;
+            std::shared_ptr<std::atomic<bool>> cancel;
+        };
+
+        // Each pass with module pipelines and the modules the scene wants from it.
+        using ModuleOwners = std::vector<std::pair<ModulePipelines *, const std::vector<uint32_t> *>>;
+
+        ModuleOwners GetModuleOwners() const;
+        void SyncModulePipelines();
+        void StartModuleBuild(const ModuleOwners &owners);
+        void FinishModuleBuild(const ModuleOwners &owners);
+
         void InitEnabledRenderPassComponents(CommandBuffer *cmd);
 
         RenderGraph m_renderGraph;
@@ -142,6 +168,8 @@ namespace pe
         std::array<uint32_t, kSceneRenderGraphPassCount> m_renderGraphPassLastEnabledFrame{}; // RHI frame counter
         SceneRenderGraphPassComponents m_scenePasses{};
         RTHitBuild m_rtHitBuild;
+        ModuleBuild m_moduleBuild;
+        std::map<uint32_t, uint64_t> m_failedModules; // module -> GenerationSum(owners) when its build failed
         float m_renderTargetScale = 0.0f;
         bool m_hdr = false;
         bool m_colorFormatChanged = false;

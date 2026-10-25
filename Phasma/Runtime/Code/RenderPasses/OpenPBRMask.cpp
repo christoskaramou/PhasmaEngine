@@ -27,57 +27,77 @@ namespace pe
         static_assert(sizeof(PushConstants_OpenPBRMask) == 96);
     } // namespace
 
-    void OpenPBRMask::CreateShaders(PassInfo &info, uint32_t module)
+    std::function<void(PassInfo &)> OpenPBRMask::Builder(uint32_t module, bool doubleSided) const
     {
-        std::vector<Define> defines;
-        if (m_shadow)
-            defines.push_back({"PE_MASK_SHADOW", "1"});
+        const auto &settings = Settings::Get<SceneSettings>();
+        return [module,
+                doubleSided,
+                shadow = m_shadow,
+                depthBias = std::array<float, 3>{settings.depth_bias[0], settings.depth_bias[1], settings.depth_bias[2]},
+                depthFormat = RHII.GetDepthFormat(),
+                source = GetOpenPBRModule(module).maskSource](PassInfo &info)
+        {
+            std::vector<Define> defines;
+            if (shadow)
+                defines.push_back({"PE_MASK_SHADOW", "1"});
 
-        info.name = "OpenPBRMask_" + std::to_string(module) + (m_shadow ? "_shadow" : "_depth");
-        // The old shaders are the caller's: every rebuild path destroys them through GetPassInfos() before
-        // UpdatePassInfo, except hot reload, which destroys the ones it replaced afterwards.
-        info.pVertShader = Shader::Create({
-            .sourcePath = Path::RuntimeAssets + "Shaders/MaterialX/MaterialMaskVS.hlsl",
-            .entryPoint = "mainVS",
-            .stage = PE_SHADER_STAGE_VERTEX,
-            .defines = defines,
-        });
-        info.pFragShader = Shader::Create({
-            .sourcePath = GetOpenPBRModule(module).maskSource,
-            .entryPoint = "mainPS",
-            .stage = PE_SHADER_STAGE_FRAGMENT,
-            .defines = defines,
-        });
+            info.name = "OpenPBRMask_" + std::to_string(module) + (shadow ? "_shadow" : "_depth");
+            // The old shaders are the caller's: every rebuild path destroys them through GetPassInfos() before
+            // UpdatePassInfo, except hot reload, which destroys the ones it replaced afterwards.
+            info.pVertShader = Shader::Create({
+                .sourcePath = Path::RuntimeAssets + "Shaders/MaterialX/MaterialMaskVS.hlsl",
+                .entryPoint = "mainVS",
+                .stage = PE_SHADER_STAGE_VERTEX,
+                .defines = defines,
+            });
+            info.pFragShader = Shader::Create({
+                .sourcePath = source,
+                .entryPoint = "mainPS",
+                .stage = PE_SHADER_STAGE_FRAGMENT,
+                .defines = defines,
+            });
+            info.cullMode = doubleSided || shadow ? PE_CULL_MODE_NONE : PE_CULL_MODE_FRONT;
+            info.depthFormat = depthFormat;
+            info.depthTestEnable = true;
+            info.depthWriteEnable = true;
+            info.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+            if (shadow)
+            {
+                info.depthBiasEnable = true;
+                info.depthBiasConstantFactor = depthBias[0];
+                info.depthBiasClamp = depthBias[1];
+                info.depthBiasSlopeFactor = depthBias[2];
+                info.dynamicStates.push_back(PE_DYNAMIC_STATE_DEPTH_BIAS);
+            }
+            else
+            {
+                info.colorFormats = {PE_FORMAT_R32G32B32A32_UINT};
+                info.colorBlendAttachments = {BlendState(false, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ZERO,
+                                                         PE_BLEND_OP_ADD, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ZERO,
+                                                         PE_BLEND_OP_ADD, PE_COLOR_COMPONENT_RGBA)};
+            }
+
+            info.Update();
+        };
     }
 
-    void OpenPBRMask::Build(PassInfo &info, uint32_t module, bool doubleSided)
+    std::vector<std::function<void(PassInfo &)>> OpenPBRMask::ModuleBuilders(uint32_t module) const
     {
-        CreateShaders(info, module);
-        info.cullMode = doubleSided || m_shadow ? PE_CULL_MODE_NONE : PE_CULL_MODE_FRONT;
-        info.depthFormat = RHII.GetDepthFormat();
-        info.depthTestEnable = true;
-        info.depthWriteEnable = true;
-        info.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
         if (m_shadow)
-        {
-            const auto &settings = Settings::Get<SceneSettings>();
-            info.depthBiasEnable = true;
-            info.depthBiasConstantFactor = settings.depth_bias[0];
-            info.depthBiasClamp = settings.depth_bias[1];
-            info.depthBiasSlopeFactor = settings.depth_bias[2];
-            info.dynamicStates.push_back(PE_DYNAMIC_STATE_DEPTH_BIAS);
-        }
-        else
-        {
-            info.colorFormats = {PE_FORMAT_R32G32B32A32_UINT};
-            info.colorBlendAttachments = {BlendState(false, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ZERO,
-                                                     PE_BLEND_OP_ADD, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ZERO,
-                                                     PE_BLEND_OP_ADD, PE_COLOR_COMPONENT_RGBA)};
-        }
+            return {Builder(module, false)};
 
-        info.Update();
+        return {Builder(module, false), Builder(module, true)};
     }
 
+    void OpenPBRMask::AdoptModule(uint32_t module, const std::vector<std::shared_ptr<PassInfo>> &infos)
+    {
+        std::array<std::shared_ptr<PassInfo>, 2> variants;
+        std::copy_n(infos.begin(), std::min(infos.size(), variants.size()), variants.begin());
+        m_modules.emplace(module, std::move(variants));
+    }
+
+    // Drops modules the scene no longer uses; new ones arrive through AdoptModule (SceneRendererCore::SyncModulePipelines),
+    // so a mesh whose module is still building draws no mask.
     void OpenPBRMask::Sync(Scene &scene, bool shadow)
     {
         if (m_shadow != shadow)
@@ -90,35 +110,20 @@ namespace pe
             return;
         }
 
+        m_active = true;
         const auto &modules = scene.GetOpenPBRMaskModules();
         for (auto it = m_modules.begin(); it != m_modules.end();)
         {
             if (std::find(modules.begin(), modules.end(), it->first) == modules.end())
             {
-                RHII.AddToDeletionQueue([retired = it->second] {});
+                for (const auto &info : it->second)
+                    RetireModulePassInfo(info);
                 it = m_modules.erase(it);
             }
             else
             {
                 ++it;
             }
-        }
-
-        for (uint32_t module : modules)
-        {
-            if (m_modules.contains(module))
-                continue;
-
-            // Build before inserting, like MaterialThinPass: a failed build leaves no half-made entry to draw.
-            std::array<std::shared_ptr<PassInfo>, 2> variants;
-            const uint32_t count = m_shadow ? 1u : 2u;
-            for (uint32_t side = 0; side < count; ++side)
-            {
-                variants[side] = std::make_shared<PassInfo>();
-                Build(*variants[side], module, side != 0u);
-            }
-
-            m_modules.emplace(module, std::move(variants));
         }
     }
 
@@ -159,6 +164,7 @@ namespace pe
 
     void OpenPBRMask::Rebuild()
     {
+        m_moduleGeneration++; // a module build prepared before this rebuild is stale
         if (!SceneUsesOpenPBR())
             return;
 
@@ -167,7 +173,7 @@ namespace pe
             for (uint32_t side = 0; side < variants.size(); ++side)
             {
                 if (variants[side])
-                    Build(*variants[side], module, side != 0u);
+                    Builder(module, side != 0u)(*variants[side]);
             }
         }
     }
@@ -234,8 +240,14 @@ namespace pe
 
     void OpenPBRMask::Clear()
     {
+        m_moduleGeneration++;
+        m_active = false;
         for (const auto &[module, variants] : m_modules)
-            RHII.AddToDeletionQueue([retired = variants] {});
+        {
+            for (const auto &info : variants)
+                RetireModulePassInfo(info);
+        }
+
         m_modules.clear();
     }
 } // namespace pe

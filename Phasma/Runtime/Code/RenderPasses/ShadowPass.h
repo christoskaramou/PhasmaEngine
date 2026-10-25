@@ -40,6 +40,7 @@ namespace pe
         [[nodiscard]] float GetCascadeViewZ(uint32_t cascade) const;
         [[nodiscard]] float GetCascadeTexelSizeWorld(uint32_t cascade) const;
         void SetScene(Scene *scene) { m_scene = scene; }
+        OpenPBRMask &GetMasks() { return m_masks; }
         void SyncMaskModules(Scene &scene, bool enabled);
         void ClearDepths(CommandBuffer *cmd);
         // m_voxelPassInfo is the packed-voxel shadow caster (own VS); the framework must see it for

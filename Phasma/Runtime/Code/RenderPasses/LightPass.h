@@ -1,5 +1,7 @@
 #pragma once
 
+#include "RenderPasses/ModulePipelines.h"
+
 namespace pe
 {
     struct LightPassUBO
@@ -108,7 +110,7 @@ namespace pe
     // Material pass 2 (desktop OpenPBR): MaterialX's generated shading for visibility pixels of MaterialX materials,
     // over LightOpaque's result. Shares LightOpaquePass's bindings (Lighting.hlsl sets 0-3), uniform and push
     // constants; lives in LightPass.cpp for its helpers.
-    class MaterialShadePass : public IRenderPassComponent
+    class MaterialShadePass : public IRenderPassComponent, public ModulePipelines
     {
     public:
         void Init() override;
@@ -123,9 +125,12 @@ namespace pe
         void Destroy() override;
         void SyncModules(const std::vector<uint32_t> &modules);
         std::vector<PassInfo *> GetPassInfos() noexcept override;
+        std::vector<std::function<void(PassInfo &)>> ModuleBuilders(uint32_t module) const override;
+        void AdoptModule(uint32_t module, const std::vector<std::shared_ptr<PassInfo>> &infos) override;
+        bool HasModule(uint32_t module) const override { return m_modulePassInfos.contains(module); }
 
     protected:
-        virtual void BuildPipeline(PassInfo &info, uint32_t module);
+        virtual std::function<void(PassInfo &)> PipelineBuilder(uint32_t module) const;
         virtual std::vector<Define> Defines() const;
         virtual bool TargetsReady() const;
         void BindSceneDescriptors(PassInfo &info, uint32_t frame);
@@ -163,7 +168,7 @@ namespace pe
         Image *GetTransparentDepth() const;
 
     protected:
-        void BuildPipeline(PassInfo &info, uint32_t module) override;
+        std::function<void(PassInfo &)> PipelineBuilder(uint32_t module) const override;
         std::vector<Define> Defines() const override;
         bool TargetsReady() const override;
 

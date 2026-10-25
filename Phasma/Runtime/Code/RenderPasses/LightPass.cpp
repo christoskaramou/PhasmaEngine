@@ -916,24 +916,38 @@ namespace pe
         return defines;
     }
 
-    void MaterialShadePass::BuildPipeline(PassInfo &info, uint32_t module)
+    std::function<void(PassInfo &)> MaterialShadePass::PipelineBuilder(uint32_t module) const
     {
-        const std::vector<Define> defines = Defines();
-        info.name = "MaterialShade_pipeline_" + std::to_string(module);
-        info.pCompShader = Shader::Create({.sourcePath = GetOpenPBRModule(module).shadeSource,
-                                           .entryPoint = "mainCS",
-                                           .stage = PE_SHADER_STAGE_COMPUTE,
-                                           .defines = defines});
-        info.Update();
+        return [module, defines = Defines(), source = GetOpenPBRModule(module).shadeSource](PassInfo &info)
+        {
+            info.name = "MaterialShade_pipeline_" + std::to_string(module);
+            info.pCompShader = Shader::Create({.sourcePath = source,
+                                               .entryPoint = "mainCS",
+                                               .stage = PE_SHADER_STAGE_COMPUTE,
+                                               .defines = defines});
+            info.Update();
+        };
+    }
+
+    std::vector<std::function<void(PassInfo &)>> MaterialShadePass::ModuleBuilders(uint32_t module) const
+    {
+        return {PipelineBuilder(module)};
+    }
+
+    void MaterialShadePass::AdoptModule(uint32_t module, const std::vector<std::shared_ptr<PassInfo>> &infos)
+    {
+        m_modulePassInfos.emplace(module, infos.front());
     }
 
     void MaterialShadePass::UpdatePassInfo()
     {
+        m_moduleGeneration++; // a module build prepared with the old defines is stale
         m_builtDefines = DefinesKey(Defines());
         for (const auto &[module, info] : m_modulePassInfos)
-            BuildPipeline(*info, module);
+            PipelineBuilder(module)(*info);
     }
 
+    // Drops modules the scene no longer uses; new ones arrive through AdoptModule (SceneRendererCore::SyncModulePipelines).
     void MaterialShadePass::SyncModules(const std::vector<uint32_t> &modules)
     {
         for (auto it = m_modulePassInfos.begin(); it != m_modulePassInfos.end();)
@@ -944,18 +958,8 @@ namespace pe
                 continue;
             }
 
-            RHII.AddToDeletionQueue([retired = it->second] {});
+            RetireModulePassInfo(it->second);
             it = m_modulePassInfos.erase(it);
-        }
-
-        for (uint32_t module : modules)
-        {
-            if (m_modulePassInfos.contains(module))
-                continue;
-
-            auto info = std::make_shared<PassInfo>();
-            BuildPipeline(*info, module);
-            m_modulePassInfos.emplace(module, std::move(info));
         }
     }
 
@@ -1208,6 +1212,7 @@ namespace pe
                                             m_shadowFallbackSampler,
                                             m_shadowFallbackViews);
 
+        m_moduleGeneration++;
         m_modulePassInfos.clear();
 
         m_viewportRT = m_visibility = m_albedoRT = nullptr;
@@ -1256,49 +1261,53 @@ namespace pe
         return defines;
     }
 
-    void OpenPBRForwardPass::BuildPipeline(PassInfo &info, uint32_t module)
+    std::function<void(PassInfo &)> OpenPBRForwardPass::PipelineBuilder(uint32_t module) const
     {
-        const std::vector<Define> defines = Defines();
-        info.name = "OpenPBRForward_pipeline_" + std::to_string(module);
-        info.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Gbuffer/GBufferVS.hlsl",
-                                           .entryPoint = "mainVS",
-                                           .stage = PE_SHADER_STAGE_VERTEX,
-                                           .defines = defines});
-        info.pFragShader = Shader::Create({.sourcePath = GetOpenPBRModule(module).forwardSource,
-                                           .entryPoint = "mainPS",
-                                           .stage = PE_SHADER_STAGE_FRAGMENT,
-                                           .defines = defines});
-        info.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
-
-        // standard_pbr.pass "transparent" raster state without depth writes, and MaterialX's own blend over a colour
-        // that already carries its opacity (GlslRenderer; plan Decision 2 = A).
-        const bool reverseDepth = Settings::Get<SceneSettings>().reverse_depth;
-        info.cullMode = PE_CULL_MODE_FRONT;
-        info.depthTestEnable = true;
-        info.depthWriteEnable = false;
-        info.depthCompareOp = reverseDepth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL;
-        info.blendEnable = true;
-        info.colorBlendAttachments = {BlendState::Default};
-        info.colorFormats = {m_viewportRT->GetFormat()};
-
         // The shader's velocity alpha is 1 (overwrite) or 0 (keep what is behind), so the same blend selects.
+        std::vector<::PeFormat> colorFormats = {m_viewportRT->GetFormat()};
         if (m_velocityRT)
-        {
-            info.colorBlendAttachments.push_back(BlendState::Default);
-            info.colorFormats.push_back(m_velocityRT->GetFormat());
-        }
+            colorFormats.push_back(m_velocityRT->GetFormat());
 
         // The nearest surface wins: reverse-Z depth is larger nearer, and 0 (the clear) means none.
+        std::vector<BlendState> blendStates(colorFormats.size(), BlendState::Default);
         if (m_transparentDepthRT)
         {
-            info.colorBlendAttachments.push_back(BlendState(true, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ONE, PE_BLEND_OP_MAX,
-                                                            PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ONE, PE_BLEND_OP_MAX,
-                                                            PE_COLOR_COMPONENT_R));
-            info.colorFormats.push_back(m_transparentDepthRT->GetFormat());
+            colorFormats.push_back(m_transparentDepthRT->GetFormat());
+            blendStates.push_back(BlendState(true, PE_BLEND_FACTOR_ONE, PE_BLEND_FACTOR_ONE, PE_BLEND_OP_MAX, PE_BLEND_FACTOR_ONE,
+                                             PE_BLEND_FACTOR_ONE, PE_BLEND_OP_MAX, PE_COLOR_COMPONENT_R));
         }
 
-        info.depthFormat = RHII.GetDepthFormat();
-        info.Update();
+        return [module,
+                defines = Defines(),
+                source = GetOpenPBRModule(module).forwardSource,
+                reverseDepth = Settings::Get<SceneSettings>().reverse_depth,
+                colorFormats,
+                blendStates,
+                depthFormat = RHII.GetDepthFormat()](PassInfo &info)
+        {
+            info.name = "OpenPBRForward_pipeline_" + std::to_string(module);
+            info.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Gbuffer/GBufferVS.hlsl",
+                                               .entryPoint = "mainVS",
+                                               .stage = PE_SHADER_STAGE_VERTEX,
+                                               .defines = defines});
+            info.pFragShader = Shader::Create({.sourcePath = source,
+                                               .entryPoint = "mainPS",
+                                               .stage = PE_SHADER_STAGE_FRAGMENT,
+                                               .defines = defines});
+            info.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+
+            // standard_pbr.pass "transparent" raster state without depth writes, and MaterialX's own blend over a
+            // colour that already carries its opacity (GlslRenderer; plan Decision 2 = A).
+            info.cullMode = PE_CULL_MODE_FRONT;
+            info.depthTestEnable = true;
+            info.depthWriteEnable = false;
+            info.depthCompareOp = reverseDepth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL;
+            info.blendEnable = true;
+            info.colorBlendAttachments = blendStates;
+            info.colorFormats = colorFormats;
+            info.depthFormat = depthFormat;
+            info.Update();
+        };
     }
 
     bool OpenPBRForwardPass::TargetsReady() const
