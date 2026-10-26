@@ -2,6 +2,8 @@
 
 PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniques, with an experimental WebGPU C API layer. Vulkan runs on Windows and Linux; DX12 is Windows-only.
 
+It ships with an editor, a player for desktop and Android, an exporter, a model cook, an animator and a profiler, and its materials can come straight from MaterialX as OpenPBR.
+
 ![Screenshot](Phasma/Editor/EditorAssets/Images/ABeautifulGame.png)
 
 > **Get the projects.** PhasmaEngine is the engine. The games and demos live in **[PhasmaProjects](https://github.com/christoskaramou/PhasmaProjects)** — a solar system, an RTS, a voxel world, a physics lab, and a shelf of arcade remakes, ready to open.
@@ -15,46 +17,55 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 ## Features
 
 ### Rendering
-* Deferred Rendering
+* Deferred rendering with Forward+ tiled light culling, on Vulkan and DirectX 12
+* OpenPBR materials from MaterialX — each `.mtlx` document compiles to its own Slang shader and runs on a visibility buffer (opaque and alpha-cut), in a forward pass (glass and alpha-blended surfaces), and in ray-traced hit groups; all 454 materials of AMD's GPUOpen MaterialX library match MaterialX's own renderer
 * Ray Tracing — full and hybrid modes (Vulkan and DirectX 12 / DXR)
 * Hybrid RT transparency: transmission, refraction, Fresnel/TIR
-* Physically Based Rendering (PBR)
-* Image Based Lighting (IBL)
-* Screen Space Ambient Occlusion (SSAO)
+* Global Illumination (opt-in, ray traced): dynamic diffuse GI probes fitted to the scene or following the camera in cascades, Lumen-style screen probes, and ray-traced reflections
+* Resident cluster geometry (opt-in): meshoptimizer cluster hierarchies for static meshes, refined to a pixel error
+* Physically Based Rendering (PBR) and Image Based Lighting (IBL)
+* Screen Space Ambient Occlusion (SSAO, FidelityFX CACAO)
 * Screen Space Reflections (SSR)
 * Cascaded Shadow Maps (GPU-culled cascades)
-* Bloom
-* Depth of Field
-* Motion Blur
-* Tone Mapping
-* FXAA
-* Temporal Anti-Aliasing with RCAS Upscale
-* Frustum Culling
-* GPU Occlusion Culling (two-phase temporal Hi-Z)
-* Mesh Level of Detail (LOD)
-* Render Graph
-* Day/Night Skybox with HDR environment maps
+* HDR scene colour and sRGB-correct linear colour (per-scene options)
+* Depth of Field as a thin lens on the camera (f-stop, focus distance, sensor size), with glass and other transparent surfaces blurred by their own depth
+* Temporal Anti-Aliasing with RCAS upscale and render scale, CAS sharpening, FXAA
+* Bloom, ACES tone mapping, colour grading (lift/gamma/gain, saturation, contrast, strength masks), motion blur
+* Frustum culling, GPU occlusion culling (two-phase temporal Hi-Z), GPU-driven indirect drawing
+* Mesh Level of Detail (LOD), skinned meshes included
+* Render Graph, with per-scene pipeline scripts that add their own passes from Lua
+* Skyboxes from HDR environment maps or six-face cubemaps, swappable at runtime
+* Debug lines, selection outline and editor grid
 
 ### Shaders
-* HLSL shaders compiled via DXC/shaderc
+* HLSL shaders compiled via DXC/shaderc, or Slang (`--shader-compiler slang`)
+* MaterialX documents compiled to Slang by `PhasmaCook`
+* Shader hot-reload with file watching, including changes to included files
 * Experimental WGSL support through PhasmaWebGPU
-* Shader hot-reload with file watching
 
 ### Scene
-* Multiple model formats loading (via Assimp)
+* Model import (glTF, FBX, OBJ and more via Assimp) cooked to the portable `.pemesh` format, with a MaterialX document written for each glTF material
 * Mesh optimization (via meshoptimizer)
 * Directional, Point, Spot, and Area lights
 * Cameras and lights as scene nodes (Add Component)
 * Scene save/load (.pescene) and prefabs (save/instantiate node hierarchies)
 * Physics — Jolt rigid bodies, trigger zones, static terrain/voxel colliders; Box2D for 2D
-* Physics-driven walk camera (collide via forces) + auto-attached adaptive fly camera
-* Skeletal animation
+* Physics-driven walk camera (collide via forces) + adaptive fly camera on every new camera
+* Skeletal animation with root motion, and procedural 2D skinned strips
+* Sprites — sprite sheets and animation clips
+* Navigation — Recast/Detour navmeshes, crowd agents, and NavSwarm (flow field + ORCA) for large crowds
+* LAN networking for multiplayer — TCP host/join with UDP discovery (`net` table)
 * Audio (miniaudio)
-* Particle system
-* Runtime UI — script-driven HUD panels, text, buttons, images
+* Particle system (GPU compute)
+* Runtime UI — script-driven HUD panels, text, buttons, images, laid out in the editor's UI Editor
 * Trigger Zones — box regions with opt-in Script (on_enter/on_exit), Post-Process, Audio, Physics force-field, and spawn/streaming/camera sections
 * Post-Process Volumes & Scene Settings node (per-effect spatial blending)
 * Per-axis transforms and material editing
+
+### Scripting
+* Lua scripts per scene node, in the editor and the player (incl. `tween.to` helpers for smooth animation/camera focus). [How scripts run, and the tables they can call](docs/manual/scripting.md)
+* C++ game modules (`PhasmaGame.dll` / `libPhasmaGame.so`) with live reload on desktop. [C++ scripts and live reload](Phasma/ProjectNative/README.md)
+* Event system
 
 ### Worlds & Terrain
 * Voxel World node (cube voxels; Vulkan + DX12): streamed chunks with packed 8-byte vertices, temporal Hi-Z occlusion, distance LOD bands, alpha-blended water with sea-level worldgen, per-column edit persistence
@@ -62,14 +73,25 @@ PhasmaEngine is a Vulkan and DirectX 12 3D engine for learning graphics techniqu
 * Terrain node (smooth isosurface terrain): streamed Surface Nets tiles updated in place (no rebuild hitches), noise or heightmap worldgen, worldgen overhangs, persistent CSG sculpting (`terrain.sculpt` / `terrain.sculpt3d`, saved with the scene), painted caves layer, per-tile Jolt colliders following the camera
 * Map Painter — in-editor painting of every world input map (surface height, strata, features with a block-tile palette, terrain caves) with pan/zoom canvas, resize, and save + live rebuild
 
+### Programs
+Every program has a page in the [manual](docs/manual/README.md).
+* **PhasmaLauncher** — picks the project, the startup scene and which program to run
+* **PhasmaEditor** — builds scenes (below)
+* **PhasmaPlayer** — runs a project without the editor, on desktop and Android
+* **PhasmaExport** — turns a project into a standalone game folder with a verified `game.pepak` asset pack
+* **PhasmaCook** — cooks source models into `.pemesh`
+* **PhasmaAnimator** — rigs and animates a cooked `.pemesh` (below)
+* **PhasmaProfiler** — live frame, CPU, GPU and memory graphs of a running Player
+* **PhasmaGameDriver** — plays a running Player over MCP, for bots and automated tests
+
 ### Editor (PhasmaEditor)
 * ImGui-based editor
 * Pinnable Properties panel
+* MaterialX material inspector: assign a `.mtlx` document to a mesh and edit every input
 * Script editor with live function browser ("Show Functions")
-* CPU/GPU metrics
+* CPU/GPU metrics and profiler panel
 * Debug console
-* Lua scripting (incl. `tween.to` helpers for smooth animation/camera focus). [How scripts run, and the tables they can call](docs/manual/scripting.md)
-* Event system
+* Undo/redo that survives editor module hot reloads
 * Editor module C++ hot reload (PhasmaEditorModule.dll)
 * Named editor actions invokable without mouse input (agents/automation)
 
