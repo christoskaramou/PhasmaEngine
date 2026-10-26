@@ -61,6 +61,12 @@ namespace pe
         void Dispatch(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ) override;
         void DispatchIndirect(Buffer *indirectBuffer, size_t offset) override;
         void DispatchExternalCompute(uint32_t groupCountX, uint32_t groupCountY, uint32_t groupCountZ);
+        // Averages one multisampled colour subresource into a single-sample one; call outside a pass.
+        void ResolveImage(Image *src,
+                          uint32_t srcArrayLayer,
+                          Image *dst,
+                          uint32_t dstMipLevel,
+                          uint32_t dstArrayLayer);
         void PushConstants(const PushConstantsBlock<128> &constants) override;
 
         void Draw(uint32_t vertexCount, uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance) override;

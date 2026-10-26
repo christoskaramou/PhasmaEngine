@@ -1433,6 +1433,31 @@ namespace pe
                 MarkPendingImageBarrierRegion("ImageGroupBarrier");
         }
     }
+
+    void Dx12CommandBufferImpl::ResolveImage(Image *src,
+                                             uint32_t srcArrayLayer,
+                                             Image *dst,
+                                             uint32_t dstMipLevel,
+                                             uint32_t dstArrayLayer)
+    {
+        Dx12ImageImpl *srcImg = Dx12ImageImpl::From(src);
+        Dx12ImageImpl *dstImg = Dx12ImageImpl::From(dst);
+
+        PushImageStateTransition(m_barrierBatch, srcImg, D3D12_RESOURCE_STATE_RESOLVE_SOURCE);
+        PushImageStateTransition(m_barrierBatch, dstImg, D3D12_RESOURCE_STATE_RESOLVE_DEST);
+        FlushBarriers();
+
+        const UINT srcSubresource = srcArrayLayer * src->GetMipLevels();
+        const UINT dstSubresource = dstMipLevel + dstArrayLayer * dst->GetMipLevels();
+        // ponytail: resolves in the texture's own format; pass the view's format if an sRGB view of a
+        // non-sRGB texture ever needs resolving (it would average in the wrong colour space).
+        m_cmdList->ResolveSubresource(dstImg->GetResource(),
+                                      dstSubresource,
+                                      srcImg->GetResource(),
+                                      srcSubresource,
+                                      srcImg->GetViewFormat());
+    }
+
     void Dx12CommandBufferImpl::MemoryBarrier(const MemoryBarrierInfo &)
     {
         // Global UAV barrier: pResource = nullptr instructs the GPU to flush

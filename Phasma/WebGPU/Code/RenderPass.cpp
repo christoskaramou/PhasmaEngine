@@ -15,6 +15,9 @@
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#if defined(PE_WIN32)
+#include "API/DX12/Dx12CommandBufferImpl.h"
+#endif
 
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
@@ -348,6 +351,27 @@ namespace
         rpe->renderingActive = true;
         rpe->renderingActiveUsesSecondaryContents = false;
         rpe->renderingScopeWasOpened = true;
+    }
+
+    // DX12 binds no resolve attachments, so each resolveTarget is filled after the pass ends.
+    void ResolveDx12Attachments(WGPURenderPassEncoder rpe)
+    {
+#if defined(PE_WIN32)
+        for (const auto &info : rpe->deferredColorAttachments)
+        {
+            const WGPUTextureViewImpl *target = info.resolveTextureView;
+            if (!target || !info.textureView)
+                continue;
+
+            pe::Dx12CommandBufferImpl::From(rpe->cmd)->ResolveImage(info.textureView->texture->image,
+                                                                    info.textureView->baseArrayLayer,
+                                                                    target->texture->image,
+                                                                    target->baseMipLevel,
+                                                                    target->baseArrayLayer);
+        }
+#else
+        (void)rpe;
+#endif
     }
 
     // Deferred beginRendering: Vulkan dynamic rendering forbids image layout
@@ -1787,9 +1811,14 @@ extern "C"
         if (rpe->renderingActive)
         {
             if (pe::GetRHI().GetApi() == PE_GRAPHICS_API_DX12)
+            {
                 rpe->cmd->EndPass();
+                ResolveDx12Attachments(rpe);
+            }
             else
+            {
                 pe::GetVulkanCommandBuffer(rpe->cmd).endRendering();
+            }
             rpe->renderingActive = false;
             rpe->renderingActiveUsesSecondaryContents = false;
         }
