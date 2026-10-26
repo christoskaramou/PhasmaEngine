@@ -271,7 +271,7 @@ namespace pwgpu
             static constexpr uint32_t kDx12WebGPUDxilCacheVersion = 1;
             static constexpr uint32_t kDx12WebGPUCbvRegisterShiftVersion = 2;
             static constexpr std::string_view kDx12WebGPUNagaBridgeVersion =
-                "naga-29.0.1-spv-to-hlsl-semantic-cbv-shift-sampler-cap64-vector-select2-demote-kill";
+                "naga-29.0.1-spv-to-hlsl-semantic-cbv-shift-sampler-cap64-vector-select2-demote-kill-y-up";
 
             DxilCacheSha256 hash;
             HashDxilCacheString(hash, "PhasmaWebGPU.DX12.DXIL");

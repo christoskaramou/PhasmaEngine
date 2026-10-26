@@ -13500,8 +13500,10 @@ pub fn spirv_to_hlsl_with_error(
         return Err("SPIR-V input is empty".to_string());
     }
 
+    // WebGPU SPIR-V follows the Vulkan backend's Y-down clip space (WGSL is flipped on the way in);
+    // D3D clip space is Y-up, so flip position.y back while parsing.
     let parse_options = spv_front::Options {
-        adjust_coordinate_space: false,
+        adjust_coordinate_space: true,
         strict_capabilities: false,
         block_ctx_dump_prefix: None,
     };
