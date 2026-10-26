@@ -2195,6 +2195,7 @@ namespace pe
         desc.backbufferCount = m_api == PE_GRAPHICS_API_DX12 ? 3 : 2;
         desc.name = "RHI_swapchain";
         m_swapchain = Swapchain::Create(desc);
+        m_swapchainImageCount = m_swapchain->GetImageCount();
 
         for (DeletionQueue *queue : m_deletionQueues)
         {
@@ -2298,7 +2299,7 @@ namespace pe
 
     uint32_t RHI::GetSwapchainImageCount()
     {
-        return m_swapchain->GetImageCount();
+        return m_swapchainImageCount;
     }
 
     SystemProcMem RHI::GetSystemAndProcessMemory()

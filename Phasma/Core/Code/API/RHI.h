@@ -289,6 +289,8 @@ namespace pe
         SDL_Window *m_window;
         Surface *m_surface;
         Swapchain *m_swapchain;
+        // Read by workers that build PassInfos while ChangePresentMode recreates the swapchain: it never reads 0 mid-way.
+        std::atomic<uint32_t> m_swapchainImageCount{0};
         std::atomic<uint32_t> m_frameCounter{0}; // read by AddToDeletionQueue from loader threads
         StagingManager *m_stagingManager;
         Buffer *m_dx12FillZero = nullptr; // GPU-native DX12 FillBuffer sources (see GetDx12FillSource)
