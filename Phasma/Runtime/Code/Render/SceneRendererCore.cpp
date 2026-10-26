@@ -322,6 +322,31 @@ namespace pe
             StartModuleBuild(owners);
     }
 
+    // A module is ready once every pass that wants it holds its pipelines. Failed and rejected modules render legacy
+    // and are not waited for; the ray-traced hit groups build as one job, so they only report that they are building.
+    OpenPBRBuildProgress SceneRendererCore::GetOpenPBRBuildProgress() const
+    {
+        std::map<uint32_t, bool> modules;
+        for (const auto &[owner, wanted] : GetModuleOwners())
+        {
+            for (uint32_t module : *wanted)
+            {
+                if (m_failedModules.contains(module) || GetOpenPBRModule(module).rejected)
+                    continue;
+
+                auto [it, inserted] = modules.emplace(module, true);
+                it->second = it->second && owner->HasModule(module);
+            }
+        }
+
+        OpenPBRBuildProgress progress;
+        progress.total = static_cast<uint32_t>(modules.size());
+        progress.ready = static_cast<uint32_t>(std::count_if(modules.begin(), modules.end(), [](const auto &module)
+                                                             { return module.second; }));
+        progress.hitsBuilding = m_rtHitBuild.done.valid();
+        return progress;
+    }
+
     void SceneRendererCore::StartModuleBuild(const ModuleOwners &owners)
     {
         // The first module some pass lacks; a failed one waits until a pass rebuilds, and a rejected one (here or by

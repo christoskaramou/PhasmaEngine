@@ -51,6 +51,7 @@ namespace pe
         Image *GetDepthStencilRT() override { return m_sceneRenderer.GetDepthStencilRT(); }
         Image *CreateFSSampledImage(Image *source) override;
         uint64_t GetRenderedFrames() const override { return m_sceneRenderer.GetRenderedFrames(); }
+        OpenPBRBuildProgress GetOpenPBRBuildProgress() const override { return m_sceneRenderer.GetOpenPBRBuildProgress(); }
 
     private:
         Image *CreateRenderTarget(const std::string &name,

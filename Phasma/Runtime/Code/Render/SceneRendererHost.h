@@ -9,6 +9,16 @@ namespace pe
     class Scene;
     class SkyBox;
 
+    // MaterialX shaders the scene still waits for (SceneRendererCore::GetOpenPBRBuildProgress).
+    struct OpenPBRBuildProgress
+    {
+        uint32_t ready = 0;        // modules every pass that draws them already holds
+        uint32_t total = 0;        // modules the scene's passes want, failed and rejected ones aside
+        bool hitsBuilding = false; // the ray-traced hit groups for the scene's modules are compiling
+
+        bool Busy() const { return ready < total || hitsBuilding; }
+    };
+
     class SceneRendererHost
     {
     public:
@@ -43,6 +53,7 @@ namespace pe
         // Scene render graph executions so far. Unlike RHI frames it skips frames that never rendered (the swapchain
         // was not ready), so passes can tell a gap in their own history from a busy GPU.
         virtual uint64_t GetRenderedFrames() const = 0;
+        virtual OpenPBRBuildProgress GetOpenPBRBuildProgress() const = 0;
     };
 
     void SetActiveSceneRendererHost(SceneRendererHost *renderer);

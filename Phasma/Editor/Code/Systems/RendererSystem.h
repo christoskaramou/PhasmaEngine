@@ -97,6 +97,7 @@ namespace pe
         Image *GetDepthStencilRT() override { return m_sceneRenderer.GetDepthStencilRT(); }
         Image *CreateFSSampledImage(Image *source) override;
         uint64_t GetRenderedFrames() const override { return m_sceneRenderer.GetRenderedFrames(); }
+        OpenPBRBuildProgress GetOpenPBRBuildProgress() const override { return m_sceneRenderer.GetOpenPBRBuildProgress(); }
         void Resize(uint32_t width, uint32_t height);
         void PollShaders(std::optional<size_t> hash = std::nullopt);
         void WaitPreviousFrameCommands();

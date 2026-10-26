@@ -14,6 +14,7 @@
 #include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
 #include "UI/RuntimeUiInputEvents.h"
+#include "Render/SceneRendererHost.h"
 #include "Runtime/RuntimeStartup.h"
 #include "Script/Bindings/Input/InputState.h"
 #if defined(PE_WIN32)
@@ -33,6 +34,66 @@ namespace pe
 {
     namespace
     {
+        // MaterialX shaders compiling: "Building materials 4 of 16" over a filling bar, in a panel whose bottom-left corner
+        // sits `margin` inside `corner`. Draws nothing once every module and hit group is ready.
+        void DrawOpenPBRBuildProgress(ImDrawList *drawList,
+                                      const OpenPBRBuildProgress &progress,
+                                      ImVec2 corner,
+                                      float scale)
+        {
+            if (!drawList || !progress.Busy())
+                return;
+
+            const bool modulesLeft = progress.ready < progress.total;
+            char text[96];
+            if (modulesLeft)
+                snprintf(text, sizeof(text), "Building materials %u of %u", progress.ready + 1, progress.total);
+            else
+                snprintf(text, sizeof(text), "Building ray-traced materials");
+
+            const float margin = 12.0f * scale;
+            const float pad = 8.0f * scale;
+            const float barHeight = 4.0f * scale;
+            const ImVec2 textSize = ImGui::CalcTextSize(text);
+            const float width = std::max(textSize.x, 180.0f * scale) + 2.0f * pad;
+            const float height = textSize.y + barHeight + 3.0f * pad;
+            const ImVec2 min(corner.x + margin, corner.y - margin - height);
+            const ImVec2 max(min.x + width, min.y + height);
+            drawList->AddRectFilled(min, max, IM_COL32(0, 0, 0, 170), 6.0f * scale);
+            drawList->AddText(ImVec2(min.x + pad, min.y + pad), IM_COL32(235, 235, 235, 255), text);
+
+            const ImVec2 barMin(min.x + pad, max.y - pad - barHeight);
+            const ImVec2 barMax(max.x - pad, max.y - pad);
+            const float barWidth = barMax.x - barMin.x;
+            const ImU32 fillColor = IM_COL32(110, 180, 255, 255);
+            drawList->AddRectFilled(barMin, barMax, IM_COL32(255, 255, 255, 40), barHeight * 0.5f);
+            if (modulesLeft)
+            {
+                const float fill = static_cast<float>(progress.ready) / static_cast<float>(progress.total);
+                if (fill > 0.0f)
+                {
+                    const ImVec2 fillMax(barMin.x + barWidth * fill, barMax.y);
+                    drawList->AddRectFilled(barMin, fillMax, fillColor, barHeight * 0.5f);
+                }
+            }
+            else
+            {
+                // The hit groups build as one job with no count: a segment sweeps along the bar instead.
+                const float segment = barWidth * 0.25f;
+                const float t = static_cast<float>(std::fmod(ImGui::GetTime() * 0.8, 1.0));
+                const float start = barMin.x + (barWidth + segment) * t - segment;
+                const float left = std::max(start, barMin.x);
+                const float right = std::min(start + segment, barMax.x);
+                if (right > left)
+                {
+                    drawList->AddRectFilled(ImVec2(left, barMin.y),
+                                            ImVec2(right, barMax.y),
+                                            fillColor,
+                                            barHeight * 0.5f);
+                }
+            }
+        }
+
         std::string ReadEnvironmentVariable(const char *name)
         {
 #if defined(PE_WIN32)
@@ -458,6 +519,17 @@ namespace pe
                 if (!InputState::IsKeyboardCapturedByUi() && ImGui::IsKeyPressed(ImGuiKey_G, false))
                     m_showFrameGraph = !m_showFrameGraph;
                 DrawFrameTimeOverlay();
+
+                // MaterialX shaders still compiling, in the window's bottom-left corner.
+                if (const SceneRendererHost *host = GetActiveSceneRendererHost())
+                {
+                    const ImGuiViewport *viewport = ImGui::GetMainViewport();
+                    DrawOpenPBRBuildProgress(ImGui::GetForegroundDrawList(),
+                                             host->GetOpenPBRBuildProgress(),
+                                             ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y),
+                                             m_frameInfo.uiScale > 0.0f ? m_frameInfo.uiScale : 1.0f);
+                }
+
                 ImGui::Render();
                 m_pendingTouchClicks.clear();
                 m_frameOpen = false;

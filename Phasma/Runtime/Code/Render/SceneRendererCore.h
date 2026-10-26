@@ -4,6 +4,7 @@
 #include "Render/SceneFrameResources.h"
 #include "Render/SceneRenderGraph.h"
 #include "Render/SceneRenderTargets.h"
+#include "Render/SceneRendererHost.h"
 #include "Skybox/Skybox.h"
 
 namespace pe
@@ -80,6 +81,7 @@ namespace pe
         void SetRenderPassScene(Scene &scene);
         void ExecuteRenderGraph(CommandBuffer *cmd);
         uint64_t GetRenderedFrames() const { return m_renderedFrames; }
+        OpenPBRBuildProgress GetOpenPBRBuildProgress() const;
         void ExecuteDeferredRenderGraph(CommandBuffer *cmd);
         void PollShaders(std::optional<size_t> hash = std::nullopt);
 
