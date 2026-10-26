@@ -49,6 +49,16 @@ namespace pe
             source.samplerHeapIndexStride = 1;
             return mapping;
         }
+
+        // Slang declares a combined binding as an OpTypeImage plus an OpTypeSampler ([[vk::combinedImageSampler]] is
+        // ignored). The sampler* fields serve only OpTypeSampledImage, so a lone sampler would read the image table.
+        VkDescriptorSetAndBindingMappingEXT SeparateSamplerMapping(VkDescriptorSetAndBindingMappingEXT combined)
+        {
+            auto &source = combined.sourceData.indirectIndexArray;
+            combined.resourceMask = VK_SPIRV_RESOURCE_TYPE_SAMPLER_BIT_EXT;
+            source.addressOffset = source.samplerAddressOffset;
+            return combined;
+        }
     } // namespace
 
     void VulkanPipelineImpl::ConfigureDescriptorHeap(vk::PipelineShaderStageCreateInfo *stages, uint32_t count)
@@ -75,6 +85,12 @@ namespace pe
             {
                 const auto &heapBinding = layout->m_heapLayout->bindings[i];
                 m_heapMappings.push_back(HeapBindingMapping(set, bindings[i], heapBinding));
+
+                if (bindings[i].type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
+                {
+                    m_heapMappings.back().resourceMask &= ~VK_SPIRV_RESOURCE_TYPE_SAMPLER_BIT_EXT;
+                    m_heapMappings.push_back(SeparateSamplerMapping(m_heapMappings.back()));
+                }
             }
         }
 
