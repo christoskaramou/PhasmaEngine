@@ -478,9 +478,10 @@ namespace pe
         {
             args.push_back("-fvk-use-entrypoint-name");
             args.push_back("-fvk-use-dx-layout");
-#if PE_DEBUG_MODE
+#if defined(PE_DEBUG)
             // DXC's -Zi keeps source lines in SPIR-V (its DXIL debug part goes to a PDB the engine drops). Slang's -g
             // emits NonSemantic.Shader.DebugInfo.100, which needs VK_KHR_shader_non_semantic_info: core from 1.3.
+            // Debug builds only: with -O3 it made a MaterialX forward shader take 40 s instead of 3 s (2026-10-26).
             if (std::string_view(profile) == "spirv_1_6")
                 args.push_back("-g");
 #endif
