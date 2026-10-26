@@ -254,6 +254,11 @@ namespace pe
             return SelectionManager::Instance().GetSelectedNode() == node;
         }
 
+        bool EditorHasSceneSelection()
+        {
+            return SelectionManager::Instance().GetSelectedNode() != nullptr;
+        }
+
         bool EditorScriptPlayMode()
         {
             return GUIState::s_playMode;
@@ -423,6 +428,7 @@ namespace pe
         SceneRuntimeHooks sceneHooks = CreateDefaultSceneRuntimeHooks();
         sceneHooks.clearSelection = EditorClearSceneSelection;
         sceneHooks.isNodeSelected = EditorIsSceneNodeSelected;
+        sceneHooks.hasSelection = EditorHasSceneSelection;
         SetSceneRuntimeHooks(sceneHooks);
         CameraRuntimeCallbacks cameraHooks = CreateDefaultCameraRuntimeCallbacks();
         cameraHooks.getAspect = EditorCameraAspect;
