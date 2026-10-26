@@ -4,9 +4,6 @@
 #include "Utils.h"
 #include "API/QueryPool.h"
 
-extern "C" void wgpuDeviceAddRef(WGPUDevice);
-extern "C" void wgpuDeviceRelease(WGPUDevice);
-
 extern "C"
 {
 
@@ -30,7 +27,7 @@ extern "C"
                                          { pe::QueryPool::Destroy(pool); });
             }
             if (qs->device)
-                wgpuDeviceRelease(qs->device);
+                pwgpu::ReleaseDevice(qs->device);
             delete qs;
         }
     }

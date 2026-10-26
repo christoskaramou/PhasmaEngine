@@ -24,7 +24,7 @@ extern "C"
                                     { pe::Sampler::Destroy(native); });
             }
             if (sampler->device)
-                wgpuDeviceRelease(sampler->device);
+                pwgpu::ReleaseDevice(sampler->device);
             delete sampler;
         }
     }

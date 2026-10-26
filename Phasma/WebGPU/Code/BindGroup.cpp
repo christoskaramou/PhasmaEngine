@@ -131,7 +131,7 @@ extern "C"
             WGPUDeviceImpl *dev = bgl->device;
             delete bgl;
             if (dev)
-                wgpuDeviceRelease(dev);
+                pwgpu::ReleaseDevice(dev);
         }
     }
 
@@ -175,7 +175,7 @@ extern "C"
             WGPUDeviceImpl *dev = bg->device;
             delete bg;
             if (dev)
-                wgpuDeviceRelease(dev);
+                pwgpu::ReleaseDevice(dev);
         }
     }
 

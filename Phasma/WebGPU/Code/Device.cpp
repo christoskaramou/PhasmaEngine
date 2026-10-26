@@ -854,40 +854,56 @@ void WGPUDeviceImpl::DeferDestroy(std::function<void()> fn)
     pendingDeleters.push_back({serial, std::move(fn)});
 }
 
+void pwgpu::ReleaseDevice(WGPUDeviceImpl *device)
+{
+    if (!device)
+        return;
+    if (device->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+    {
+        if (device->queue)
+        {
+            if (device->queue->peQueue)
+            {
+                device->queue->peQueue->WaitIdle();
+                device->queue->RecyclePendingSubmits();
+            }
+            device->ReclaimCompletedDeferredResources();
+            device->queue->device = nullptr;
+            wgpuQueueRelease(device->queue);
+            device->queue = nullptr;
+        }
+        if (device->descriptorBuffer.buffer)
+            pe::Buffer::Destroy(device->descriptorBuffer.buffer);
+        WGPUInstance inst = device->instance;
+        delete device;
+        if (inst)
+            wgpuInstanceRelease(inst);
+    }
+}
+
 extern "C"
 {
 
     void wgpuDeviceAddRef(WGPUDevice device)
     {
-        if (device)
-            device->refCount.fetch_add(1, std::memory_order_relaxed);
+        if (!device)
+            return;
+
+        device->externalRefCount.fetch_add(1, std::memory_order_relaxed);
+        device->refCount.fetch_add(1, std::memory_order_relaxed);
     }
 
     void wgpuDeviceRelease(WGPUDevice device)
     {
         if (!device)
             return;
-        if (device->refCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
-        {
-            if (device->queue)
-            {
-                if (device->queue->peQueue)
-                {
-                    device->queue->peQueue->WaitIdle();
-                    device->queue->RecyclePendingSubmits();
-                }
-                device->ReclaimCompletedDeferredResources();
-                device->queue->device = nullptr;
-                wgpuQueueRelease(device->queue);
-                device->queue = nullptr;
-            }
-            if (device->descriptorBuffer.buffer)
-                pe::Buffer::Destroy(device->descriptorBuffer.buffer);
-            WGPUInstance inst = device->instance;
-            delete device;
-            if (inst)
-                wgpuInstanceRelease(inst);
-        }
+
+        // The application's last handle destroys the device even while child objects still reference it;
+        // destroy drains the queue and its deferred deletions, which drop those internal references.
+        if (device->externalRefCount.fetch_sub(1, std::memory_order_acq_rel) == 1)
+            wgpuDeviceDestroy(device);
+
+        pwgpu::ReleaseDevice(device);
     }
 
     void wgpuDeviceDestroy(WGPUDevice device)
@@ -941,8 +957,11 @@ extern "C"
 
         if (device->deviceLostCallbackInfo.callback)
         {
+            // Lost by releasing the last application handle: the callback gets a null device.
+            const bool released = device->externalRefCount.load(std::memory_order_acquire) == 0;
+            WGPUDevice reported = released ? nullptr : device;
             WGPUStringView msg = pwgpu::ToStringView("Device destroyed.");
-            device->deviceLostCallbackInfo.callback(&device,
+            device->deviceLostCallbackInfo.callback(&reported,
                                                     WGPUDeviceLostReason_Destroyed,
                                                     msg,
                                                     device->deviceLostCallbackInfo.userdata1,
@@ -1133,7 +1152,7 @@ extern "C"
             }
             auto *bad = new WGPUBufferImpl();
             bad->device = device;
-            wgpuDeviceAddRef(device);
+            pwgpu::RetainDevice(device);
             bad->usage = usage;
             bad->size = size;
             bad->invalid = true;
@@ -1183,7 +1202,7 @@ extern "C"
             device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(full));
             auto *bad = new WGPUBufferImpl();
             bad->device = device;
-            wgpuDeviceAddRef(device);
+            pwgpu::RetainDevice(device);
             bad->usage = usage;
             bad->size = size;
             bad->invalid = true;
@@ -1199,7 +1218,7 @@ extern "C"
             device->reportError(WGPUErrorType_OutOfMemory, pwgpu::ToStringView(full));
             auto *bad = new WGPUBufferImpl();
             bad->device = device;
-            wgpuDeviceAddRef(device);
+            pwgpu::RetainDevice(device);
             bad->usage = usage;
             bad->size = size;
             bad->invalid = true;
@@ -1258,7 +1277,7 @@ extern "C"
 
         auto *buf = new WGPUBufferImpl();
         buf->device = device;
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         buf->usage = usage;
         buf->size = size;
         buf->hostVisible = needsHostAccess;
@@ -1370,7 +1389,7 @@ extern "C"
             }
             auto *bad = new WGPUTextureImpl();
             bad->device = device;
-            wgpuDeviceAddRef(device);
+            pwgpu::RetainDevice(device);
             bad->format = fmt;
             bad->usage = usage;
             bad->dimension = dim;
@@ -1541,7 +1560,7 @@ extern "C"
 
         auto *tex = new WGPUTextureImpl();
         tex->device = device;
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         tex->format = fmt;
         tex->usage = usage;
         tex->dimension = dim;
@@ -1746,7 +1765,7 @@ extern "C"
             }
             auto *bad = new WGPUSamplerImpl();
             bad->invalid = true;
-            wgpuDeviceAddRef(device);
+            pwgpu::RetainDevice(device);
             bad->device = device;
             if (descriptor && descriptor->label.data)
                 bad->label = pwgpu::ToString(descriptor->label);
@@ -1822,7 +1841,7 @@ extern "C"
                             mipF == WGPUMipmapFilterMode_Linear);
 
         auto *smp = new WGPUSamplerImpl();
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         smp->device = device;
         smp->addressModeU = addrU;
         smp->addressModeV = addrV;
@@ -1964,7 +1983,7 @@ extern "C"
             return nullptr;
 
         auto *bgl = new WGPUBindGroupLayoutImpl();
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         bgl->device = device;
         if (descriptor->label.data)
             bgl->label = pwgpu::ToString(descriptor->label);
@@ -2374,7 +2393,7 @@ extern "C"
             return nullptr;
 
         auto *bg = new WGPUBindGroupImpl();
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         bg->device = device;
         if (descriptor->label.data)
             bg->label = pwgpu::ToString(descriptor->label);
@@ -2882,7 +2901,7 @@ extern "C"
             return nullptr;
 
         auto *pl = new WGPUPipelineLayoutImpl();
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         pl->device = device;
         if (descriptor->label.data)
             pl->label = pwgpu::ToString(descriptor->label);
@@ -3206,7 +3225,7 @@ extern "C"
         cp->invalid = true;
         if (label)
             cp->label = label;
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         return cp;
     }
 
@@ -3217,7 +3236,7 @@ extern "C"
         rp->invalid = true;
         if (label)
             rp->label = label;
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         return rp;
     }
 
@@ -3733,7 +3752,7 @@ extern "C"
         cp->layout = pipeLayout;
         cp->entryPoint = entryPointName;
         cp->workgroupInvocations = pipelineWorkgroupInvocations;
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         // Auto-built layout already has refCount=1 owned by cp; only AddRef for user-supplied layout.
         if (!autoLayout)
             wgpuPipelineLayoutAddRef(pipeLayout);
@@ -4717,7 +4736,7 @@ extern "C"
             }
         }
 
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         // Auto-built layout already has refCount=1 owned by rp; only AddRef for user-supplied layout.
         if (!autoLayout)
             wgpuPipelineLayoutAddRef(pipeLayout);
@@ -4883,7 +4902,7 @@ extern "C"
                 device->reportError(WGPUErrorType_Validation, pwgpu::ToStringView(msg));
             auto *qs = new WGPUQuerySetImpl();
             qs->device = device;
-            wgpuDeviceAddRef(device);
+            pwgpu::RetainDevice(device);
             qs->type = descriptor->type;
             // W3C §20.1.1: q.count is set from descriptor.count on the content
             // timeline before device-timeline validation may invalidate q.
@@ -4926,7 +4945,7 @@ extern "C"
 
         auto *qs = new WGPUQuerySetImpl();
         qs->device = device;
-        wgpuDeviceAddRef(device);
+        pwgpu::RetainDevice(device);
         qs->type = descriptor->type;
         qs->count = descriptor->count;
         qs->backendQueryPool = backendQueryPool;

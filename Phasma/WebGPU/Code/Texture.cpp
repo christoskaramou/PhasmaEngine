@@ -658,7 +658,7 @@ extern "C"
                                     { pe::Image::Destroy(image); });
             }
             if (texture->device)
-                wgpuDeviceRelease(texture->device);
+                pwgpu::ReleaseDevice(texture->device);
             delete texture;
         }
     }

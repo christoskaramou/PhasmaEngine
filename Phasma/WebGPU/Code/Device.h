@@ -94,7 +94,8 @@ struct WGPUDescriptorBufferState
 
 struct WGPUDeviceImpl
 {
-    std::atomic<uint32_t> refCount{1};
+    std::atomic<uint32_t> refCount{1};         // every holder: the application and child objects
+    std::atomic<uint32_t> externalRefCount{1}; // the application's handles only
     std::string label;
 
     WGPUInstanceImpl *instance = nullptr;
@@ -203,4 +204,14 @@ namespace pwgpu
         else if (fn)
             fn();
     }
+
+    // Child objects hold internal references: they keep the device's memory alive but never keep it from
+    // being destroyed when the application releases its last handle (webgpu.h Ownership, "Releasing a Device").
+    inline void RetainDevice(WGPUDeviceImpl *device)
+    {
+        if (device)
+            device->refCount.fetch_add(1, std::memory_order_relaxed);
+    }
+
+    void ReleaseDevice(WGPUDeviceImpl *device);
 } // namespace pwgpu

@@ -14,7 +14,6 @@
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
 
-extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuRenderPipelineAddRef(WGPURenderPipeline);
 extern "C" void wgpuRenderPipelineRelease(WGPURenderPipeline);
 extern "C" void wgpuBindGroupAddRef(WGPUBindGroup);
@@ -444,7 +443,7 @@ extern "C"
             for (auto *buf : rb->retainedBuffers)
                 wgpuBufferRelease(buf);
             if (rb->device)
-                wgpuDeviceRelease(rb->device);
+                pwgpu::ReleaseDevice(rb->device);
             delete rb;
         }
     }
@@ -474,7 +473,7 @@ extern "C"
             for (auto *buf : rbe->retainedBuffers)
                 wgpuBufferRelease(buf);
             if (rbe->device)
-                wgpuDeviceRelease(rbe->device);
+                pwgpu::ReleaseDevice(rbe->device);
             delete rbe;
         }
     }

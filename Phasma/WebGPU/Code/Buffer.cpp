@@ -115,7 +115,7 @@ extern "C"
             }
             delete buffer;
             if (dev)
-                wgpuDeviceRelease(dev);
+                pwgpu::ReleaseDevice(dev);
         }
     }
 

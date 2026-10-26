@@ -71,7 +71,7 @@ extern "C"
             WGPUDevice dev = sm->device;
             delete sm;
             if (dev)
-                wgpuDeviceRelease(dev);
+                pwgpu::ReleaseDevice(dev);
         }
     }
 

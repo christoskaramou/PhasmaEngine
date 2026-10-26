@@ -10,8 +10,6 @@
 #include "API/Swapchain.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 
-extern "C" void wgpuDeviceAddRef(WGPUDevice);
-extern "C" void wgpuDeviceRelease(WGPUDevice);
 extern "C" void wgpuTextureRelease(WGPUTexture);
 
 namespace
@@ -98,7 +96,7 @@ extern "C"
                 wgpuTextureRelease(surface->currentTexture);
             delete surface->acquireSemaphore;
             if (surface->device)
-                wgpuDeviceRelease(surface->device);
+                pwgpu::ReleaseDevice(surface->device);
             delete surface;
         }
     }
@@ -161,9 +159,9 @@ extern "C"
         if (surface->device != config->device)
         {
             if (surface->device)
-                wgpuDeviceRelease(surface->device);
+                pwgpu::ReleaseDevice(surface->device);
             surface->device = config->device;
-            wgpuDeviceAddRef(config->device);
+            pwgpu::RetainDevice(config->device);
         }
 
         if (surface->swapchain && !surface->acquireSemaphore)
@@ -187,7 +185,7 @@ extern "C"
 
         if (surface->device)
         {
-            wgpuDeviceRelease(surface->device);
+            pwgpu::ReleaseDevice(surface->device);
             surface->device = nullptr;
         }
 
@@ -357,7 +355,7 @@ extern "C"
         tex->image = swapImage;
         tex->device = surface->device;
         if (tex->device)
-            wgpuDeviceAddRef(tex->device);
+            pwgpu::RetainDevice(tex->device);
         tex->format = surface->configuration.format;
         tex->usage = static_cast<WGPUTextureUsage>(surface->configuration.usage);
         tex->dimension = WGPUTextureDimension_2D;

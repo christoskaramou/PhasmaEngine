@@ -32,7 +32,7 @@ extern "C"
             WGPUDeviceImpl *dev = cp->device;
             delete cp;
             if (dev)
-                wgpuDeviceRelease(dev);
+                pwgpu::ReleaseDevice(dev);
         }
     }
 
