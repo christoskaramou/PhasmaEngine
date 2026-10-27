@@ -94,6 +94,8 @@ if(PE_BUILD_MCP AND TARGET PhasmaMCP)
 endif()
 
 if(MSVC)
+    # Optimized Debug builds cannot combine /O1 with MSVC runtime checks.
+    set_property(TARGET PhasmaRuntime PROPERTY MSVC_RUNTIME_CHECKS "")
     target_compile_options(PhasmaRuntime PRIVATE $<$<CONFIG:Debug>:/O1>)
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
     target_compile_options(PhasmaRuntime PRIVATE $<$<CONFIG:Debug>:-O1>)

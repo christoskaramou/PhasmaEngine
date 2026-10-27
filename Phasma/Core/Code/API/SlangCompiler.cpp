@@ -479,11 +479,12 @@ namespace pe
             args.push_back("-fvk-use-entrypoint-name");
             args.push_back("-fvk-use-dx-layout");
 #if defined(PE_DEBUG)
-            // DXC's -Zi keeps source lines in SPIR-V (its DXIL debug part goes to a PDB the engine drops). Slang's -g
-            // emits NonSemantic.Shader.DebugInfo.100, which needs VK_KHR_shader_non_semantic_info: core from 1.3.
-            // Debug builds only: with -O3 it made a MaterialX forward shader take 40 s instead of 3 s (2026-10-26).
-            if (std::string_view(profile) == "spirv_1_6")
-                args.push_back("-g");
+            // DXC's -Zi keeps source lines in SPIR-V (its DXIL debug part goes to a PDB the engine drops). -g1 emits core
+            // OpLine only, so it needs no VK_KHR_shader_non_semantic_info; -g (NonSemantic debug info plus the source)
+            // took a MaterialX forward shader 22.8 s against 4.3 s (2026-10-27). Debug builds only.
+            // ponytail: no source text, and the lines point at the deleted _slang copy; -debug-info-include-source
+            // (slangc after 2026.8) is the upgrade if a debugger must show the source.
+            args.push_back("-g1");
 #endif
             args.push_back("-reflection-json");
             args.push_back(PathUtf8(files.json));
