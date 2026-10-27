@@ -41,7 +41,7 @@ namespace pe
             uint32_t cascadeCount = 1;
             float intensity = 1.f;
             float hysteresis = 0.999f;
-            uint32_t padding = 0;
+            uint32_t tracedVisibility = 1; // ProbeVolume.hlsl GI_TRACED_VISIBILITY: 0 keeps the distance moments alone
         };
         static_assert(sizeof(ProbeUniforms) == kUniformBytes);
         ProbeUniforms m_probeData{};

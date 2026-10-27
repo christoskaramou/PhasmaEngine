@@ -18,7 +18,7 @@
     uint gi_cascadeCount;
     float gi_intensity;
     float gi_hysteresis;
-    uint gi_padding;
+    uint gi_tracedVisibility; // gi_traced_visibility: GI_TRACED_VISIBILITY hits trace each probe
 };
 [[vk::binding(1, 3)]] Texture2D<float4> gi_lightingIrradiance;
 [[vk::binding(2, 3)]] Texture2D<float4> gi_lightingDistance;
@@ -41,7 +41,7 @@
     uint gi_cascadeCount;
     float gi_intensity;
     float gi_hysteresis;
-    uint gi_padding;
+    uint gi_tracedVisibility; // gi_traced_visibility: GI_TRACED_VISIBILITY hits trace each probe
 };
 [[vk::binding(1, 2)]] Texture2D<float4> gi_traceIrradiance;
 [[vk::binding(2, 2)]] Texture2D<float4> gi_traceDistance;
@@ -68,7 +68,7 @@
     uint gi_cascadeCount;
     float gi_intensity;
     float gi_hysteresis;
-    uint gi_padding;
+    uint gi_tracedVisibility; // gi_traced_visibility: GI_TRACED_VISIBILITY hits trace each probe
 };
 [[vk::binding(1, 0)]] Texture2D<float4> gi_irradiance;
 [[vk::binding(2, 0)]] Texture2D<float4> gi_distance;
@@ -249,7 +249,9 @@ float4 ProbeSample(Texture2D<float4> atlas, uint probe, float3 direction)
 }
 
 // Irradiance from one cascade's 8 probes around the normal-biased point (trilinear x facing x visibility); a = 1 when
-// any probe counted.
+// any probe counted. With GI_TRACED_VISIBILITY and gi_tracedVisibility set, a ray from the biased point to each probe
+// decides its visibility, since the distance moments leak through thin floors near a probe's horizon; a blocked probe
+// keeps 0.001 of its moments' visibility, so a point whose probes are all blocked (contact gaps) falls back to them.
 float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool history)
 {
     float3 origin = ProbeOrigin(cascade, history);
@@ -260,7 +262,15 @@ float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool
     float3 fraction = saturate(grid - float3(base));
     float3 irradiance = 0.0.xxx;
     float totalWeight = 0.0;
-    [unroll] for (uint corner = 0; corner < 8; ++corner)
+#ifdef GI_TRACED_VISIBILITY
+    const bool traceProbes = gi_tracedVisibility != 0;
+    // ponytail: [loop] even when gi_tracedVisibility is 0 (Full RT +0.03 ms mean, within noise); split off an unrolled
+    // loop without the trace if that ever measures above noise.
+    [loop] // unrolled, the traces of 8 corners x 2 cascades x call sites took minutes to compile (2026-10-20)
+#else
+    [unroll]
+#endif
+    for (uint corner = 0; corner < 8; ++corner)
     {
         uint3 offset = uint3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
         uint3 cell = base + offset;
@@ -276,8 +286,15 @@ float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool
         float3 trilinear = lerp(1.0 - fraction, fraction, float3(offset));
         float weight = trilinear.x * trilinear.y * trilinear.z;
         float facing = saturate(dot(normal, -direction) * 0.5 + 0.5);
-        weight *= max(0.05, facing * facing) * visibility;
         float4 sample = ProbeSample(gi_irradiance, probe, normal);
+#ifdef GI_TRACED_VISIBILITY
+        // From the biased point, as the moments measure: from the hit itself, each facet of a tessellated surface
+        // flipped probes near its tangent plane, a stair-stepped seam (2026-10-27).
+        if (traceProbes && weight * sample.a > 0.0 && distance > 0.0001)
+            visibility = max(TraceVisibility(biased, -direction, distance), 0.001 * visibility);
+#endif
+
+        weight *= max(0.05, facing * facing) * visibility;
         weight *= sample.a;
         irradiance += sample.rgb * weight;
         totalWeight += weight;

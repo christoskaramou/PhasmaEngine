@@ -292,6 +292,7 @@ namespace pe
             settings.AddMember("gi_probe_spacing", s.gi_probe_spacing, allocator);
             settings.AddMember("gi_intensity", s.gi_intensity, allocator);
             settings.AddMember("gi_hysteresis", s.gi_hysteresis, allocator);
+            settings.AddMember("gi_traced_visibility", s.gi_traced_visibility, allocator);
             settings.AddMember("shadows", s.shadows, allocator);
             settings.AddMember("shadow_map_size", s.shadow_map_size, allocator);
             settings.AddMember("num_cascades", s.num_cascades, allocator);
@@ -301,6 +302,7 @@ namespace pe
             settings.AddMember("shadow_normal_bias", s.shadow_normal_bias, allocator);
             settings.AddMember("shadow_fade_fraction", s.shadow_fade_fraction, allocator);
             settings.AddMember("shadow_filter_radius", s.shadow_filter_radius, allocator);
+            settings.AddMember("sun_angular_diameter", s.sun_angular_diameter, allocator);
             settings.AddMember("shadow_debug_mode", s.shadow_debug_mode, allocator);
             {
                 rapidjson::Value depthBias(rapidjson::kArrayType);
@@ -540,6 +542,11 @@ namespace pe
             gSettings.gi_probe_spacing = readFiniteFloat("gi_probe_spacing", 2.f, 0.25f, 64.f);
             gSettings.gi_intensity = readFiniteFloat("gi_intensity", 1.f, 0.f, 16.f);
             gSettings.gi_hysteresis = readFiniteFloat("gi_hysteresis", 0.999f, 0.f, 0.999f);
+
+            const auto tracedVisibility = settings.FindMember("gi_traced_visibility");
+            gSettings.gi_traced_visibility = tracedVisibility == settings.MemberEnd() || !tracedVisibility->value.IsBool() ||
+                                             tracedVisibility->value.GetBool();
+
             gSettings.cluster_geometry = settings.HasMember("cluster_geometry") && settings["cluster_geometry"].IsBool() &&
                                          settings["cluster_geometry"].GetBool();
             gSettings.cluster_error_pixels = readFiniteFloat("cluster_error_pixels", 1.f, 0.1f, 64.f);
@@ -573,6 +580,7 @@ namespace pe
                 gSettings.shadow_fade_fraction = settings["shadow_fade_fraction"].GetFloat();
             if (settings.HasMember("shadow_filter_radius"))
                 gSettings.shadow_filter_radius = settings["shadow_filter_radius"].GetFloat();
+            gSettings.sun_angular_diameter = readFiniteFloat("sun_angular_diameter", 0.53f, 0.f, 30.f);
             if (settings.HasMember("shadow_debug_mode"))
                 gSettings.shadow_debug_mode = settings["shadow_debug_mode"].GetInt();
             if (settings.HasMember("forward_plus"))

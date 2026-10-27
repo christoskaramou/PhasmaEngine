@@ -20,6 +20,7 @@ static float3 pe_P;              // world position of the hit
 static float3 pe_N;              // interpolated geometric normal
 static float pe_occlusion;       // material AO, outside the graph (the legacy hit's occlusion texture)
 static float pe_hit_curvature;   // the hit triangle's curvature: subsurface's fwidth ratio has no derivatives here
+static float3 pe_shadow_offset;  // world offset of shadow ray origins onto the smooth surface (ShadowTerminatorOffset)
 
 // The viewer of a hit is the ray's origin, so the generated V is the reversed ray direction.
 float3 pe_view_position()
@@ -46,7 +47,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         L = normalize(-RotateVectorByQuat(float3(0, 0, -1), light.rotation));
         radiance = light.color.rgb * light.color.w;
         if (i == 0)
-            occlusion = TraceShadowRay(P, L, 10000.0);
+            occlusion = TraceSunShadow(P + pe_shadow_offset, L);
 
         return;
     }
@@ -66,7 +67,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
 
         L = normalize(-toSurface);
         radiance = light.color.rgb * light.color.w * attenuation;
-        occlusion = TraceShadowRay(P, L, dist);
+        occlusion = TraceShadowRay(P + pe_shadow_offset, L, dist);
         return;
     }
 
@@ -92,7 +93,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         attenuation = max(0.0, attenuation * attenuation);
 
         radiance = light.color.rgb * light.color.w * attenuation * smoothstep(outerCutoffCos, cutoffCos, theta);
-        occlusion = TraceShadowRay(P, L, dist);
+        occlusion = TraceShadowRay(P + pe_shadow_offset, L, dist);
         return;
     }
 
@@ -146,7 +147,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         return;
 
     radiance = light.color.xyz * light.color.w * attenuation * outputCos;
-    occlusion = TraceShadowRay(P, L, distToTarget);
+    occlusion = TraceShadowRay(P + pe_shadow_offset, L, distToTarget);
 }
 
 #include "PeEnvironment.slang"

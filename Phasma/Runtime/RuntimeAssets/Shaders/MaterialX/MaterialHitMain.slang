@@ -81,7 +81,18 @@ float3 PeSurfaceCacheHit(PeSurfacePoint sp)
     float2 envBRDF;
     const float3 energyCompensation = RT_EnergyCompensation(NdV, roughness, F0, envBRDF);
 
-    return RT_LightOpaque(pe_P, N, V, albedo, metallic, roughness, F0, pe_occlusion, envBRDF, energyCompensation) + emission;
+    return RT_LightOpaque(pe_P,
+                          pe_P + pe_shadow_offset,
+                          N,
+                          V,
+                          albedo,
+                          metallic,
+                          roughness,
+                          F0,
+                          pe_occlusion,
+                          envBRDF,
+                          energyCompensation) +
+           emission;
 }
 
 [shader("closesthit")]
@@ -99,6 +110,15 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     pe_N = sp.N;
     pe_occlusion = PeHitOcclusion(constantsId, sp.uv0);
     pe_hit_curvature = PeHitCurvature(tri);
+
+    const float3 terminatorOffset = ShadowTerminatorOffset(tri.v0.position,
+                                                           tri.v1.position,
+                                                           tri.v2.position,
+                                                           tri.v0.normal,
+                                                           tri.v1.normal,
+                                                           tri.v2.normal,
+                                                           b);
+    pe_shadow_offset = mul(float4(terminatorOffset, 0.0), tri.world).xyz;
 
     pe_load_material(pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
     pe_fill_vertex_data(sp);

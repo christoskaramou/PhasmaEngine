@@ -522,6 +522,11 @@ namespace pe
         // Before adopting: a build still in flight is stale once its passes drop their groups.
         if (modules.empty())
         {
+            // ponytail: the worker checks between passes, so the pass it is building still finishes (minutes cold);
+            // pass the flag into BuildTracePassInfo's module loop if that wait ever matters.
+            if (m_rtHitBuild.done.valid())
+                m_rtHitBuild.cancel->store(true);
+
             for (RayTracingPass *pass : passes)
                 pass->SyncHitModules(noModules);
         }

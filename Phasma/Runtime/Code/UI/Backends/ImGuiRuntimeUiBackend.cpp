@@ -51,22 +51,27 @@ namespace pe
             else
                 snprintf(text, sizeof(text), "Building ray-traced materials");
 
-            const float margin = 12.0f * scale;
-            const float pad = 8.0f * scale;
-            const float barHeight = 4.0f * scale;
-            const ImVec2 textSize = ImGui::CalcTextSize(text);
-            const float width = std::max(textSize.x, 180.0f * scale) + 2.0f * pad;
+            const float margin = 16.0f * scale;
+            const float pad = 14.0f * scale;
+            const float barHeight = 6.0f * scale;
+            const float rounding = 8.0f * scale;
+            // 1.4x the runtime UI font (baked at 4x density, so it stays sharp): the 16 px label was hard to read.
+            ImFont *font = ImGui::GetFont();
+            const float fontSize = ImGui::GetFontSize() * 1.4f;
+            const ImVec2 textSize = font->CalcTextSizeA(fontSize, FLT_MAX, 0.0f, text);
+            const float width = std::max(textSize.x, 280.0f * scale) + 2.0f * pad;
             const float height = textSize.y + barHeight + 3.0f * pad;
             const ImVec2 min(corner.x + margin, corner.y - margin - height);
             const ImVec2 max(min.x + width, min.y + height);
-            drawList->AddRectFilled(min, max, IM_COL32(0, 0, 0, 170), 6.0f * scale);
-            drawList->AddText(ImVec2(min.x + pad, min.y + pad), IM_COL32(235, 235, 235, 255), text);
+            drawList->AddRectFilled(min, max, IM_COL32(18, 22, 30, 225), rounding);
+            drawList->AddRect(min, max, IM_COL32(110, 180, 255, 70), rounding, 0, 1.5f * scale);
+            drawList->AddText(font, fontSize, ImVec2(min.x + pad, min.y + pad), IM_COL32(240, 242, 245, 255), text);
 
             const ImVec2 barMin(min.x + pad, max.y - pad - barHeight);
             const ImVec2 barMax(max.x - pad, max.y - pad);
             const float barWidth = barMax.x - barMin.x;
             const ImU32 fillColor = IM_COL32(110, 180, 255, 255);
-            drawList->AddRectFilled(barMin, barMax, IM_COL32(255, 255, 255, 40), barHeight * 0.5f);
+            drawList->AddRectFilled(barMin, barMax, IM_COL32(255, 255, 255, 45), barHeight * 0.5f);
             if (modulesLeft)
             {
                 const float fill = static_cast<float>(progress.ready) / static_cast<float>(progress.total);

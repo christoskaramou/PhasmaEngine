@@ -342,6 +342,12 @@ namespace pe
         ubo.orthographicCamera = camera->IsOrthographic() ? 1u : 0u;
         ubo.linear_color = SceneUsesLinearColor() ? 1u : 0u;
         ubo.env_samples = static_cast<uint32_t>(std::clamp(gSettings.openpbr_env_samples, 1, 512));
+        ubo.frame = static_cast<uint32_t>(RHII.GetFrameCounter());
+
+        const float sunDiameter = std::isfinite(gSettings.sun_angular_diameter)
+                                      ? std::clamp(gSettings.sun_angular_diameter, 0.f, 30.f)
+                                      : 0.53f;
+        ubo.sunTanHalfAngle = std::tan(glm::radians(sunDiameter) * 0.5f);
 
         BufferRange range{};
         range.data = &ubo;

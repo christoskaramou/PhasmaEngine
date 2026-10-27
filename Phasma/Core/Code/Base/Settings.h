@@ -162,7 +162,8 @@ namespace pe
         int openpbr_env_samples = 32; // openpbr: filtered importance samples per specular lobe, clamped 1-512
         float gi_probe_spacing = 2.f;
         float gi_intensity = 1.f;
-        float gi_hysteresis = 0.999f; // ceiling of the per-probe average; restarts on lighting changes
+        float gi_hysteresis = 0.999f;     // ceiling of the per-probe average; restarts on lighting changes
+        bool gi_traced_visibility = true; // RT hits test each world probe with a ray: no thin-floor leaks, 8 rays per hit
         bool cluster_geometry = false;
         float cluster_error_pixels = 1.f;
         uint32_t lod_count = 4;
@@ -176,6 +177,7 @@ namespace pe
         float shadow_normal_bias = 1.5f;
         float shadow_fade_fraction = 0.15f;
         float shadow_filter_radius = 0.75f;
+        float sun_angular_diameter = 0.53f; // degrees: ray-traced sun shadows sample the sun's disk (0 = hard)
         // Multiplies the camera-distance LOD selection for shadow casters (ShadowCullCS). 1.0 = shadows
         // match the visible geometry's LOD; >1 drops shadow detail sooner (cheaper, still PCF-blurred);
         // <=0 forces full-res casters. ponytail: live via Lua/A-B; GUI + scene serialize deferred.

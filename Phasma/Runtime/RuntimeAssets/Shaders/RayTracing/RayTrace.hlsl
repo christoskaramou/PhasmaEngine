@@ -286,6 +286,15 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 normalWorld = normalize(mul(normalObj, worldRotation3x3));
     float3 positionWorld = WorldRayOrigin() + WorldRayDirection() * RayTCurrent();
 
+    float3 terminatorOffset = ShadowTerminatorOffset(v0.position,
+                                                     v1.position,
+                                                     v2.position,
+                                                     v0.normal,
+                                                     v1.normal,
+                                                     v2.normal,
+                                                     barycentricCoords);
+    float3 shadowOrigin = positionWorld + mul(objToWorld, float4(terminatorOffset, 0.0));
+
     // Tangent Space
     float3 tangentWorld = normalize(mul(tangentObj.xyz, worldRotation3x3));
 
@@ -409,7 +418,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         DirectionalLight sun = LoadDirectionalLight(0);
         float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
         float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
-        float sunShadow = TraceShadowRay(positionWorld, L, 10000.0);
+        float sunShadow = TraceSunShadow(shadowOrigin, L);
         for (uint i = 0; i < cb_numDirectionalLights; i++)
         {
             // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
@@ -424,7 +433,8 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
             {
                 float dist = distance(positionWorld, LoadPointLight(p).position.xyz); // position is .xyz
                 if (dist < LoadPointLight(p).position.w) // radius is .w
-                    lighting += RT_ComputePointLight(p, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+                    lighting += RT_ComputePointLight(p, positionWorld, shadowOrigin, N, V, combinedColor.rgb, metallic,
+                                                     roughness, F0, occlusion, energyCompensation);
             }
         }
 
@@ -432,14 +442,16 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         for (uint j = 0; j < cb_numSpotLights; j++)
         {
             if (LoadSpotLight(j).color.w > 0.0) // intensity is .w
-                lighting += RT_ComputeSpotLight(j, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+                lighting += RT_ComputeSpotLight(j, positionWorld, shadowOrigin, N, V, combinedColor.rgb, metallic,
+                                                roughness, F0, occlusion, energyCompensation);
         }
 
         // Area Lights
         for (uint k = 0; k < cb_numAreaLights; k++)
         {
             if (LoadAreaLight(k).color.w > 0.0)
-                lighting += RT_ComputeAreaLight(k, positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, energyCompensation);
+                lighting += RT_ComputeAreaLight(k, positionWorld, shadowOrigin, N, V, combinedColor.rgb, metallic,
+                                                roughness, F0, occlusion, energyCompensation);
         }
 
         if (!isTransmissive)

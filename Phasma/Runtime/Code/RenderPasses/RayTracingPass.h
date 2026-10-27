@@ -21,6 +21,8 @@ namespace pe
         uint32_t orthographicCamera;
         uint32_t linear_color; // decode authored colours at hits
         uint32_t env_samples;  // MaterialX hits: openpbr_env_samples (RTCommon cb_envSamples)
+        uint32_t frame;        // RTCommon cb_frame: the frame counter sun-disk samples step with
+        float sunTanHalfAngle; // tan of half sun_angular_diameter (RTCommon TraceSunShadow; 0 = hard)
     };
 
     class RayTracingPass : public IRenderPassComponent

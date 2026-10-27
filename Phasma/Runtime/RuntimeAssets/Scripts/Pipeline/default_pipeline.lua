@@ -28,6 +28,7 @@ exposed {
     shadow_normal_bias = 1.5,
     shadow_fade_fraction = 0.15,
     shadow_filter_radius = 0.75,
+    sun_angular_diameter = 0.53,
     shadow_lod_bias = 1.0,
     shadow_debug_mode = 0,
     depth_bias_constant = 0.0,
@@ -44,6 +45,7 @@ exposed {
     gi_probe_spacing = 2.0,
     gi_intensity = 1.0,
     gi_hysteresis = 0.999,
+    gi_traced_visibility = true,
     ssao = true,
     ssao_radius = 0.5,
     ssao_bias = 0.025,
@@ -97,10 +99,10 @@ under("occlusion_culling", {"occlusion_culling_bias"})
 under("cluster_geometry", {"cluster_error_pixels"})
 under("lod_enabled", {"lod_count", "lod_bias", "lod_distance_1", "lod_distance_2", "lod_distance_3"})
 under("shadows", {"shadow_map_size", "num_cascades", "shadow_distance", "shadow_cascade_lambda", "shadow_normal_bias",
-                  "shadow_fade_fraction", "shadow_filter_radius", "shadow_lod_bias", "shadow_debug_mode",
-                  "depth_bias_constant", "depth_bias_clamp", "depth_bias_slope"})
+                  "shadow_fade_fraction", "shadow_filter_radius", "sun_angular_diameter", "shadow_lod_bias",
+                  "shadow_debug_mode", "depth_bias_constant", "depth_bias_clamp", "depth_bias_slope"})
 under("IBL", {"IBL_intensity"})
-under("global_illumination", {"gi_probe_spacing", "gi_intensity", "gi_hysteresis"})
+under("global_illumination", {"gi_probe_spacing", "gi_intensity", "gi_hysteresis", "gi_traced_visibility"})
 under("ssao", {"ssao_radius", "ssao_bias", "ssao_intensity", "ssao_power", "ssao_samples"})
 under("taa", {"cas_sharpening"}) -- sharpening runs only after TAA
 under("cas_sharpening", {"cas_sharpness"})

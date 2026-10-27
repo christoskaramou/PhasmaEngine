@@ -92,6 +92,8 @@ struct Vertex
     uint cb_orthographicCamera;
     uint cb_linearColor; // decode authored colours at hits
     uint cb_envSamples;  // MaterialX hits: openpbr_env_samples
+    uint cb_frame;       // frame counter: TraceSunShadow's sample sequence
+    float cb_sunTanHalfAngle; // tan(sun_angular_diameter / 2); 0 = hard sun shadows
 };
 
 // Set 2
@@ -101,6 +103,42 @@ struct Vertex
 // unbounded texture array (binding 12), which must stay the last binding of its set.
 [[vk::image_format("r32f")]][[vk::binding(3, 1)]] RWTexture2D<float> rtDepth;
 
+// 1 when nothing blocks the ray up to dist, the any-hit's transmittance through alpha-blended surfaces, 0 when opaque
+// geometry does.
+float TraceVisibility(float3 origin, float3 dir, float dist)
+{
+    RayDesc ray;
+    ray.Origin    = origin;
+    ray.Direction = dir;
+    ray.TMin      = 0.001; // Reduced bias to avoid leaks
+    ray.TMax      = dist;
+
+    HitPayload shadowPayload;
+    shadowPayload.radiance = 1.0.xxx; // Init as visible
+    shadowPayload.t        = 0.0; // Init as Hit -> Miss will set to -1.0
+    shadowPayload.hitKind  = 0;
+    shadowPayload.rayType  = 1; // Mark as Shadow Ray
+
+    TraceRay(
+        tlas,
+        RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
+        0xFF,
+        0, 0, 0,
+        ray,
+        shadowPayload
+    );
+
+    if (shadowPayload.t != -1.0)
+        return 0.0;
+
+    return shadowPayload.radiance.x; // Assumes monochromatic for now or use .rgb in DirectLight
+}
+
+#if defined(GI_SHADING) || defined(REFLECTIONS)
+// Ray-traced shading and reflection hits trace each world probe's visibility (ProbeVolume.hlsl); probe and screen-probe
+// rays keep the distance moments alone, as up to 8 more rays per hit would multiply their cost.
+#define GI_TRACED_VISIBILITY 1
+#endif
 #if defined(GI_PROBES) || defined(GI_SHADING)
 #include "../GlobalIllumination/ProbeVolume.hlsl"
 #endif
@@ -289,36 +327,49 @@ float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float rough
     );
 }
 
+// Shadow rays leave from the smooth surface the vertex normals describe (Hanika, "Hacking the Shadow Terminator", Ray
+// Tracing Gems II, ch. 4): from the flat triangle, a point the interpolated normal still lights near the terminator
+// shadows itself on the neighbouring facets, a hard faceted arc. The offset from the triangle to that surface, in the
+// vertices' space; zero on flat and concave parts.
+float3 ShadowTerminatorOffset(float3 p0, float3 p1, float3 p2, float3 n0, float3 n1, float3 n2, float3 barycentrics)
+{
+    float3 p = p0 * barycentrics.x + p1 * barycentrics.y + p2 * barycentrics.z;
+    float3 below = min(0.0, dot(p - p0, n0)) * n0 * barycentrics.x;
+    below += min(0.0, dot(p - p1, n1)) * n1 * barycentrics.y;
+    below += min(0.0, dot(p - p2, n2)) * n2 * barycentrics.z;
+    return -below;
+}
+
 float TraceShadowRay(float3 origin, float3 dir, float dist)
 {
     if (cb_shadows == 0)
         return 1.0;
 
-    RayDesc ray;
-    ray.Origin    = origin;
-    ray.Direction = dir;
-    ray.TMin      = 0.001; // Reduced bias to avoid leaks
-    ray.TMax      = dist;
+    return TraceVisibility(origin, dir, dist);
+}
 
-    HitPayload shadowPayload;
-    shadowPayload.radiance = 1.0.xxx; // Init as visible
-    shadowPayload.t        = 0.0; // Init as Hit -> Miss will set to -1.0
-    shadowPayload.hitKind  = 0;
-    shadowPayload.rayType  = 1; // Mark as Shadow Ray
+// The sun is a disk sun_angular_diameter wide: each frame the shadow ray aims at another point of it (a per-pixel offset
+// into the R2 sequence), and the passes' temporal filters (reflection history, TAA, probe averages) turn the hits into a
+// penumbra. L points to the sun's centre.
+float TraceSunShadow(float3 origin, float3 L)
+{
+    float3 dir = L;
+    if (cb_sunTanHalfAngle > 0.0)
+    {
+        uint2 pixel = DispatchRaysIndex().xy;
+        uint seed = pixel.x + 65536u * pixel.y;
+        float2 offset = float2(ProbeRandom(seed), ProbeRandom(seed ^ 0x9E3779B9u));
+        float2 u = frac(offset + float(cb_frame % 4096u) * float2(0.7548776662, 0.5698402910));
 
-    TraceRay(
-        tlas,
-        RAY_FLAG_SKIP_CLOSEST_HIT_SHADER | RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH,
-        0xFF,
-        0, 0, 0,
-        ray,
-        shadowPayload
-    );
+        float3 helper = abs(L.y) < 0.99 ? float3(0.0, 1.0, 0.0) : float3(1.0, 0.0, 0.0);
+        float3 tangent = normalize(cross(helper, L));
+        float3 bitangent = cross(L, tangent);
+        float radius = sqrt(u.x) * cb_sunTanHalfAngle;
+        float angle = 6.28318530718 * u.y;
+        dir = normalize(L + (tangent * cos(angle) + bitangent * sin(angle)) * radius);
+    }
 
-    if (shadowPayload.t != -1.0)
-        return 0.0;
-
-    return shadowPayload.radiance.x; // Assumes monochromatic for now or use .rgb in DirectLight
+    return TraceShadowRay(origin, dir, 10000.0);
 }
 
 float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow, float3 energyCompensation)
@@ -365,7 +416,7 @@ float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNo
     return diffuseLight + specRef;
 }
 
-float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
+float3 RT_ComputePointLight(int index, float3 worldPos, float3 shadowOrigin, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
     roughness = max(roughness, 0.04);
 
@@ -384,7 +435,7 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     attenuation *= attenuation; // Quadratic
 
     // Shadow
-    float shadow = TraceShadowRay(worldPos, L, dist);
+    float shadow = TraceShadowRay(shadowOrigin, L, dist);
 
     float NoV_clamped = clamp(dot(materialNormal, V), 0.001, 1.0);
     float NoL_raw = dot(materialNormal, L);
@@ -422,7 +473,7 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 materialNormal, f
     return diffuseLight + specRef;
 }
 
-float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
+float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 shadowOrigin, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
     roughness = max(roughness, 0.04);
 
@@ -451,7 +502,7 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     attenuation = max(0.0, attenuation);
 
     // Shadow
-    float shadow = TraceShadowRay(worldPos, L, dist);
+    float shadow = TraceShadowRay(shadowOrigin, L, dist);
 
     float intensity = light.color.w; // intensity is .w
 
@@ -490,7 +541,7 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 materialNormal, fl
     return diffuseLight + specRef;
 }
 
-float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
+float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 shadowOrigin, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 energyCompensation)
 {
     roughness = max(roughness, 0.04);
 
@@ -568,7 +619,7 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 materialNormal, fl
     if (lightOutputCos <= 0.0) return 0.0;
 
     // Shadow (using L to target point)
-    float shadow = TraceShadowRay(worldPos, L, distToTarget);
+    float shadow = TraceShadowRay(shadowOrigin, L, distToTarget);
 
     float3 areaColor = light.color.xyz * light.color.w * attenuation * lightOutputCos;
 
@@ -631,6 +682,7 @@ float3 RT_EnergyCompensation(float NdV, float roughness, float3 F0, out float2 e
 // The hit lighting of an opaque, non-self-lit surface: probe and sky ambient, then every light with its shadow ray.
 // Emission is the caller's.
 float3 RT_LightOpaque(float3 P,
+                      float3 shadowOrigin,
                       float3 N,
                       float3 V,
                       float3 albedo,
@@ -665,7 +717,7 @@ float3 RT_LightOpaque(float3 P,
     DirectionalLight sun = LoadDirectionalLight(0);
     float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
     float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
-    float sunShadow = TraceShadowRay(P, L, 10000.0);
+    float sunShadow = TraceSunShadow(shadowOrigin, L);
     for (uint i = 0; i < cb_numDirectionalLights; i++)
     {
         // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
@@ -682,7 +734,7 @@ float3 RT_LightOpaque(float3 P,
             float dist = distance(P, LoadPointLight(p).position.xyz); // position is .xyz
             if (dist < LoadPointLight(p).position.w) // radius is .w
             {
-                lighting += RT_ComputePointLight(p, P, N, V, albedo, metallic, roughness, F0, occlusion,
+                lighting += RT_ComputePointLight(p, P, shadowOrigin, N, V, albedo, metallic, roughness, F0, occlusion,
                                                  energyCompensation);
             }
         }
@@ -692,14 +744,16 @@ float3 RT_LightOpaque(float3 P,
     for (uint j = 0; j < cb_numSpotLights; j++)
     {
         if (LoadSpotLight(j).color.w > 0.0) // intensity is .w
-            lighting += RT_ComputeSpotLight(j, P, N, V, albedo, metallic, roughness, F0, occlusion, energyCompensation);
+            lighting += RT_ComputeSpotLight(j, P, shadowOrigin, N, V, albedo, metallic, roughness, F0, occlusion,
+                                            energyCompensation);
     }
 
     // Area Lights
     for (uint k = 0; k < cb_numAreaLights; k++)
     {
         if (LoadAreaLight(k).color.w > 0.0)
-            lighting += RT_ComputeAreaLight(k, P, N, V, albedo, metallic, roughness, F0, occlusion, energyCompensation);
+            lighting += RT_ComputeAreaLight(k, P, shadowOrigin, N, V, albedo, metallic, roughness, F0, occlusion,
+                                            energyCompensation);
     }
 
     return lighting;

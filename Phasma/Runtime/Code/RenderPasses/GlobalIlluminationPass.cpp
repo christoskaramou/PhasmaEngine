@@ -183,6 +183,7 @@ namespace pe
                      RequireActiveSceneRendererHost().GetRenderedFrames() > m_lastUpdate;
         m_probeData.intensity = std::isfinite(settings.gi_intensity) ? std::clamp(settings.gi_intensity, 0.f, 16.f) : 1.f;
         m_probeData.hysteresis = std::isfinite(settings.gi_hysteresis) ? std::clamp(settings.gi_hysteresis, 0.f, 0.999f) : 0.999f;
+        m_probeData.tracedVisibility = settings.gi_traced_visibility ? 1u : 0u;
         // Probe texels detect lighting changes on their own (ProbeUpdate.hlsl). A known change to anything the probe
         // rays see (lights, ray-traced transforms, geometry and materials, the settings that shade ray hits) also caps
         // every texel's average at 200 frames, so changes too small to stand out of the noise still settle in a few
