@@ -409,6 +409,13 @@ if (PE_WEBGPU_TESTS)
     )
 
     pe_add_webgpu_sample(
+        TARGET WebGPUHelloTrianglePortableTest
+        DIR HelloTriangle
+        SOURCE HelloTrianglePortableTest.cpp
+        SHADERS triangle.wgsl
+    )
+
+    pe_add_webgpu_sample(
         TARGET WebGPUHelloTriangleMSAATest
         DIR HelloTriangleMSAA
         SOURCE HelloTriangleMSAATest.cpp
