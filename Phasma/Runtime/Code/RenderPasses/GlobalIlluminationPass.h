@@ -24,11 +24,9 @@ namespace pe
         Image *GetFarRadianceHistory() const { return m_farRadianceHistory; }
         static constexpr uint32_t kUniformBytes = 224; // ProbeUniforms; zeroed fallbacks bind at least this much
 
-    private:
         // A camera-following volume is kCascades nested 8x8x8 cascades, each twice the spacing of the last (Lumen's
         // radiance cache clipmaps); a volume fitted to the scene is one. ProbeVolume.hlsl: GI_MAX_CASCADES.
         static constexpr uint32_t kCascades = 4;
-        static constexpr uint32_t kCascadeProbes = 512;
         struct ProbeUniforms
         {
             vec4 originSpacing[kCascades];        // per cascade: xyz origin, w its smallest spacing
@@ -44,6 +42,14 @@ namespace pe
             uint32_t tracedVisibility = 1; // ProbeVolume.hlsl GI_TRACED_VISIBILITY: 0 keeps the distance moments alone
         };
         static_assert(sizeof(ProbeUniforms) == kUniformBytes);
+        const ProbeUniforms &GetProbeData() const { return m_probeData; } // the probe grid the last Update uploaded
+        uint32_t GetProbeCount() const
+        {
+            return m_probeData.cascadeCount * m_probeData.gridSize * m_probeData.gridSize * m_probeData.gridSize;
+        }
+
+    private:
+        static constexpr uint32_t kCascadeProbes = 512;
         ProbeUniforms m_probeData{};
         std::vector<Buffer *> m_probeUniforms;
         Image *m_irradiance = nullptr;

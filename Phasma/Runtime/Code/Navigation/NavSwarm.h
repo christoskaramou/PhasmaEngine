@@ -53,7 +53,7 @@ namespace pe
         // Runs the whole fixed steps that fit in `dt` (the rest carries over, at most 6 a call) and returns how many.
         // A supplied crowd steps with the swarm and shares its avoidance pass.
         int Update(float dt, NavCrowd *crowd = nullptr);
-        bool Get(int member, vec3 &position, vec3 &velocity) const;
+        bool Get(int member, vec3 &position, vec3 &velocity, float *radius = nullptr) const;
         // Where to draw the member: blended between its last two steps by the time since (one step behind, smooth at
         // any frame rate). Get is the simulation's own state; game logic reads that.
         bool GetInterpolated(int member, vec3 &position) const;

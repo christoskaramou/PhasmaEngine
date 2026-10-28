@@ -17,6 +17,10 @@
 #include "Render/SceneRendererHost.h"
 #include "Runtime/RuntimeStartup.h"
 #include "Script/Bindings/Input/InputState.h"
+#include "Camera/Camera.h"
+#include "Scene/Scene.h"
+#include "Scene/SceneAccess.h"
+#include "Systems/NavigationSystem.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
@@ -96,6 +100,51 @@ namespace pe
                                             fillColor,
                                             barHeight * 0.5f);
                 }
+            }
+        }
+
+        // Editor gizmo (Gizmos > Nav Agents, SceneSettings::draw_nav_agents): each navigation agent and swarm member
+        // as a ring of its radius and a line along its velocity. Drawn here, not in the editor's SceneView: movers exist
+        // only in play, when the editor hides its UI and shows this backend's frame.
+        void DrawNavAgents(ImDrawList *drawList, const ImGuiViewport *viewport)
+        {
+            auto *nav = GetGlobalSystem<NavigationSystem>();
+            Scene *scene = GetActiveScene();
+            Camera *camera = scene ? scene->GetActiveCamera() : nullptr;
+            if (!drawList || !nav || !camera)
+                return;
+
+            const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+            auto project = [&](const vec3 &world, ImVec2 &screen)
+            {
+                const vec4 clip = viewProj * vec4(world, 1.f);
+                if (clip.w <= 1e-6f)
+                    return false;
+
+                const vec2 ndc = vec2(clip) / clip.w;
+                screen = ImVec2(viewport->WorkPos.x + (ndc.x * 0.5f + 0.5f) * viewport->WorkSize.x,
+                                viewport->WorkPos.y + (ndc.y * 0.5f + 0.5f) * viewport->WorkSize.y);
+                return true;
+            };
+
+            const ImU32 color = IM_COL32(255, 120, 200, 230);
+            for (const NavigationSystem::MoverView &mover : nav->DebugMovers())
+            {
+                const vec3 centre = mover.position + vec3(0.f, 0.05f, 0.f);
+                ImVec2 ring[25];
+                bool ok = true;
+                for (int i = 0; i < 25; ++i)
+                {
+                    const float a = 6.2831853f * static_cast<float>(i) / 24.f;
+                    ok = ok && project(centre + vec3(std::cos(a), 0.f, std::sin(a)) * mover.radius, ring[i]);
+                }
+
+                ImVec2 from, to;
+                if (ok)
+                    drawList->AddPolyline(ring, 25, color, ImDrawFlags_None, 2.f);
+
+                if (project(centre, from) && project(centre + mover.velocity, to))
+                    drawList->AddLine(from, to, color, 2.f);
             }
         }
 
@@ -534,6 +583,9 @@ namespace pe
                                              ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + viewport->WorkSize.y),
                                              m_frameInfo.uiScale > 0.0f ? m_frameInfo.uiScale : 1.0f);
                 }
+
+                if (Settings::Get<SceneSettings>().draw_nav_agents)
+                    DrawNavAgents(ImGui::GetForegroundDrawList(), ImGui::GetMainViewport());
 
                 ImGui::Render();
                 m_pendingTouchClicks.clear();

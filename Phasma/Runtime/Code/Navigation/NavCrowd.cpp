@@ -102,13 +102,16 @@ namespace pe
         c.alpha = c.carry / step;
     }
 
-    bool NavCrowd::Get(int agent, vec3 &position, vec3 &velocity) const
+    bool NavCrowd::Get(int agent, vec3 &position, vec3 &velocity, float *radius) const
     {
         const dtCrowdAgent *a = m_impl->crowd && agent >= 0 && agent < kMaxAgents ? m_impl->crowd->getAgent(agent) : nullptr;
         if (!a || !a->active)
             return false;
         position = vec3(a->npos[0], a->npos[1], a->npos[2]);
         velocity = vec3(a->vel[0], a->vel[1], a->vel[2]);
+        if (radius)
+            *radius = a->params.radius;
+
         return true;
     }
 
@@ -138,7 +141,7 @@ namespace pe
     }
     void NavCrowd::Stop(int) {}
     void NavCrowd::Update(float) {}
-    bool NavCrowd::Get(int, vec3 &, vec3 &) const
+    bool NavCrowd::Get(int, vec3 &, vec3 &, float *) const
     {
         return false;
     }

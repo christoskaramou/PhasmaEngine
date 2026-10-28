@@ -884,7 +884,7 @@ namespace pe
         return s.stats.steps;
     }
 
-    bool NavSwarm::Get(int member, vec3 &position, vec3 &velocity) const
+    bool NavSwarm::Get(int member, vec3 &position, vec3 &velocity, float *radius) const
     {
         const Impl &s = *m_impl;
         if (member < 0 || member >= static_cast<int>(s.members.size()) || !s.members[member].alive)
@@ -892,6 +892,9 @@ namespace pe
         const Impl::Member &m = s.members[member];
         position = m.pos;
         velocity = vec3(m.vel.x, 0.0f, m.vel.y);
+        if (radius)
+            *radius = m.radius;
+
         return true;
     }
 
@@ -941,7 +944,7 @@ namespace pe
     {
         return 0;
     }
-    bool NavSwarm::Get(int, vec3 &, vec3 &) const
+    bool NavSwarm::Get(int, vec3 &, vec3 &, float *) const
     {
         return false;
     }

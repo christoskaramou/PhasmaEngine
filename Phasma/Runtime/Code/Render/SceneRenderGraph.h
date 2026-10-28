@@ -55,6 +55,7 @@ namespace pe
         MaterialShade,   // openpbr: material pass 2 (MaterialX shading)
         OpenPBRSkinning,
         OpenPBRForward, // openpbr: MaterialX alpha-blend and transmission meshes (forward pass)
+        ProbeGizmos,    // editor: GI and screen probes as lit spheres (draw_gi_probes, draw_screen_probes)
         Count
     };
 
@@ -104,6 +105,7 @@ namespace pe
         IRenderPassComponent *materialShade = nullptr;
         IRenderPassComponent *openpbrSkinning = nullptr;
         IRenderPassComponent *openpbrForward = nullptr;
+        IRenderPassComponent *probeGizmos = nullptr;
     };
 
     using SceneRenderGraphPassCondition = std::function<bool(SceneRenderGraphPassId)>;

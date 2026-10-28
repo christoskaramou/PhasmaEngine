@@ -63,6 +63,9 @@ namespace pe
         // game can outline nodes; with nothing selected the pass early-outs to zero work.
         settings.draw_grid = false;
         settings.draw_aabbs = false;
+        settings.draw_gi_probes = false;
+        settings.draw_screen_probes = false;
+        settings.draw_nav_agents = false;
     }
 
     void RuntimeSceneRenderer::Init(CommandBuffer *cmd)

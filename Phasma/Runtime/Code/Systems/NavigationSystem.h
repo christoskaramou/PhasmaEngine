@@ -52,6 +52,15 @@ namespace pe
         [[nodiscard]] bool IsAnchored(const SceneNodeHandle &node) const;
         [[nodiscard]] NavSwarmStats SwarmStats() const;
 
+        struct MoverView
+        {
+            vec3 position{0.f};
+            vec3 velocity{0.f};
+            float radius = 0.f;
+        };
+        // Every agent and swarm member as stepped last, for the editor's Nav Agents gizmo.
+        [[nodiscard]] std::vector<MoverView> DebugMovers() const;
+
     private:
         struct Binding
         {

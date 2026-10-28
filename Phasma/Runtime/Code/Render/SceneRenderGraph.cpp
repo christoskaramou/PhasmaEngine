@@ -25,6 +25,7 @@
 #include "RenderPasses/OcclusionCullingPass.h"
 #include "RenderPasses/ParticleComputePass.h"
 #include "RenderPasses/ParticlePass.h"
+#include "RenderPasses/ProbeGizmosPass.h"
 #include "RenderPasses/RTDepthResolvePass.h"
 #include "RenderPasses/RayTracingPass.h"
 #include "RenderPasses/ReflectionPass.h"
@@ -104,6 +105,7 @@ namespace pe
             {SceneRenderGraphPassId::DOF, 2000, "DOF", &SceneRenderGraphPassComponents::dof},
             {SceneRenderGraphPassId::MotionBlur, 2100, "MotionBlur", &SceneRenderGraphPassComponents::motionBlur},
             {SceneRenderGraphPassId::Grid, 2200, "Grid", &SceneRenderGraphPassComponents::grid},
+            {SceneRenderGraphPassId::ProbeGizmos, 2210, "ProbeGizmos", &SceneRenderGraphPassComponents::probeGizmos},
             {SceneRenderGraphPassId::Particle, 2300, "Particle", &SceneRenderGraphPassComponents::particle},
             // Before TAA (1300): the temporal resolve de-jitters the outline with the scene.
             {SceneRenderGraphPassId::SelectionOutline, 1250, "SelectionOutline",
@@ -226,6 +228,8 @@ namespace pe
                 return isPassEnabled(SceneRenderGraphPassId::MotionBlur);
             if (component == components.grid)
                 return isPassEnabled(SceneRenderGraphPassId::Grid);
+            if (component == components.probeGizmos)
+                return isPassEnabled(SceneRenderGraphPassId::ProbeGizmos);
             if (component == components.selectionOutline)
                 return isPassEnabled(SceneRenderGraphPassId::SelectionOutline);
 
@@ -330,6 +334,7 @@ namespace pe
         CreateSceneRenderGraphPassComponent<DOFPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<MotionBlurPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<GridPass>(renderPassComponents);
+        CreateSceneRenderGraphPassComponent<ProbeGizmosPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<SelectionOutlinePass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<VisibilityDebugPass>(renderPassComponents);
         CreateSceneRenderGraphPassComponent<MaterialThinPass>(renderPassComponents);
@@ -521,6 +526,7 @@ namespace pe
         scenePasses.dof = GetGlobalComponent<DOFPass>();
         scenePasses.motionBlur = GetGlobalComponent<MotionBlurPass>();
         scenePasses.grid = GetGlobalComponent<GridPass>();
+        scenePasses.probeGizmos = GetGlobalComponent<ProbeGizmosPass>();
         scenePasses.selectionOutline = GetGlobalComponent<SelectionOutlinePass>();
         scenePasses.visibilityDebug = GetGlobalComponent<VisibilityDebugPass>();
         scenePasses.materialThin = GetGlobalComponent<MaterialThinPass>();
@@ -563,7 +569,10 @@ namespace pe
         // As in Unreal, Lumen reflections (ReflectionPass, on with GI) replace screen-space reflections.
         const bool lumenReflections = gs.global_illumination && hasRayTracingGeometry;
         const bool renderSSAO = pp.ssao && renderRaster;
-        const bool needDepth = renderRaster || needVelocity || pp.dof || pp.motion_blur || gs.draw_aabbs || gs.draw_grid;
+        const bool probeGizmoToggled = gs.draw_gi_probes || gs.draw_screen_probes;
+        const bool probeGizmos = gs.global_illumination && hasRayTracingGeometry && probeGizmoToggled;
+        const bool editorOverlays = gs.draw_aabbs || gs.draw_grid || probeGizmos;
+        const bool needDepth = renderRaster || needVelocity || pp.dof || pp.motion_blur || editorOverlays;
         const bool needGBuffer = renderRaster || needVelocity || renderSSR || renderSSAO;
 
         if (UsesDx12RenderOrchestration())
@@ -573,7 +582,7 @@ namespace pe
             const bool dx12RtOnly = dx12RayTracing && !dx12RenderRaster;
             const bool dx12RenderTAA = pp.taa && (dx12RenderRaster || dx12RtOnly);
             const bool dx12NeedVelocity = needVelocity;
-            const bool dx12NeedDepth = dx12RenderRaster || dx12NeedVelocity || gs.draw_aabbs || gs.draw_grid;
+            const bool dx12NeedDepth = dx12RenderRaster || dx12NeedVelocity || editorOverlays;
             const bool dx12NeedGBuffer = dx12RenderRaster || dx12NeedVelocity;
 
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Culling, true);
@@ -621,6 +630,7 @@ namespace pe
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, pp.dof && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur && dx12RenderRaster);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
+            SetPassEnabled(passEnabled, SceneRenderGraphPassId::ProbeGizmos, probeGizmos);
             SetPassEnabled(passEnabled, SceneRenderGraphPassId::SelectionOutline,
                            gs.selection_outline && (dx12RenderRaster || dx12RayTracing));
 
@@ -675,6 +685,7 @@ namespace pe
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::DOF, pp.dof);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::MotionBlur, pp.motion_blur);
         SetPassEnabled(passEnabled, SceneRenderGraphPassId::Grid, gs.draw_grid);
+        SetPassEnabled(passEnabled, SceneRenderGraphPassId::ProbeGizmos, probeGizmos);
         // Outline composites into "viewport" (x-ray mask, no depth) before TAA/Upsample, so it works
         // over either the raster or the ray-traced image -- gate on "did any color producer write
         // viewport", not raster-only, else full RT (renderRaster == false) silently drops the outline.
@@ -751,6 +762,7 @@ namespace pe
         SetPassScene<ParticleComputePass>(components.particleCompute, scene);
         SetPassScene<ParticlePass>(components.particle, scene);
         SetPassScene<GridPass>(components.grid, scene);
+        SetPassScene<ProbeGizmosPass>(components.probeGizmos, scene);
         SetPassScene<AabbsPass>(components.aabbs, scene);
         SetPassScene<LinesPass>(components.lines, scene);
         SetPassScene<SelectionOutlinePass>(components.selectionOutline, scene);

@@ -46,6 +46,7 @@ namespace pe
         Image *GetProbeNormals() const { return m_normals; }
         Image *GetGeometry() const { return m_geometry; }
         Image *GetAdaptiveMap() const { return m_adaptiveMap; }
+        const ScreenProbeUniforms &GetData() const { return m_data; } // frame: the last frame Update ran
 
     private:
         void CreateImages();

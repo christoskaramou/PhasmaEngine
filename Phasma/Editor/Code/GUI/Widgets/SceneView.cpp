@@ -10,6 +10,9 @@
 #include "GUI/SkinnedStrip2DEditor.h"
 #include "GUI/UndoRedo.h"
 #include "Particles/ParticleManager.h"
+#include "RenderPasses/GlobalIlluminationPass.h"
+#include "Systems/AudioSystem.h"
+#include "Systems/Physics2DSystem.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -1388,6 +1391,16 @@ namespace pe
         DrawVolumeGizmos(imageMin, imageSize);
         if (GUIState::s_useNavMeshGizmos)
             DrawNavMeshGizmos(imageMin, imageSize);
+        if (GUIState::s_useProbeGridGizmos)
+            DrawProbeGridGizmos(imageMin, imageSize);
+        if (GUIState::s_useProbeGridGizmos || Settings::Get<SceneSettings>().draw_gi_probes)
+            DrawProbeInfluence(imageMin, imageSize);
+        if (GUIState::s_useAudioGizmos)
+            DrawAudioGizmos(imageMin, imageSize);
+        if (GUIState::s_useEmitterGizmos)
+            DrawEmitterGizmos(imageMin, imageSize);
+        if (GUIState::s_usePhysics2DGizmos)
+            DrawPhysics2DGizmos(imageMin, imageSize);
         DrawCameraGizmos(imageMin, imageSize);
         if (GUIState::s_useOrientationGizmo)
             DrawOrientationGizmo(imageMin, imageSize);
@@ -1706,6 +1719,344 @@ namespace pe
             if (ProjectWorldToViewport(segments[i] + lift, viewProj, imageMin, imageSize, a) &&
                 ProjectWorldToViewport(segments[i + 1] + lift, viewProj, imageMin, imageSize, b))
                 drawList->AddLine(a, b, IM_COL32(80, 170, 255, 210), 1.5f);
+        }
+    }
+
+    namespace
+    {
+        void DrawProbeCascadeBounds(ImDrawList *drawList,
+                                    const vec3 &origin,
+                                    const vec3 &extent,
+                                    const mat4 &viewProj,
+                                    const ImVec2 &imageMin,
+                                    const ImVec2 &imageSize,
+                                    ImU32 color)
+        {
+            static const int kEdges[12][2] = {
+                {0, 1}, {0, 2}, {0, 4}, {1, 3}, {1, 5}, {2, 3}, {2, 6}, {3, 7}, {4, 5}, {4, 6}, {5, 7}, {6, 7}};
+
+            ImVec2 corners[8];
+            bool projected[8];
+            for (int c = 0; c < 8; ++c)
+            {
+                const vec3 corner = origin + extent * vec3(c & 1, (c >> 1) & 1, (c >> 2) & 1);
+                projected[c] = ProjectWorldToViewport(corner, viewProj, imageMin, imageSize, corners[c]);
+            }
+
+            for (const auto &edge : kEdges)
+            {
+                if (projected[edge[0]] && projected[edge[1]])
+                    drawList->AddLine(corners[edge[0]], corners[edge[1]], color, 1.5f);
+            }
+        }
+
+        const ImU32 kProbeCascadeColors[GlobalIlluminationPass::kCascades] = {
+            IM_COL32(255, 210, 60, 230), IM_COL32(90, 220, 120, 230), IM_COL32(80, 170, 255, 230), IM_COL32(220, 110, 255, 230)};
+
+        // Lines from `position` to the 8 probes of `cascade` that ProbeCascadeIrradiance blends there, each as strong
+        // as its trilinear weight times `scale` (the cascade's share at a cascade edge).
+        void DrawCascadeInfluence(const GlobalIlluminationPass::ProbeUniforms &probes,
+                                  uint32_t cascade,
+                                  const vec3 &position,
+                                  float scale,
+                                  const mat4 &viewProj,
+                                  const ImVec2 &imageMin,
+                                  const ImVec2 &imageSize)
+        {
+            ImVec2 from;
+            if (!ProjectWorldToViewport(position, viewProj, imageMin, imageSize, from))
+                return;
+
+            const vec3 origin(probes.originSpacing[cascade]);
+            const vec3 spacing(probes.spacing[cascade]);
+            const float last = static_cast<float>(probes.gridSize - 1);
+            const vec3 grid = glm::clamp((position - origin) / spacing, vec3(0.f), vec3(last));
+            const vec3 base = glm::min(glm::floor(grid), vec3(last - 1.f));
+            const vec3 fraction = glm::clamp(grid - base, vec3(0.f), vec3(1.f));
+            const ImU32 rgb = kProbeCascadeColors[cascade] & IM_COL32(255, 255, 255, 0);
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            for (int corner = 0; corner < 8; ++corner)
+            {
+                const vec3 offset(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
+                const vec3 trilinear = glm::mix(vec3(1.f) - fraction, fraction, offset);
+                const float weight = trilinear.x * trilinear.y * trilinear.z * scale;
+                ImVec2 to;
+                if (!ProjectWorldToViewport(origin + (base + offset) * spacing, viewProj, imageMin, imageSize, to))
+                    continue;
+
+                const ImU32 color = rgb | IM_COL32(0, 0, 0, static_cast<int>(70.f + 185.f * weight));
+                drawList->AddLine(from, to, color, 1.f + 3.f * weight);
+                drawList->AddCircleFilled(to, 3.f + 3.f * weight, color, 12);
+            }
+        }
+
+        // A coarser cascade's probe a cell inside the next finer cascade, which shading never reads (ProbeGizmos.hlsl).
+        bool IsInnerCoarseProbe(const GlobalIlluminationPass::ProbeUniforms &probes,
+                                uint32_t cascade,
+                                const vec3 &position)
+        {
+            if (cascade == 0)
+                return false;
+
+            const vec3 grid = (position - vec3(probes.originSpacing[cascade - 1])) / vec3(probes.spacing[cascade - 1]);
+            const float last = static_cast<float>(probes.gridSize) - 2.f;
+            return glm::all(glm::greaterThanEqual(grid, vec3(1.f))) && glm::all(glm::lessThanEqual(grid, vec3(last)));
+        }
+    } // namespace
+
+    // GI world probes as dots over everything, with each cascade's bounds: shows probes the depth-tested sphere gizmo
+    // (Gizmos > GI Probes) hides, such as a layer just under a floor.
+    void SceneView::DrawProbeGridGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+        if (!renderer || !gi || !Settings::Get<SceneSettings>().global_illumination || gi->GetProbeCount() == 0)
+            return;
+
+        Camera *camera = renderer->GetScene().GetActiveCamera();
+        if (!camera)
+            return;
+
+        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+        ImDrawList *drawList = ImGui::GetWindowDrawList();
+        const GlobalIlluminationPass::ProbeUniforms &probes = gi->GetProbeData();
+        const uint32_t n = probes.gridSize;
+        for (uint32_t cascade = 0; cascade < probes.cascadeCount; ++cascade)
+        {
+            const vec3 origin(probes.originSpacing[cascade]);
+            const vec3 spacing(probes.spacing[cascade]);
+            const ImU32 color = kProbeCascadeColors[cascade];
+            DrawProbeCascadeBounds(drawList,
+                                   origin,
+                                   spacing * static_cast<float>(n - 1),
+                                   viewProj,
+                                   imageMin,
+                                   imageSize,
+                                   color);
+
+            for (uint32_t i = 0; i < n * n * n; ++i)
+            {
+                const vec3 position = origin + vec3(i % n, (i / n) % n, i / (n * n)) * spacing;
+                if (IsInnerCoarseProbe(probes, cascade, position))
+                    continue;
+
+                ImVec2 screen;
+                if (ProjectWorldToViewport(position, viewProj, imageMin, imageSize, screen))
+                    drawList->AddCircleFilled(screen, 3.f, color, 8);
+            }
+        }
+    }
+
+    // The selected node's world probes (with GI Probes or GI Probe Grid on): a line from its pivot to each probe
+    // ProbeLighting blends there, stronger for more trilinear weight; over a cascade's outer cell the next cascade's
+    // probes too. Facing and visibility are left out, so a blocked probe still gets its line.
+    void SceneView::DrawProbeInfluence(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
+        Camera *camera = renderer ? renderer->GetScene().GetActiveCamera() : nullptr;
+        auto &sel = SelectionManager::Instance();
+        const bool nodeSelected = sel.GetSelectionType() == SelectionType::Node ||
+                                  sel.GetSelectionType() == SelectionType::Mesh;
+        NodeId *node = nodeSelected ? sel.GetSelectedNode() : nullptr;
+        const bool probesLive = gi && Settings::Get<SceneSettings>().global_illumination && gi->GetProbeCount() > 0;
+        if (!node || !camera || !probesLive)
+            return;
+
+        const vec3 position(renderer->GetScene().GetWorldMatrix(node)[3]);
+        const GlobalIlluminationPass::ProbeUniforms &probes = gi->GetProbeData();
+        const float last = static_cast<float>(probes.gridSize - 1);
+        for (uint32_t cascade = 0; cascade < probes.cascadeCount; ++cascade)
+        {
+            const vec3 grid = (position - vec3(probes.originSpacing[cascade])) / vec3(probes.spacing[cascade]);
+            const bool inside = glm::all(glm::greaterThanEqual(grid, vec3(0.f))) &&
+                                glm::all(glm::lessThanEqual(grid, vec3(last)));
+            if (!inside)
+                continue;
+
+            // ProbeCascadeAt's edge: cells to the nearest boundary; ProbeLighting hands over to the next cascade there.
+            const vec3 distance = glm::min(grid, vec3(last) - grid);
+            const float share = glm::smoothstep(0.f, 1.f, std::min(distance.x, std::min(distance.y, distance.z)));
+            const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+            DrawCascadeInfluence(probes, cascade, position, share, viewProj, imageMin, imageSize);
+            if (share < 1.f && cascade + 1 < probes.cascadeCount)
+                DrawCascadeInfluence(probes, cascade + 1, position, 1.f - share, viewProj, imageMin, imageSize);
+
+            return;
+        }
+    }
+
+    namespace
+    {
+        void DrawSphereRings(const vec3 &center,
+                             float radius,
+                             const mat4 &viewProj,
+                             const ImVec2 &imageMin,
+                             const ImVec2 &imageSize,
+                             ImU32 color)
+        {
+            GizmoUtils::DrawRing(center, radius, vec3(1, 0, 0), viewProj, imageMin, imageSize, color);
+            GizmoUtils::DrawRing(center, radius, vec3(0, 1, 0), viewProj, imageMin, imageSize, color);
+            GizmoUtils::DrawRing(center, radius, vec3(0, 0, 1), viewProj, imageMin, imageSize, color);
+        }
+
+        // A closed outline of `local` XY points, turned by `angle` about Z and moved to `origin` (a 2D physics shape).
+        void DrawOutline2D(const std::vector<vec2> &local,
+                           const vec3 &origin,
+                           float angle,
+                           const mat4 &viewProj,
+                           const ImVec2 &imageMin,
+                           const ImVec2 &imageSize,
+                           ImU32 color)
+        {
+            const float c = std::cos(angle);
+            const float s = std::sin(angle);
+            ImDrawList *drawList = ImGui::GetWindowDrawList();
+            ImVec2 previous;
+            bool previousOk = false;
+            for (size_t i = 0; i <= local.size(); ++i)
+            {
+                const vec2 &p = local[i % local.size()];
+                const vec3 world = origin + vec3(p.x * c - p.y * s, p.x * s + p.y * c, 0.f);
+                ImVec2 screen;
+                const bool ok = ProjectWorldToViewport(world, viewProj, imageMin, imageSize, screen);
+                if (ok && previousOk)
+                    drawList->AddLine(previous, screen, color, 1.5f);
+
+                previous = screen;
+                previousOk = ok;
+            }
+        }
+
+        // Physics2DSystem's shape (box2d: centred on the body, capsules along local Y) as XY points.
+        std::vector<vec2> Physics2DOutline(const Physics2DBodyDesc &desc)
+        {
+            if (desc.shapeType == Physics2DShapeType::Box)
+            {
+                const vec2 half(desc.width * 0.5f, desc.height * 0.5f);
+                return {vec2(-half.x, -half.y), vec2(half.x, -half.y), vec2(half.x, half.y), vec2(-half.x, half.y)};
+            }
+
+            const bool capsule = desc.shapeType == Physics2DShapeType::Capsule;
+            const float radius = capsule ? desc.capsuleRadius : desc.radius;
+            const float segment = capsule ? std::max(0.f, desc.capsuleHeight - 2.f * radius) : 0.f;
+            std::vector<vec2> points;
+            for (int i = 0; i <= 32; ++i)
+            {
+                const float a = 6.2831853f * static_cast<float>(i) / 32.f;
+                const float y = std::sin(a) * radius + (i <= 16 ? 0.5f : -0.5f) * segment;
+                points.emplace_back(std::cos(a) * radius, y);
+            }
+
+            return points;
+        }
+    } // namespace
+
+    // Audio sources: an icon per node (click to select); for the selected spatial source its min (solid) and max
+    // (faint) distance.
+    void SceneView::DrawAudioGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        auto *audio = GetGlobalSystem<AudioSystem>();
+        Camera *camera = renderer ? renderer->GetScene().GetActiveCamera() : nullptr;
+        if (!audio || !camera)
+            return;
+
+        Scene &scene = renderer->GetScene();
+        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+        auto &sel = SelectionManager::Instance();
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            const bool hasAudio = scene.GetComponentFlags(node) & Component_Audio;
+            const AudioSourceDesc *desc = hasAudio ? audio->GetSourceDesc(node) : nullptr;
+            if (!desc || !scene.IsNodeHierarchyEnabled(node))
+                continue;
+
+            const vec3 position(scene.GetWorldMatrix(node)[3]);
+            const bool selected = sel.GetSelectionType() == SelectionType::Node && sel.GetSelectedNode() == node;
+            const std::string id = "##AudioIcon" + std::to_string(i);
+            if (DrawGizmoIcon(position, ICON_FA_VOLUME_HIGH, viewProj, imageMin, imageSize, selected, id.c_str()))
+                sel.Select(node, SelectionType::Node);
+
+            if (selected && desc->spatial)
+            {
+                const ImU32 solid = IM_COL32(90, 220, 255, 255);
+                const ImU32 faint = IM_COL32(90, 220, 255, 90);
+                DrawSphereRings(position, desc->minDistance, viewProj, imageMin, imageSize, solid);
+                DrawSphereRings(position, desc->maxDistance, viewProj, imageMin, imageSize, faint);
+            }
+        }
+    }
+
+    // Particle emitters: an icon each (click to select); for the selected one its spawn radius and base velocity.
+    void SceneView::DrawEmitterGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        Camera *camera = renderer ? renderer->GetScene().GetActiveCamera() : nullptr;
+        ParticleManager *particles = renderer ? renderer->GetScene().GetParticleManager() : nullptr;
+        if (!camera || !particles)
+            return;
+
+        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+        auto &sel = SelectionManager::Instance();
+        const auto &emitters = particles->GetEmitters();
+        for (int i = 0; i < static_cast<int>(emitters.size()); ++i)
+        {
+            const vec3 position(emitters[i].position);
+            const bool selected = sel.GetSelectionType() == SelectionType::Emitter &&
+                                  sel.GetSelectedEmitterIndex() == i;
+            const std::string id = "##EmitterIcon" + std::to_string(i);
+            if (DrawGizmoIcon(position, ICON_FA_FIRE, viewProj, imageMin, imageSize, selected, id.c_str()))
+                sel.SelectEmitter(i);
+
+            if (!selected)
+                continue;
+
+            const ImU32 color = IM_COL32(255, 150, 60, 255);
+            DrawSphereRings(position, emitters[i].physics.y, viewProj, imageMin, imageSize, color);
+
+            ImVec2 from, to;
+            const vec3 tip = position + vec3(emitters[i].velocity);
+            const bool visible = ProjectWorldToViewport(position, viewProj, imageMin, imageSize, from) &&
+                                 ProjectWorldToViewport(tip, viewProj, imageMin, imageSize, to);
+            if (visible)
+            {
+                ImGui::GetWindowDrawList()->AddLine(from, to, color, 2.f);
+                ImGui::GetWindowDrawList()->AddCircleFilled(to, 4.f, color);
+            }
+        }
+    }
+
+    // 2D physics bodies: each shape outline in the XY plane at its node, green dynamic, grey static or kinematic,
+    // cyan sensors.
+    void SceneView::DrawPhysics2DGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize)
+    {
+        RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
+        auto *physics = GetGlobalSystem<Physics2DSystem>();
+        Camera *camera = renderer ? renderer->GetScene().GetActiveCamera() : nullptr;
+        if (!physics || !camera)
+            return;
+
+        Scene &scene = renderer->GetScene();
+        const mat4 viewProj = camera->GetProjectionNoJitter() * camera->GetView();
+        for (uint32_t i = 0; i < scene.GetNodeCount(); ++i)
+        {
+            NodeId *node = scene.GetNodeId(i);
+            const bool hasBody = scene.GetComponentFlags(node) & Component_Physics2D;
+            const Physics2DBodyDesc *desc = hasBody ? physics->GetBodyDesc(node) : nullptr;
+            if (!desc || !scene.IsNodeHierarchyEnabled(node))
+                continue;
+
+            const mat4 &world = scene.GetWorldMatrix(node);
+            const float angle = std::atan2(world[0][1], world[0][0]);
+            ImU32 color = IM_COL32(120, 230, 120, 230);
+            if (desc->isSensor)
+                color = IM_COL32(90, 200, 235, 230);
+            else if (desc->bodyType != Physics2DBodyType::Dynamic)
+                color = IM_COL32(170, 170, 170, 230);
+
+            DrawOutline2D(Physics2DOutline(*desc), vec3(world[3]), angle, viewProj, imageMin, imageSize, color);
         }
     }
 

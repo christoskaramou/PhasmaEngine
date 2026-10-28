@@ -226,6 +226,9 @@ namespace pe
         bool freeze_frustum_culling = false;
         bool draw_aabbs = false;
         bool draw_grid = true;
+        bool draw_gi_probes = false;     // editor gizmo: world probes as spheres lit by their irradiance (ProbeGizmosPass)
+        bool draw_screen_probes = false; // editor gizmo: screen probes the same way
+        bool draw_nav_agents = false;    // editor gizmo: navigation agents in play (ImGuiRuntimeUiBackend)
         bool aabbs_depth_aware = true;
         bool selection_outline = true;
         float selection_outline_color_r = 0.05f;

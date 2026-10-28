@@ -337,7 +337,8 @@ namespace pe
             m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::BloomV) ||
             m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::DOF) ||
             m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::MotionBlur) ||
-            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::Grid) || m_guiPassEnabled;
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::Grid) ||
+            m_sceneRenderer.IsPassEnabled(SceneRenderGraphPassId::ProbeGizmos) || m_guiPassEnabled;
         if (displayProduced)
             return m_sceneRenderer.GetDisplayRT();
 

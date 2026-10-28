@@ -50,6 +50,16 @@ struct PushConstants_Grid
     float2 padding;
 };
 
+struct PushConstants_ProbeGizmos
+{
+    float2 projJitter;
+    float2 invDisplaySize;
+    uint mode;    // 0: world probes (ProbeVolume.hlsl), 1: screen probes (ScreenProbePass)
+    uint tilesX;  // screen probe images' width
+    float radius; // world probes: fraction of the cascade spacing; screen probes: fraction of the view distance
+    float padding;
+};
+
 struct PushConstants_SelectionOutline
 {
     float4 color;

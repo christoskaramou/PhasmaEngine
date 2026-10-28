@@ -997,6 +997,13 @@ namespace pe
         addAction("gizmo.navmesh", "NavMesh Gizmos", "Gizmos", "toggle", true, GUIState::s_useNavMeshGizmos, true);
         addAction("gizmo.orientation", "Orientation Gizmo", "Gizmos", "toggle", true, GUIState::s_useOrientationGizmo, true);
         addAction("gizmo.grid", "Grid", "Gizmos", "toggle", true, globalSettings.draw_grid, true);
+        addAction("gizmo.gi_probes", "GI Probes", "Gizmos", "toggle", true, globalSettings.draw_gi_probes, true);
+        addAction("gizmo.probe_grid", "GI Probe Grid", "Gizmos", "toggle", true, GUIState::s_useProbeGridGizmos, true);
+        addAction("gizmo.screen_probes", "Screen Probes", "Gizmos", "toggle", true, globalSettings.draw_screen_probes, true);
+        addAction("gizmo.audio", "Audio Sources", "Gizmos", "toggle", true, GUIState::s_useAudioGizmos, true);
+        addAction("gizmo.emitters", "Particle Emitters", "Gizmos", "toggle", true, GUIState::s_useEmitterGizmos, true);
+        addAction("gizmo.colliders2d", "2D Colliders", "Gizmos", "toggle", true, GUIState::s_usePhysics2DGizmos, true);
+        addAction("gizmo.nav_agents", "Nav Agents", "Gizmos", "toggle", true, globalSettings.draw_nav_agents, true);
 
         for (GUIStyle style : {GUIStyle::Classic, GUIStyle::Dark, GUIStyle::Light, GUIStyle::Modern, GUIStyle::Unity, GUIStyle::Unreal})
         {
@@ -1440,6 +1447,20 @@ namespace pe
             return toggleBool(GUIState::s_useOrientationGizmo);
         if (action == "gizmo.grid")
             return toggleBool(Settings::Get<SceneSettings>().draw_grid);
+        if (action == "gizmo.gi_probes")
+            return toggleBool(Settings::Get<SceneSettings>().draw_gi_probes);
+        if (action == "gizmo.probe_grid")
+            return toggleBool(GUIState::s_useProbeGridGizmos);
+        if (action == "gizmo.screen_probes")
+            return toggleBool(Settings::Get<SceneSettings>().draw_screen_probes);
+        if (action == "gizmo.audio")
+            return toggleBool(GUIState::s_useAudioGizmos);
+        if (action == "gizmo.emitters")
+            return toggleBool(GUIState::s_useEmitterGizmos);
+        if (action == "gizmo.colliders2d")
+            return toggleBool(GUIState::s_usePhysics2DGizmos);
+        if (action == "gizmo.nav_agents")
+            return toggleBool(Settings::Get<SceneSettings>().draw_nav_agents);
 
         if (action.rfind("layout.style.", 0) == 0 || action == "layout.style")
         {
@@ -2996,10 +3017,31 @@ namespace pe
                 ui::ItemTooltip("Outline every physics collider (the selected object's always shows): green solid, cyan trigger.");
                 ImGui::MenuItem("NavMesh", nullptr, &GUIState::s_useNavMeshGizmos);
                 ui::ItemTooltip("Outline the baked navigation mesh (Scene Settings > Navigation > Bake) in blue.");
+                ImGui::MenuItem("Nav Agents", nullptr, &gSettings.draw_nav_agents);
+                ui::ItemTooltip("While playing, each navigation agent and swarm member as a pink ring of its radius "
+                                "with a line along its velocity.");
+                ImGui::MenuItem("2D Colliders", nullptr, &GUIState::s_usePhysics2DGizmos);
+                ui::ItemTooltip("Outline every 2D physics shape in the XY plane: green dynamic, grey static or "
+                                "kinematic, cyan sensor.");
+                ImGui::MenuItem("Audio Sources", nullptr, &GUIState::s_useAudioGizmos);
+                ui::ItemTooltip("Show audio source icons; the selected spatial source shows its min and max "
+                                "distance.");
+                ImGui::MenuItem("Particle Emitters", nullptr, &GUIState::s_useEmitterGizmos);
+                ui::ItemTooltip("Show particle emitter icons; the selected emitter shows its spawn radius and "
+                                "base velocity.");
                 ImGui::MenuItem("Orientation", nullptr, &GUIState::s_useOrientationGizmo);
                 ui::ItemTooltip("Show the viewport orientation gizmo.");
                 ImGui::MenuItem("Grid", nullptr, &gSettings.draw_grid);
                 ui::ItemTooltip("Show or hide the editor grid.");
+                ImGui::MenuItem("GI Probes", nullptr, &gSettings.draw_gi_probes);
+                ui::ItemTooltip("Global illumination world probes as spheres lit by their own light, hidden behind "
+                                "geometry. Needs Global Illumination on.");
+                ImGui::MenuItem("GI Probe Grid", nullptr, &GUIState::s_useProbeGridGizmos);
+                ui::ItemTooltip("Every world probe as a dot, seen through geometry, and each cascade's bounds; "
+                                "one colour per cascade.");
+                ImGui::MenuItem("Screen Probes", nullptr, &gSettings.draw_screen_probes);
+                ui::ItemTooltip("Screen probes (one per 16 px tile) as small spheres lit by their own light. Needs "
+                                "Global Illumination on, raster or hybrid rendering.");
                 ImGui::EndMenu();
             }
 

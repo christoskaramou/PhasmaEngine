@@ -380,6 +380,31 @@ namespace pe
         return m_swarm ? m_swarm->Stats() : NavSwarmStats{};
     }
 
+    std::vector<NavigationSystem::MoverView> NavigationSystem::DebugMovers() const
+    {
+        std::vector<MoverView> movers;
+        MoverView mover;
+        if (m_crowd)
+        {
+            for (const Binding &agent : m_agents.list)
+            {
+                if (m_crowd->Get(agent.index, mover.position, mover.velocity, &mover.radius))
+                    movers.push_back(mover);
+            }
+        }
+
+        if (m_swarm)
+        {
+            for (const Binding &member : m_members.list)
+            {
+                if (m_swarm->Get(member.index, mover.position, mover.velocity, &mover.radius))
+                    movers.push_back(mover);
+            }
+        }
+
+        return movers;
+    }
+
     void NavigationSystem::Place(Scene &scene, const SceneNodeHandle &node, const vec3 &world)
     {
         // World to the node's local space through its parent's world matrix, so a mover under a moved or scaled

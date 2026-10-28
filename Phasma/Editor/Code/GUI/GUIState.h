@@ -55,8 +55,12 @@ namespace pe
         static bool s_useTransformGizmo;
         static bool s_useLightGizmos;
         static bool s_useCameraGizmos;
-        static bool s_useColliderGizmos; // every physics collider; the selected node's always shows
-        static bool s_useNavMeshGizmos;  // the baked navigation mesh's polygon edges
+        static bool s_useColliderGizmos;  // every physics collider; the selected node's always shows
+        static bool s_useNavMeshGizmos;   // the baked navigation mesh's polygon edges
+        static bool s_useProbeGridGizmos; // GI world probe dots and cascade bounds, seen through geometry
+        static bool s_useAudioGizmos;     // audio source icons; the selected source's min/max distance
+        static bool s_useEmitterGizmos;   // particle emitter icons; the selected one's spawn radius and velocity
+        static bool s_usePhysics2DGizmos; // 2D physics shapes in the XY plane
         static bool s_useOrientationGizmo;
         // Play Mode State
         static bool s_playMode;
