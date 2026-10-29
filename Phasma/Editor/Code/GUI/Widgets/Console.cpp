@@ -5,11 +5,64 @@
 
 namespace pe
 {
+    namespace
+    {
+        constexpr size_t kMaxLogs = 10000;
+        constexpr size_t kTrimLogs = kMaxLogs / 10; // trim in batches so the erase is paid once per kTrimLogs lines
+    } // namespace
+
     void Console::Clear()
     {
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_logs.clear();
+        m_offsets.clear();
+        m_trimmedHeight = 0.0f;
         m_warnCount = 0;
         m_errorCount = 0;
+    }
+
+    void Console::TrimLogs()
+    {
+        m_logs.erase(m_logs.begin(), m_logs.begin() + kTrimLogs);
+
+        if (m_offsets.size() <= kTrimLogs)
+        {
+            m_offsets.clear();
+            return;
+        }
+
+        const float removedHeight = m_offsets[kTrimLogs];
+        m_offsets.erase(m_offsets.begin(), m_offsets.begin() + kTrimLogs);
+        for (float &offset : m_offsets)
+            offset -= removedHeight;
+
+        m_trimmedHeight += removedHeight;
+    }
+
+    void Console::MeasureLogs(float wrapWidth)
+    {
+        ImFont *font = ImGui::GetFont();
+        const float fontSize = ImGui::GetFontSize();
+        const bool layoutChanged = wrapWidth != m_layoutWidth ||
+                                   font != m_layoutFont ||
+                                   fontSize != m_layoutFontSize;
+        if (layoutChanged)
+        {
+            m_offsets.clear();
+            m_layoutWidth = wrapWidth;
+            m_layoutFont = font;
+            m_layoutFontSize = fontSize;
+        }
+
+        if (m_offsets.empty())
+            m_offsets.push_back(0.0f);
+
+        // ItemSize truncates each line advance; truncate the same way so offsets match the drawn layout
+        for (size_t i = m_offsets.size() - 1; i < m_logs.size(); i++)
+        {
+            const float height = ImGui::CalcTextSize(m_logs[i].text.c_str(), nullptr, false, wrapWidth).y;
+            m_offsets.push_back(m_offsets.back() + ImTrunc(height));
+        }
     }
 
     void Console::AddLog(LogType type, const char *fmt, ...)
@@ -22,7 +75,10 @@ namespace pe
         buf[IM_ARRAYSIZE(buf) - 1] = 0;
         va_end(args);
 
+        std::lock_guard<std::mutex> lock(m_mutex);
         m_logs.push_back({std::string(buf), type});
+        if (m_logs.size() > kMaxLogs)
+            TrimLogs();
 
         if (type == LogType::Warn)
             ++m_warnCount;
@@ -76,6 +132,14 @@ namespace pe
             ImGui::LogToClipboard();
 
         ImGui::Separator();
+
+        std::lock_guard<std::mutex> lock(m_mutex);
+
+        // Keep the same entries in view after TrimLogs removed lines above them
+        if (m_trimmedHeight > 0.0f && !m_filter.IsActive())
+            ImGui::SetNextWindowScroll(ImVec2(-1.0f, std::max(0.0f, m_scrollY - m_trimmedHeight)));
+        m_trimmedHeight = 0.0f;
+
         ImGui::BeginChild("scrolling", ImVec2(0, 0), false, 0);
 
         if (copy)
@@ -122,16 +186,25 @@ namespace pe
         }
         else
         {
-            ImGuiListClipper clipper;
-            clipper.Begin((int)m_logs.size());
-            while (clipper.Step())
-            {
-                for (int i = clipper.DisplayStart; i < clipper.DisplayEnd; i++)
-                {
-                    draw_log(m_logs[i]);
-                }
-            }
-            clipper.End();
+            // ImGuiListClipper assumes equal heights; wrapped entries differ, so clip by measured offsets
+            MeasureLogs(ImGui::CalcWrapWidthForPos(ImGui::GetCursorScreenPos(), 0.0f));
+
+            const float viewTop = ImGui::GetScrollY() - ImGui::GetCursorPosY();
+            const float viewBottom = viewTop + ImGui::GetWindowHeight();
+            const auto firstIt = std::upper_bound(m_offsets.begin(), m_offsets.end(), viewTop);
+            const size_t first = firstIt == m_offsets.begin() ? 0 : size_t(firstIt - m_offsets.begin()) - 1;
+            const auto endIt = std::lower_bound(firstIt, m_offsets.end(), viewBottom);
+            const size_t end = std::min(m_logs.size(), size_t(endIt - m_offsets.begin()));
+
+            if (m_offsets[first] > 0.0f)
+                ImGui::Dummy(ImVec2(0.0f, m_offsets[first]));
+
+            for (size_t i = first; i < end; i++)
+                draw_log(m_logs[i]);
+
+            const float tailHeight = m_offsets.back() - m_offsets[end];
+            if (tailHeight > 0.0f)
+                ImGui::Dummy(ImVec2(0.0f, tailHeight));
         }
 
         ImGui::PopStyleVar();
@@ -139,6 +212,7 @@ namespace pe
         if (m_scrollToBottom && m_autoScroll)
             ImGui::SetScrollHereY(1.0f);
         m_scrollToBottom = false;
+        m_scrollY = ImGui::GetScrollY();
 
         ImGui::EndChild();
         ImGui::End();
