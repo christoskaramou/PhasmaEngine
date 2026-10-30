@@ -681,6 +681,30 @@ namespace
         return false;
     }
 
+    // Vertex, index and indirect buffers are read outside bind groups, so each use
+    // records its own barrier: pending until the scope opens, or by suspending it.
+    void EmitInputBufferBarrier(WGPURenderPassEncoder rpe, WGPUBuffer buffer)
+    {
+        std::vector<pe::BufferBarrierInfo> barriers;
+        AppendBufferUsageBarrier(buffer, static_cast<uint8_t>(pwgpu::BufferUsageKind::Input), barriers);
+        if (barriers.empty())
+            return;
+
+        // Input access is read-only, so an unchanged state needs no barrier.
+        const pe::BufferTrackInfo &cur = buffer->peBuffer->GetTrackInfo();
+        const bool sameState = cur.stageMask == barriers[0].stageMask &&
+                               cur.accessMask == barriers[0].accessMask;
+        if (sameState)
+            return;
+
+        // ponytail: as in setBindGroup, an active occlusion query pins the scope.
+        if (rpe->occlusionQueryActive)
+            return;
+
+        SuspendRendering(rpe);
+        rpe->cmd->BufferBarriers(barriers);
+    }
+
     void CollectBindGroupBarriers(WGPURenderPassEncoder rpe,
                                   std::vector<pe::ImageBarrierInfo> &imageBarriers,
                                   std::vector<pe::BufferBarrierInfo> &bufferBarriers)
@@ -698,6 +722,8 @@ namespace
             if (!bg || bg->invalid)
                 continue;
 
+            // Still outside the rendering scope: zero what the pass would read uninitialized.
+            LazyInitBindGroupTextures(rpe->cmd, bg);
             AppendBindGroupBarriers(bg, imageBarriers, bufferBarriers);
         }
     }
@@ -969,13 +995,16 @@ extern "C"
         // batch; emit theirs now, outside the scope.
         // ponytail: a query begun in this scope must end in it, so a bind while an
         // occlusion query is active keeps the scope and skips the barrier.
-        if (group && rpe->bindGroupBarriersEmitted && !rpe->occlusionQueryActive &&
-            BindGroupNeedsBarriers(group))
+        const bool groupNeedsWork = group &&
+                                    (BindGroupNeedsBarriers(group) ||
+                                     BindGroupHasUninitializedTextures(group));
+        if (groupNeedsWork && rpe->bindGroupBarriersEmitted && !rpe->occlusionQueryActive)
         {
             std::vector<pe::ImageBarrierInfo> imageBarriers;
             std::vector<pe::BufferBarrierInfo> bufferBarriers;
             AppendBindGroupBarriers(group, imageBarriers, bufferBarriers);
             SuspendRendering(rpe);
+            LazyInitBindGroupTextures(rpe->cmd, group);
             if (!bufferBarriers.empty())
                 rpe->cmd->BufferBarriers(bufferBarriers);
             if (!imageBarriers.empty())
@@ -1081,6 +1110,7 @@ extern "C"
             return;
         }
 
+        EmitInputBufferBarrier(rpe, buffer);
         if (rpe->pipeline &&
             slot < rpe->pipeline->vertexBufferLayouts.size() &&
             rpe->pipeline->vertexBufferLayouts[slot].used)
@@ -1166,6 +1196,7 @@ extern "C"
             return;
         }
 
+        EmitInputBufferBarrier(rpe, buffer);
         pwgpu::BindWebGPUIndexBuffer(
             rpe->cmd, buffer->peBuffer, static_cast<size_t>(offset), pwgpu::ToPeIndexType(format),
             &rpe->bindingCache);
@@ -1322,6 +1353,7 @@ extern "C"
         }
 
         rpe->drawCount++;
+        EmitInputBufferBarrier(rpe, buffer);
         OpenRenderingIfNeeded(rpe);
         rpe->cmd->DrawIndirect(buffer->peBuffer, static_cast<size_t>(offset), 1, PE_DRAW_INDIRECT_COMMAND_SIZE);
         wgpuBufferAddRef(buffer);
@@ -1416,6 +1448,7 @@ extern "C"
         }
 
         rpe->drawCount++;
+        EmitInputBufferBarrier(rpe, buffer);
         OpenRenderingIfNeeded(rpe);
         rpe->cmd->DrawIndexedIndirect(buffer->peBuffer, static_cast<size_t>(offset), 1,
                                       PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
@@ -1445,6 +1478,7 @@ extern "C"
         }
 
         rpe->cmd->SetViewport(x, y, width, height, minDepth, maxDepth);
+        rpe->dynamicStateChanged = true;
     }
 
     void wgpuRenderPassEncoderSetScissorRect(WGPURenderPassEncoder rpe,
@@ -1461,6 +1495,7 @@ extern "C"
         }
 
         rpe->cmd->SetScissor(static_cast<int32_t>(x), static_cast<int32_t>(y), width, height);
+        rpe->dynamicStateChanged = true;
     }
 
     void wgpuRenderPassEncoderSetBlendConstant(WGPURenderPassEncoder rpe, WGPUColor const *color)
@@ -1473,6 +1508,7 @@ extern "C"
         float constants[4] = {static_cast<float>(color->r), static_cast<float>(color->g),
                               static_cast<float>(color->b), static_cast<float>(color->a)};
         rpe->cmd->SetBlendConstants(constants);
+        rpe->dynamicStateChanged = true;
     }
 
     void wgpuRenderPassEncoderSetStencilReference(WGPURenderPassEncoder rpe, uint32_t reference)
@@ -1481,6 +1517,7 @@ extern "C"
             return;
 
         rpe->cmd->SetStencilReference(reference & kStencilReferenceMask);
+        rpe->dynamicStateChanged = true;
     }
 
     void wgpuRenderPassEncoderBeginOcclusionQuery(WGPURenderPassEncoder rpe, uint32_t queryIndex)
@@ -1634,8 +1671,11 @@ extern "C"
             }
         }
 
-        bool canUseVulkanNativeBundles =
-            pe::GetRHI().GetApi() == PE_GRAPHICS_API_VULKAN && !rpe->renderingActive;
+        // ponytail: a native bundle bakes the default viewport/scissor/blend/stencil
+        // state, so any dynamic-state change replays bundles inline; key the native
+        // cache on that state if inline replay shows up in profiles.
+        bool canUseVulkanNativeBundles = pe::GetRHI().GetApi() == PE_GRAPHICS_API_VULKAN &&
+                                         !rpe->renderingActive && !rpe->dynamicStateChanged;
         if (canUseVulkanNativeBundles)
         {
             for (size_t i = 0; i < bundleCount; ++i)

@@ -1,6 +1,7 @@
 #include "BindGroup.h"
 #include "DescriptorBuffer.h"
 #include "Device.h"
+#include "Texture.h"
 #include "Utils.h"
 #include "API/Image.h"
 
@@ -108,6 +109,53 @@ bool BglGroupEquivalent(const WGPUBindGroupLayoutImpl *a, const WGPUBindGroupLay
         }
     }
     return true;
+}
+
+namespace
+{
+    // Fast path for the common case, so per-draw callers skip the per-subresource walk.
+    bool TextureFullyInitialized(WGPUTextureImpl *tex)
+    {
+        std::lock_guard<std::mutex> lk(tex->stateMutex);
+        return tex->uninitializedSubresources.empty();
+    }
+} // namespace
+
+bool BindGroupHasUninitializedTextures(const WGPUBindGroupImpl *bg)
+{
+    for (const auto &use : bg->textureUses)
+    {
+        const WGPUTextureViewImpl *view = use.view;
+        if (!view || !view->texture || TextureFullyInitialized(view->texture))
+            continue;
+
+        if (pwgpu::RangeHasAnyUninitialized(view->texture,
+                                            view->baseMipLevel,
+                                            view->mipLevelCount,
+                                            view->baseArrayLayer,
+                                            view->arrayLayerCount,
+                                            pwgpu::AspectsForView(view->texture->format, view->aspect)))
+            return true;
+    }
+    return false;
+}
+
+void LazyInitBindGroupTextures(pe::CommandBuffer *cmd, const WGPUBindGroupImpl *bg)
+{
+    for (const auto &use : bg->textureUses)
+    {
+        const WGPUTextureViewImpl *view = use.view;
+        if (!view || !view->texture || TextureFullyInitialized(view->texture))
+            continue;
+
+        pwgpu::LazyInitViewRangeOnEncoder(cmd,
+                                          view->texture,
+                                          view->baseMipLevel,
+                                          view->mipLevelCount,
+                                          view->baseArrayLayer,
+                                          view->arrayLayerCount,
+                                          pwgpu::AspectsForView(view->texture->format, view->aspect));
+    }
 }
 
 extern "C"

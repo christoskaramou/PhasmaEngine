@@ -123,6 +123,8 @@ namespace
             if (!bg || bg->invalid)
                 return;
 
+            LazyInitBindGroupTextures(cpe->cmd, bg);
+
             for (const auto &use : bg->textureUses)
             {
                 if (!use.view || !use.view->texture || !use.view->texture->image)

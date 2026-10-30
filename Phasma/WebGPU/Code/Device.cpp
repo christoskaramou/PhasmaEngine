@@ -377,6 +377,62 @@ namespace
         return false;
     }
 
+    // First WGSL `enable` extension whose device feature is missing, or nullptr.
+    // naga accepts every extension it knows, whatever the device supports.
+    const char *MissingWgslExtensionFeature(WGPUDeviceImpl *device, const std::string &source)
+    {
+        static constexpr std::pair<std::string_view, WGPUFeatureName> kExtensions[] = {
+            {"f16", WGPUFeatureName_ShaderF16},
+            {"clip_distances", WGPUFeatureName_ClipDistances},
+            {"dual_source_blending", WGPUFeatureName_DualSourceBlending},
+            {"subgroups", WGPUFeatureName_Subgroups},
+            {"primitive_index", WGPUFeatureName_PrimitiveIndex},
+        };
+
+        auto isIdentChar = [](char c)
+        {
+            return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+        };
+
+        for (size_t pos = source.find("enable"); pos != std::string::npos; pos = source.find("enable", pos))
+        {
+            const size_t start = pos;
+            pos += 6;
+
+            // A directive starts the module or follows another directive's `;`.
+            const size_t before = start == 0 ? std::string::npos : source.find_last_not_of(" \t\r\n", start - 1);
+            const bool startsStatement = before == std::string::npos || source[before] == ';' || source[before] == '/';
+            const bool wordBoundary = (start == 0 || !isIdentChar(source[start - 1])) &&
+                                      (pos >= source.size() || !isIdentChar(source[pos]));
+            if (!startsStatement || !wordBoundary)
+                continue;
+
+            const size_t end = source.find(';', pos);
+            if (end == std::string::npos)
+                break;
+
+            std::string_view list(source.data() + pos, end - pos);
+            while (!list.empty())
+            {
+                const size_t comma = list.find(',');
+                std::string_view name = list.substr(0, comma);
+                list = comma == std::string_view::npos ? std::string_view{} : list.substr(comma + 1);
+
+                const size_t first = name.find_first_not_of(" \t\r\n");
+                if (first == std::string_view::npos)
+                    continue;
+                name = name.substr(first, name.find_last_not_of(" \t\r\n") - first + 1);
+
+                for (const auto &[extension, feature] : kExtensions)
+                {
+                    if (name == extension && !DeviceHasFeature(device, feature))
+                        return extension.data();
+                }
+            }
+        }
+        return nullptr;
+    }
+
     bool BindGroupLayoutUsableOnDevice(const WGPUBindGroupLayoutImpl *layout,
                                        const WGPUDeviceImpl *device)
     {
@@ -3127,6 +3183,20 @@ extern "C"
         if (wgslDesc)
         {
 #if defined(PE_WEBGPU_WGSL) && PE_WEBGPU_WGSL
+            if (const char *extension = MissingWgslExtensionFeature(device, pwgpu::ToString(wgslDesc->code)))
+            {
+                WGPUCompilationMessageStorage msg;
+                msg.type = WGPUCompilationMessageType_Error;
+                msg.message = std::string("enable ") + extension +
+                              ": the device was created without the feature this extension requires";
+                sm->compilationMessages.push_back(std::move(msg));
+                device->reportError(WGPUErrorType_Validation,
+                                    pwgpu::ToStringView("wgpuDeviceCreateShaderModule: "
+                                                        "WGSL extension not enabled on the device"));
+                sm->invalid = true;
+                return sm;
+            }
+
             auto compiled = pwgpu::Wgsl::Compile(wgslDesc->code);
             const uint32_t *spirv = compiled.spirv();
             const size_t spirvWordCount = compiled.spirvWordCount();

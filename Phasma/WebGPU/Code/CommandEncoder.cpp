@@ -229,6 +229,19 @@ namespace
         return copySize.depthOrArrayLayers == fullDepth;
     }
 
+    // A 2D copy spanning the mip's x/y extent overwrites every layer it touches, so
+    // none of them needs the lazy zero-clear (a 3D copy must cover the whole mip).
+    bool CopyWritesWholeLayers(const WGPUTextureImpl *tex, uint32_t mipLevel,
+                               const WGPUOrigin3D &origin, const WGPUExtent3D &copySize)
+    {
+        if (tex->dimension == WGPUTextureDimension_3D)
+            return IsFullMipRegion(tex, mipLevel, origin, copySize);
+
+        const WGPUExtent3D mip = MipExtent(tex, mipLevel);
+        return origin.x == 0 && origin.y == 0 &&
+               copySize.width == mip.width && copySize.height == mip.height;
+    }
+
     ::PeFormat ToPeTextureViewFormat(WGPUTextureViewImpl *view)
     {
         if (!view || !view->texture || !view->texture->image ||
@@ -1220,7 +1233,10 @@ extern "C"
                 rt->refCount.fetch_add(1, std::memory_order_relaxed);
                 rpe->retainedViews.push_back(rt);
 
-                att.resolveAverage = pwgpu::IsBlendableFormat(view->format);
+                // Vulkan averages every non-integer format; integer ones take sample 0.
+                const pwgpu::ColorSampleType sampleType = pwgpu::GetColorFormatSampleType(view->format);
+                att.resolveAverage = sampleType != pwgpu::ColorSampleType::Uint &&
+                                     sampleType != pwgpu::ColorSampleType::Sint;
                 att.resolveTextureView = rt;
                 if (!dx12Backend)
                     att.resolveImageView =
@@ -1409,6 +1425,15 @@ extern "C"
             else if (ca.storeOp == WGPUStoreOp_Discard)
                 pwgpu::MarkRangeUninitialized(view->texture, view->baseMipLevel, 1,
                                               baseLayer, layerCount, aspects);
+
+            // The resolve writes the whole target subresource whatever the storeOp,
+            // so a later read must not lazy-clear it.
+            if (ca.resolveTarget && ca.resolveTarget->texture)
+            {
+                auto *rt = ca.resolveTarget;
+                pwgpu::MarkRangeInitialized(rt->texture, rt->baseMipLevel, 1,
+                                            rt->baseArrayLayer, rt->arrayLayerCount, aspects);
+            }
         }
 
         if (dsa && dsa->view && dsa->view->texture && dsa->view->texture->image)
@@ -1422,6 +1447,13 @@ extern "C"
             uint32_t lC = dsView->arrayLayerCount;
             uint32_t bM = dsView->baseMipLevel;
             uint32_t mC = dsView->mipLevelCount;
+
+            // A read-only aspect keeps loadOp=Load, so an uninitialized one is zeroed on
+            // the encoder before the pass instead of through a Clear load op.
+            if (hasDepth && dsa->depthReadOnly)
+                pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, dsView->texture, bM, mC, bL, lC, dAspect);
+            if (hasStencil && dsa->stencilReadOnly)
+                pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, dsView->texture, bM, mC, bL, lC, sAspect);
 
             if (hasDepth)
             {
@@ -1999,7 +2031,7 @@ extern "C"
         // §23.x lazy initialization: partial writes to an uninitialized subresource must
         // first zero-clear it so unwritten texels read as zero. Full-coverage writes
         // skip the clear because the copy itself overwrites everything.
-        const bool dstFullCoverage = IsFullMipRegion(dst->texture, dst->mipLevel, dst->origin, *copySize);
+        const bool dstFullCoverage = CopyWritesWholeLayers(dst->texture, dst->mipLevel, dst->origin, *copySize);
         auto dstAspects = pwgpu::AspectsForView(dst->texture->format, dst->aspect);
         const uint32_t dstBaseLayer = (dst->texture->dimension == WGPUTextureDimension_3D) ? 0u : dst->origin.z;
         const uint32_t dstLayerCount = (dst->texture->dimension == WGPUTextureDimension_3D) ? 1u : copySize->depthOrArrayLayers;
@@ -2430,7 +2462,7 @@ extern "C"
         const uint32_t dstBaseLayer = dst3D ? 0u : dst->origin.z;
         const uint32_t dstLayerCount = dst3D ? 1u : copySize->depthOrArrayLayers;
         auto dstAspects = pwgpu::AspectsForView(dst->texture->format, dst->aspect);
-        if (!dstFullCoverage &&
+        if (!CopyWritesWholeLayers(dst->texture, dst->mipLevel, dst->origin, *copySize) &&
             pwgpu::RangeHasAnyUninitialized(dst->texture, dst->mipLevel, 1, dstBaseLayer, dstLayerCount, dstAspects))
         {
             pwgpu::LazyInitViewRangeOnEncoder(enc->cmd, dst->texture, dst->mipLevel, 1,

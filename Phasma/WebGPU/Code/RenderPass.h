@@ -66,6 +66,9 @@ struct WGPURenderPassEncoderImpl
     bool renderingActiveUsesSecondaryContents = false;
     bool renderingScopeWasOpened = false;
     bool bindingStateInvalidated = false;
+    // Set by setViewport/setScissorRect/setBlendConstant/setStencilReference. Native
+    // Vulkan bundles bake the pass defaults, so a changed state replays bundles inline.
+    bool dynamicStateChanged = false;
 
     // beginRendering is deferred until the first draw-scope command so bind-group
     // barriers (including layout transitions) can be emitted outside the Vulkan

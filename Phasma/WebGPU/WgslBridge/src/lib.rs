@@ -2836,17 +2836,181 @@ fn validate_align_attribute_source(source: &str) -> Vec<WgslMessage> {
     errors
 }
 
-fn lower_struct_size5_align16_source(source: &str) -> String {
-    if !source.contains("@align(16)") || !source.contains("@size(5)") {
+struct WgslStructMember {
+    explicit_align: Option<u32>,
+    ty: String,
+    // Byte offset in the source where an `@align(n) ` can be inserted (the member name).
+    name_start: usize,
+}
+
+// Members of every `struct Name { ... }` in the source, by struct name.
+fn collect_wgsl_struct_members(source: &str) -> HashMap<String, Vec<WgslStructMember>> {
+    let bytes = source.as_bytes();
+    let mut structs = HashMap::new();
+    let mut search = 0usize;
+    while let Some(found) = source[search..].find("struct") {
+        let kw = search + found;
+        search = kw + 6;
+        let boundary_before = kw == 0 || !is_ident_char(bytes[kw - 1]);
+        if !boundary_before || bytes.get(kw + 6).is_some_and(|b| is_ident_char(*b)) {
+            continue;
+        }
+        let Some(open) = source[kw..].find('{').map(|p| kw + p) else {
+            break;
+        };
+        let name = source[kw + 6..open].trim();
+        if name.is_empty() || !name.bytes().all(is_ident_char) {
+            continue;
+        }
+
+        let mut depth = 0i32;
+        let mut members = Vec::new();
+        let mut member_start = open + 1;
+        let mut close = None;
+        for (j, b) in bytes.iter().enumerate().skip(open + 1) {
+            let at_member_end = depth == 0 && (*b == b',' || *b == b'}');
+            if at_member_end {
+                if let Some(member) = parse_wgsl_struct_member(source, member_start, j) {
+                    members.push(member);
+                }
+                member_start = j + 1;
+                if *b == b'}' {
+                    close = Some(j);
+                    break;
+                }
+                continue;
+            }
+            match b {
+                b'(' | b'<' | b'[' => depth += 1,
+                b')' | b'>' | b']' => depth -= 1,
+                _ => {}
+            }
+        }
+        let Some(close) = close else {
+            break;
+        };
+        structs.insert(name.to_string(), members);
+        search = close + 1;
+    }
+    structs
+}
+
+fn parse_wgsl_struct_member(source: &str, start: usize, end: usize) -> Option<WgslStructMember> {
+    let text = &source[start..end];
+    let colon = text.find(':')?;
+    let ty = text[colon + 1..].trim().to_string();
+    let head = &text[..colon];
+    let name = head
+        .trim_end()
+        .rsplit(|c: char| c.is_whitespace() || c == ')')
+        .next()?;
+    if name.is_empty() || !name.bytes().all(is_ident_char) {
+        return None;
+    }
+
+    let name_start = start + head.trim_end().len() - name.len();
+    let explicit_align = head.find("@align(").and_then(|p| {
+        let args = &head[p + 7..];
+        args[..args.find(')')?].trim().parse::<u32>().ok()
+    });
+    Some(WgslStructMember {
+        explicit_align,
+        ty,
+        name_start,
+    })
+}
+
+// AlignOf for a WGSL type spelling; `honor_member_align` false reproduces naga 29's
+// layouter, which ignores member @align when a struct is nested in another struct.
+fn wgsl_type_alignment(
+    ty: &str,
+    structs: &HashMap<String, Vec<WgslStructMember>>,
+    honor_member_align: bool,
+    depth: u32,
+) -> Option<u32> {
+    if depth > 32 {
+        return None;
+    }
+    let t: String = ty.chars().filter(|c| !c.is_whitespace()).collect();
+    let scalar = |s: &str| match s {
+        "f16" | "h" => Some(2),
+        "f32" | "i32" | "u32" | "bool" | "f" | "i" | "u" => Some(4),
+        _ => None,
+    };
+    let generic = |prefix: &str| t.strip_prefix(prefix).and_then(|r| r.strip_suffix('>'));
+
+    if let Some(a) = scalar(&t) {
+        return Some(a);
+    }
+    if t.starts_with("atomic<") {
+        return Some(4);
+    }
+    if let Some(inner) = generic("array<") {
+        let element = split_top_level_type_args(inner).into_iter().next()?;
+        return wgsl_type_alignment(&element, structs, honor_member_align, depth + 1);
+    }
+    for (prefix, n) in [("vec2", 2), ("vec3", 4), ("vec4", 4)] {
+        if let Some(rest) = t.strip_prefix(prefix) {
+            let elem = rest
+                .strip_prefix('<')
+                .and_then(|r| r.strip_suffix('>'))
+                .unwrap_or(rest);
+            return scalar(elem).map(|a| a * n);
+        }
+    }
+    if let Some(rest) = t.strip_prefix("mat") {
+        let rows = rest.as_bytes().get(2).copied()?;
+        let elem = rest.get(3..)?.trim_start_matches('<').trim_end_matches('>');
+        let n = if rows == b'2' { 2 } else { 4 };
+        return scalar(elem).map(|a| a * n);
+    }
+
+    let members = structs.get(&t)?;
+    members.iter().try_fold(1u32, |acc, m| {
+        let natural = wgsl_type_alignment(&m.ty, structs, honor_member_align, depth + 1)?;
+        let align = match m.explicit_align {
+            Some(explicit) if honor_member_align => explicit.max(natural),
+            _ => natural,
+        };
+        Some(acc.max(align))
+    })
+}
+
+// naga 29 places a struct-typed member (or array of one) at the struct's natural
+// alignment, ignoring `@align` on the inner struct's members (WGSL AlignOf includes
+// it). Spell the true alignment out as `@align(n)` on each such outer member.
+fn propagate_struct_align_source(source: &str) -> String {
+    if !source.contains("@align(") {
         return source.to_string();
     }
-    // Naga 29 does not propagate the inner member's explicit 16-byte
-    // alignment to the containing struct type for the CTS layout case below.
-    // Add the equivalent alignment at the only use site in that exact shader.
-    source.replace(
-        "struct S { x : u32, y : T }",
-        "struct S { x : u32, @align(16) y : T }",
-    )
+    let structs = collect_wgsl_struct_members(source);
+
+    let mut inserts: Vec<(usize, u32)> = Vec::new();
+    for members in structs.values() {
+        for member in members.iter().filter(|m| m.explicit_align.is_none()) {
+            let truth = wgsl_type_alignment(&member.ty, &structs, true, 0);
+            let naga = wgsl_type_alignment(&member.ty, &structs, false, 0);
+            if let (Some(truth), Some(naga)) = (truth, naga) {
+                if truth > naga {
+                    inserts.push((member.name_start, truth));
+                }
+            }
+        }
+    }
+    if inserts.is_empty() {
+        return source.to_string();
+    }
+
+    inserts.sort_unstable();
+    let mut out = String::with_capacity(source.len() + inserts.len() * 12);
+    let mut copied = 0usize;
+    for (pos, align) in inserts {
+        out.push_str(&source[copied..pos]);
+        out.push_str(&format!("@align({align}) "));
+        copied = pos;
+    }
+    out.push_str(&source[copied..]);
+    out
 }
 
 fn location_type_and_flat_after_attr<'a>(
@@ -3363,6 +3527,100 @@ fn body_has_break_if(body: &str) -> bool {
         pos = break_pos + "break".len();
     }
     false
+}
+
+// Renames identifier `name` to `renamed` in `text` from `from` on, skipping member
+// accesses (`.name`).
+fn rename_identifier_from(text: &str, name: &str, renamed: &str, from: usize) -> String {
+    let bytes = text.as_bytes();
+    let mut out = String::with_capacity(text.len() + 16);
+    let mut copied = 0usize;
+    let mut pos = from;
+    while let Some(found) = text[pos..].find(name) {
+        let at = pos + found;
+        let end = at + name.len();
+        pos = end;
+        let starts_ident = at == 0 || !is_ident_char(bytes[at - 1]);
+        let ends_ident = end == bytes.len() || !is_ident_char(bytes[end]);
+        let member = text[..at].trim_end().ends_with('.');
+        if starts_ident && ends_ident && !member {
+            out.push_str(&text[copied..at]);
+            out.push_str(renamed);
+            copied = end;
+        }
+    }
+    out.push_str(&text[copied..]);
+    out
+}
+
+// WGSL scopes a loop's `continuing` block inside the loop body, so it may shadow a
+// body declaration; naga 29 reports that as a redefinition. Rename such
+// `continuing` declarations (and their later uses there) to a fresh name.
+fn rename_continuing_shadows_source(source: &str) -> String {
+    if !source.contains("continuing") {
+        return source.to_string();
+    }
+
+    let mut out = source.to_string();
+    let mut pos = 0usize;
+    while let Some(loop_pos) = find_keyword_from(&out, "loop", pos) {
+        pos = loop_pos + 4;
+        let Some(open) = out[pos..].find('{').map(|p| pos + p) else {
+            break;
+        };
+        if !out[pos..open].trim().is_empty() {
+            continue;
+        }
+        let Some(close) = find_matching_delimiter(&out, open, b'{', b'}') else {
+            break;
+        };
+        let body = &out[open + 1..close];
+        let Some(cont) = find_top_level_keyword(body, "continuing") else {
+            continue;
+        };
+        let Some(cont_open) = body[cont..].find('{').map(|p| cont + p) else {
+            continue;
+        };
+        let Some(cont_close) = find_matching_delimiter(body, cont_open, b'{', b'}') else {
+            continue;
+        };
+
+        let body_names: HashSet<&str> = body[..cont]
+            .split(';')
+            .flat_map(|stmt| {
+                ["var", "let", "const"]
+                    .into_iter()
+                    .filter_map(move |kw| declaration_name_after_keyword(stmt, kw))
+            })
+            .collect();
+        let original = &body[cont_open + 1..cont_close];
+        let mut shadows: Vec<(usize, &str)> = Vec::new();
+        let mut offset = 0usize;
+        for stmt in original.split_inclusive(';') {
+            let decl = ["var", "let", "const"]
+                .into_iter()
+                .find_map(|kw| declaration_name_after_keyword(stmt, kw));
+            if let Some(name) = decl.filter(|n| body_names.contains(n)) {
+                shadows.push((offset, name));
+            }
+            offset += stmt.len();
+        }
+        if shadows.is_empty() {
+            continue;
+        }
+
+        // Last first, so each earlier statement offset still points into unchanged text.
+        let mut continuing = original.to_string();
+        for (offset, name) in shadows.into_iter().rev() {
+            let renamed = format!("{name}_pe_continuing");
+            continuing = rename_identifier_from(&continuing, name, &renamed, offset);
+        }
+
+        let start = open + 1 + cont_open + 1;
+        let end = open + 1 + cont_close;
+        out.replace_range(start..end, &continuing);
+    }
+    out
 }
 
 fn split_loop_continuing<'a>(body: &'a str) -> (&'a str, Option<&'a str>) {
@@ -4532,14 +4790,46 @@ fn format_bool_const_value(value: &BoolConstValue) -> String {
     format!("vec{}<bool>({components})", value.values.len())
 }
 
+// Folds `a & b` / `a | b` on constant bools, recursing into call arguments such as
+// `array((true & false), ...)`; None when nothing in `expr` folds.
+fn fold_bool_bitwise_expr(expr: &str, known: &HashMap<String, BoolConstValue>) -> Option<String> {
+    let inner = trim_outer_parens(expr).trim();
+    if let Some((op_pos, op)) = find_top_level_bool_bitwise_op(inner) {
+        let left = parse_bool_const_value(&inner[..op_pos], known)?;
+        let right = parse_bool_const_value(&inner[op_pos + 1..], known)?;
+        if left.values.len() != right.values.len() {
+            return None;
+        }
+
+        let values = left
+            .values
+            .iter()
+            .zip(right.values.iter())
+            .map(|(a, b)| if op == '&' { *a && *b } else { *a || *b })
+            .collect::<Vec<_>>();
+        return Some(format_bool_const_value(&BoolConstValue { values }));
+    }
+
+    let (callee, args) = parse_full_call(inner)?;
+    let mut changed = false;
+    let folded = args
+        .iter()
+        .map(|arg| match fold_bool_bitwise_expr(arg, known) {
+            Some(value) => {
+                changed = true;
+                value
+            }
+            None => arg.clone(),
+        })
+        .collect::<Vec<_>>();
+    changed.then(|| format!("{callee}({})", folded.join(", ")))
+}
+
 fn lower_bool_bitwise_const_source(source: &str) -> String {
     if !source.contains('&') && !source.contains('|') {
         return source.to_string();
     }
     let known = collect_bool_const_values(source);
-    if known.is_empty() {
-        return source.to_string();
-    }
     let mut out = String::with_capacity(source.len());
     let mut changed = false;
     for part in source.split_inclusive(';') {
@@ -4552,32 +4842,13 @@ fn lower_bool_bitwise_const_source(source: &str) -> String {
             out.push_str(part);
             continue;
         };
-        let rhs = &stmt[eq + 1..];
-        let Some((op_pos, op)) = find_top_level_bool_bitwise_op(rhs) else {
+        let Some(folded) = fold_bool_bitwise_expr(&stmt[eq + 1..], &known) else {
             out.push_str(part);
             continue;
         };
-        let Some(left) = parse_bool_const_value(&rhs[..op_pos], &known) else {
-            out.push_str(part);
-            continue;
-        };
-        let Some(right) = parse_bool_const_value(&rhs[op_pos + 1..], &known) else {
-            out.push_str(part);
-            continue;
-        };
-        if left.values.len() != right.values.len() {
-            out.push_str(part);
-            continue;
-        }
-        let values = left
-            .values
-            .iter()
-            .zip(right.values.iter())
-            .map(|(a, b)| if op == '&' { *a && *b } else { *a || *b })
-            .collect::<Vec<_>>();
         out.push_str(&stmt[..eq + 1]);
         out.push(' ');
-        out.push_str(&format_bool_const_value(&BoolConstValue { values }));
+        out.push_str(&folded);
         out.push_str(suffix);
         changed = true;
     }
@@ -4586,6 +4857,182 @@ fn lower_bool_bitwise_const_source(source: &str) -> String {
     } else {
         source.to_string()
     }
+}
+
+// Components of an AbstractInt literal or vecN of them (no suffix).
+fn parse_abstract_int_components(expr: &str) -> Option<Vec<i64>> {
+    let s = trim_outer_parens(expr).trim();
+    let scalar = |text: &str| {
+        let t = trim_outer_parens(text).trim();
+        if t.ends_with('i') {
+            return None;
+        }
+        parse_wgsl_i64_like(t)
+    };
+    if let Some(v) = scalar(s) {
+        return Some(vec![v]);
+    }
+
+    let (callee, args) = parse_full_call(s)?;
+    let width = constructor_vector_width(&callee)?;
+    let values = args.iter().map(|a| scalar(a)).collect::<Option<Vec<_>>>()?;
+    match values.len() {
+        1 => Some(vec![values[0]; width]),
+        n if n == width => Some(values),
+        _ => None,
+    }
+}
+
+// Components of a u32 literal (`64u`) or vecN of them.
+fn parse_u32_literal_components(expr: &str) -> Option<Vec<u32>> {
+    let s = trim_outer_parens(expr).trim();
+    let scalar = |text: &str| {
+        trim_outer_parens(text)
+            .trim()
+            .strip_suffix('u')?
+            .parse::<u32>()
+            .ok()
+    };
+    if let Some(v) = scalar(s) {
+        return Some(vec![v]);
+    }
+
+    let (callee, args) = parse_full_call(s)?;
+    let width = constructor_vector_width(&callee)?;
+    let values = args.iter().map(|a| scalar(a)).collect::<Option<Vec<_>>>()?;
+    match values.len() {
+        1 => Some(vec![values[0]; width]),
+        n if n == width => Some(values),
+        _ => None,
+    }
+}
+
+// WGSL AbstractInt shift; None for a left shift that drops a differing bit
+// (a shader-creation error naga reports itself).
+fn abstract_int_shift(value: i64, amount: u32, left: bool) -> Option<i64> {
+    if !left {
+        return Some(if amount >= 64 {
+            value >> 63
+        } else {
+            value >> amount
+        });
+    }
+    if amount >= 64 {
+        return (value == 0).then_some(0);
+    }
+
+    // The amount + 1 most significant bits must all match.
+    let top = value >> (63 - amount);
+    (top == 0 || top == -1).then_some(value << amount)
+}
+
+fn format_abstract_int(value: i64) -> String {
+    if value == i64::MIN {
+        "(-9223372036854775807 - 1)".to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+// naga 29 const-evaluates AbstractInt shifts by 64 or more wrongly: `x >> 64u` does
+// not sign-fill and `0 << 64u` reports overflow. Fold `(a) << (b)` / `(a) >> (b)`
+// with literal operands (scalar or vecN) whenever some component shifts by >= 64.
+fn lower_abstract_int_shift_source(source: &str) -> String {
+    if !source.contains("<<") && !source.contains(">>") {
+        return source.to_string();
+    }
+
+    let bytes = source.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut copied = 0usize;
+    let mut i = 0usize;
+    while i + 1 < bytes.len() {
+        let is_shift = (bytes[i] == b'<' && bytes[i + 1] == b'<')
+            || (bytes[i] == b'>' && bytes[i + 1] == b'>');
+        if !is_shift {
+            i += 1;
+            continue;
+        }
+        let left_shift = bytes[i] == b'<';
+        let op = i;
+        i += 2;
+
+        // Left operand: the parenthesized group that ends right before the operator.
+        let Some(left_close) = source[..op].trim_end().len().checked_sub(1) else {
+            continue;
+        };
+        if bytes[left_close] != b')' || left_close < copied {
+            continue;
+        }
+        let mut depth = 0i32;
+        let mut left_open = None;
+        for j in (copied..=left_close).rev() {
+            match bytes[j] {
+                b')' => depth += 1,
+                b'(' => {
+                    depth -= 1;
+                    if depth == 0 {
+                        left_open = Some(j);
+                        break;
+                    }
+                }
+                _ => {}
+            }
+        }
+        let Some(left_open) = left_open else {
+            continue;
+        };
+
+        // Right operand: the parenthesized group that starts right after it.
+        let right_open = op + 2 + (source[op + 2..].len() - source[op + 2..].trim_start().len());
+        if bytes.get(right_open) != Some(&b'(') {
+            continue;
+        }
+        let Some(right_close) = find_matching_paren(source, right_open) else {
+            continue;
+        };
+
+        let Some(values) = parse_abstract_int_components(&source[left_open + 1..left_close]) else {
+            continue;
+        };
+        let Some(amounts) = parse_u32_literal_components(&source[right_open + 1..right_close])
+        else {
+            continue;
+        };
+        if values.len() != amounts.len() || amounts.iter().all(|a| *a < 64) {
+            continue;
+        }
+        let Some(results) = values
+            .iter()
+            .zip(amounts.iter())
+            .map(|(v, a)| abstract_int_shift(*v, *a, left_shift))
+            .collect::<Option<Vec<_>>>()
+        else {
+            continue;
+        };
+
+        let folded = if results.len() == 1 {
+            format_abstract_int(results[0])
+        } else {
+            let components = results
+                .iter()
+                .map(|v| format_abstract_int(*v))
+                .collect::<Vec<_>>();
+            format!("vec{}({})", results.len(), components.join(", "))
+        };
+        out.push_str(&source[copied..left_open]);
+        out.push('(');
+        out.push_str(&folded);
+        out.push(')');
+        copied = right_close + 1;
+        i = copied;
+    }
+
+    if copied == 0 {
+        return source.to_string();
+    }
+    out.push_str(&source[copied..]);
+    out
 }
 
 fn collect_source_i32_values(
@@ -5320,6 +5767,31 @@ fn validate_derivative_uniformity_diagnostic_scopes(source: &str) -> Vec<WgslMes
 //
 // Replacement preserves byte length (and newlines) so naga error spans on any
 // unrelated diagnostic still point at the original line/column.
+// WGSL has `--` only as a postfix decrement statement, so `a--b` means `a - -b`;
+// naga tokenizes `--` greedily and rejects it. Split a `--` that is followed by the
+// start of an operand, which a decrement never is.
+fn split_minus_minus_source(source: &str) -> String {
+    if !source.contains("--") {
+        return source.to_string();
+    }
+
+    let bytes = source.as_bytes();
+    let mut out = String::with_capacity(source.len() + 8);
+    let mut copied = 0usize;
+    for i in 0..bytes.len().saturating_sub(2) {
+        let starts_pair =
+            bytes[i] == b'-' && bytes[i + 1] == b'-' && (i == 0 || bytes[i - 1] != b'-');
+        let next = bytes[i + 2];
+        if starts_pair && (next.is_ascii_alphanumeric() || next == b'_' || next == b'(') {
+            out.push_str(&source[copied..i]);
+            out.push_str("- -");
+            copied = i + 2;
+        }
+    }
+    out.push_str(&source[copied..]);
+    out
+}
+
 fn strip_diagnostic_directives(source: &str) -> StripResult {
     let bytes = source.as_bytes();
     let mut out: Vec<u8> = bytes.to_vec();
@@ -5976,7 +6448,10 @@ fn strip_workgroup_explicit_layout(words: &mut Vec<u32>) {
 
     // Vulkan forbids explicit layout decorations on Workgroup storage types.
     // Naga emits ArrayStride for WGSL workgroup arrays; remove those decorations
-    // only from types reachable from OpVariable(..., Workgroup).
+    // only from types reachable from OpVariable(..., Workgroup) and from no buffer.
+    // ponytail: a type a buffer shares (`wg = storage_array;`) keeps its layout,
+    // since stripping it breaks the buffer side; cloning the type chain and copying
+    // with OpCopyLogical would satisfy both.
     const OP_TYPE_VECTOR: u32 = 23;
     const OP_TYPE_MATRIX: u32 = 24;
     const OP_TYPE_ARRAY: u32 = 28;
@@ -5986,11 +6461,15 @@ fn strip_workgroup_explicit_layout(words: &mut Vec<u32>) {
     const OP_VARIABLE: u32 = 59;
     const OP_DECORATE: u32 = 71;
     const OP_MEMBER_DECORATE: u32 = 72;
+    const STORAGE_CLASS_UNIFORM: u32 = 2;
     const STORAGE_CLASS_WORKGROUP: u32 = 4;
+    const STORAGE_CLASS_PUSH_CONSTANT: u32 = 9;
+    const STORAGE_CLASS_STORAGE_BUFFER: u32 = 12;
 
     let mut ptr_pointee: HashMap<u32, u32> = HashMap::new();
     let mut type_children: HashMap<u32, Vec<u32>> = HashMap::new();
     let mut workgroup_ptr_types: Vec<u32> = Vec::new();
+    let mut buffer_ptr_types: Vec<u32> = Vec::new();
 
     let mut i = 5usize;
     while i < words.len() {
@@ -6033,9 +6512,13 @@ fn strip_workgroup_explicit_layout(words: &mut Vec<u32>) {
                     .or_default()
                     .push(words[i + 3]);
             }
-            OP_VARIABLE if word_count >= 4 && words[i + 3] == STORAGE_CLASS_WORKGROUP => {
-                workgroup_ptr_types.push(words[i + 1]);
-            }
+            OP_VARIABLE if word_count >= 4 => match words[i + 3] {
+                STORAGE_CLASS_WORKGROUP => workgroup_ptr_types.push(words[i + 1]),
+                STORAGE_CLASS_UNIFORM
+                | STORAGE_CLASS_PUSH_CONSTANT
+                | STORAGE_CLASS_STORAGE_BUFFER => buffer_ptr_types.push(words[i + 1]),
+                _ => {}
+            },
             _ => {}
         }
 
@@ -6048,6 +6531,13 @@ fn strip_workgroup_explicit_layout(words: &mut Vec<u32>) {
             collect_type_closure(*pointee, &type_children, &mut workgroup_types);
         }
     }
+    let mut buffer_types: HashSet<u32> = HashSet::new();
+    for ptr_type in buffer_ptr_types {
+        if let Some(pointee) = ptr_pointee.get(&ptr_type) {
+            collect_type_closure(*pointee, &type_children, &mut buffer_types);
+        }
+    }
+    workgroup_types.retain(|t| !buffer_types.contains(t));
     if workgroup_types.is_empty() {
         return;
     }
@@ -10250,16 +10740,6 @@ fn source_floats_fit_f16(values: &[f64]) -> bool {
         .all(|v| v.is_finite() && *v >= -65504.0 && *v <= 65504.0)
 }
 
-fn source_ints_fit_i8(values: &[u32]) -> bool {
-    values.iter().all(|v| {
-        i32::from_ne_bytes(v.to_ne_bytes()) >= -128 && i32::from_ne_bytes(v.to_ne_bytes()) <= 127
-    })
-}
-
-fn source_ints_fit_u8(values: &[u32]) -> bool {
-    values.iter().all(|v| *v <= 255)
-}
-
 fn format_u32_vector(width: usize, values: &[u32]) -> String {
     let components = values
         .iter()
@@ -10312,6 +10792,23 @@ fn f16_bits_to_f32(bits: u16) -> f32 {
     f32::from_bits(out)
 }
 
+// WGSL pack{2x16,4x8}{s,u}norm: floor(0.5 + scale * clamp(e, min, 1)) per component,
+// in f32 as the shader would compute it, `bits` wide, component 0 lowest.
+fn pack_normalized(values: &[f64], bits: u32, scale: f32, min: f32) -> u32 {
+    let mask = (1u32 << bits) - 1;
+    values.iter().enumerate().fold(0u32, |packed, (i, v)| {
+        let q = (0.5f32 + scale * (*v as f32).clamp(min, 1.0)).floor() as i32 as u32;
+        packed | ((q & mask) << (bits * i as u32))
+    })
+}
+
+// pack4xU8 / pack4xI8: the low byte of each component, component 0 lowest.
+fn pack_bytes(values: impl Iterator<Item = u32>) -> u32 {
+    values.enumerate().fold(0u32, |packed, (i, v)| {
+        packed | ((v & 0xff) << (8 * i as u32))
+    })
+}
+
 fn lower_packed_builtin_source_call(
     name: &str,
     args: &[String],
@@ -10323,31 +10820,50 @@ fn lower_packed_builtin_source_call(
     match name {
         "pack2x16float" => {
             let values = resolve_source_float_vector_values(&args[0], 2, constants)?;
-            source_floats_fit_f16(&values).then_some("0u".to_string())
+            let bits = |v: f64| f32_to_f16_bits(v as f32) as u32;
+            source_floats_fit_f16(&values)
+                .then(|| format!("{}u", bits(values[0]) | (bits(values[1]) << 16)))
         }
-        "pack2x16snorm" | "pack2x16unorm" => {
+        "pack2x16snorm" => {
             let values = resolve_source_float_vector_values(&args[0], 2, constants)?;
-            source_floats_are_finite(&values).then_some("0u".to_string())
+            source_floats_are_finite(&values)
+                .then(|| format!("{}u", pack_normalized(&values, 16, 32767.0, -1.0)))
         }
-        "pack4x8snorm" | "pack4x8unorm" => {
+        "pack2x16unorm" => {
+            let values = resolve_source_float_vector_values(&args[0], 2, constants)?;
+            source_floats_are_finite(&values)
+                .then(|| format!("{}u", pack_normalized(&values, 16, 65535.0, 0.0)))
+        }
+        "pack4x8snorm" => {
             let values = resolve_source_float_vector_values(&args[0], 4, constants)?;
-            source_floats_are_finite(&values).then_some("0u".to_string())
+            source_floats_are_finite(&values)
+                .then(|| format!("{}u", pack_normalized(&values, 8, 127.0, -1.0)))
         }
+        "pack4x8unorm" => {
+            let values = resolve_source_float_vector_values(&args[0], 4, constants)?;
+            source_floats_are_finite(&values)
+                .then(|| format!("{}u", pack_normalized(&values, 8, 255.0, 0.0)))
+        }
+        // Any input is valid: only each component's low byte is packed.
         "pack4xU8" => {
             let values = resolve_source_int_vector_values(&args[0], 4, false, constants)?;
-            source_ints_fit_u8(&values).then_some("0u".to_string())
+            Some(format!("{}u", pack_bytes(values.iter().copied())))
         }
         "pack4xI8" => {
             let values = resolve_source_int_vector_values(&args[0], 4, true, constants)?;
-            source_ints_fit_i8(&values).then_some("0u".to_string())
+            Some(format!("{}u", pack_bytes(values.iter().copied())))
         }
         "pack4xU8Clamp" => {
-            resolve_source_int_vector_values(&args[0], 4, false, constants)?;
-            Some("0u".to_string())
+            let values = resolve_source_int_vector_values(&args[0], 4, false, constants)?;
+            Some(format!(
+                "{}u",
+                pack_bytes(values.iter().map(|v| (*v).min(255)))
+            ))
         }
         "pack4xI8Clamp" => {
-            resolve_source_int_vector_values(&args[0], 4, true, constants)?;
-            Some("0u".to_string())
+            let values = resolve_source_int_vector_values(&args[0], 4, true, constants)?;
+            let clamped = values.iter().map(|v| (*v as i32).clamp(-128, 127) as u32);
+            Some(format!("{}u", pack_bytes(clamped)))
         }
         "unpack2x16float" => {
             let packed = parse_source_unpack_u32_arg(&args[0], constants)?;
@@ -11346,6 +11862,231 @@ fn adjust_block_for_bias(
     }
 }
 
+// NVIDIA's Vulkan driver rounds exact-half rgb10a2unorm storage writes down
+// (0.5 stores 511, not 512) where WebGPU rounds half up as for every other
+// unorm format. This pass quantizes the value before each textureStore to an
+// rgb10a2unorm texture and stores (round(saturate(v) * S) + 0.25) / S with
+// S = (1023, 1023, 1023, 3): a point inside the target integer's bucket for
+// both truncating and round-to-nearest conversions. New expressions go at the
+// end of the arena, so no existing handle moves.
+// ponytail: only WGSL sources pass through here; SPIR-V modules that store
+// rgb10a2unorm keep the driver rounding until a SPIR-V rewrite exists.
+fn round_rgb10a2unorm_stores(module: &mut naga::Module) {
+    use naga::{ImageClass, Scalar, Span, StorageFormat, Type, TypeInner, VectorSize};
+
+    let has_target = module.types.iter().any(|(_, ty)| {
+        matches!(
+            ty.inner,
+            TypeInner::Image {
+                class: ImageClass::Storage {
+                    format: StorageFormat::Rgb10a2Unorm,
+                    ..
+                },
+                ..
+            }
+        )
+    });
+    if !has_target {
+        return;
+    }
+    // A scalar `value` is a validation error, but the vec4 scale would broadcast it
+    // into a valid store; only rewrite modules that already validate.
+    if Validator::new(ValidationFlags::all(), Capabilities::all())
+        .validate(module)
+        .is_err()
+    {
+        return;
+    }
+
+    let vec4_ty = module.types.insert(
+        Type {
+            name: None,
+            inner: TypeInner::Vector {
+                size: VectorSize::Quad,
+                scalar: Scalar::F32,
+            },
+        },
+        Span::UNDEFINED,
+    );
+
+    let naga::Module {
+        ref types,
+        ref global_variables,
+        ref mut functions,
+        ref mut entry_points,
+        ..
+    } = *module;
+    let all_functions = functions
+        .iter_mut()
+        .map(|(_, f)| f)
+        .chain(entry_points.iter_mut().map(|ep| &mut ep.function));
+    for f in all_functions {
+        let body = std::mem::take(&mut f.body);
+        let mut pass = Rgb10a2StoreRounding {
+            types,
+            globals: global_variables,
+            arguments: &f.arguments,
+            expressions: &mut f.expressions,
+            vec4_ty,
+        };
+        f.body = pass.block(body);
+    }
+}
+
+struct Rgb10a2StoreRounding<'a> {
+    types: &'a naga::UniqueArena<naga::Type>,
+    globals: &'a naga::Arena<naga::GlobalVariable>,
+    arguments: &'a [naga::FunctionArgument],
+    expressions: &'a mut naga::Arena<naga::Expression>,
+    vec4_ty: naga::Handle<naga::Type>,
+}
+
+impl Rgb10a2StoreRounding<'_> {
+    fn block(&mut self, block: naga::Block) -> naga::Block {
+        use naga::Statement;
+
+        let mut out = naga::Block::with_capacity(block.len());
+        for (stmt, span) in block.span_into_iter() {
+            let stmt = match stmt {
+                Statement::ImageStore {
+                    image,
+                    coordinate,
+                    array_index,
+                    value,
+                } if self.targets(image) => {
+                    let (emitted, rounded) = self.append_rounding(value);
+                    out.push(Statement::Emit(emitted), span);
+                    Statement::ImageStore {
+                        image,
+                        coordinate,
+                        array_index,
+                        value: rounded,
+                    }
+                }
+                Statement::Block(child) => Statement::Block(self.block(child)),
+                Statement::If {
+                    condition,
+                    accept,
+                    reject,
+                } => Statement::If {
+                    condition,
+                    accept: self.block(accept),
+                    reject: self.block(reject),
+                },
+                Statement::Switch {
+                    selector,
+                    mut cases,
+                } => {
+                    for case in &mut cases {
+                        case.body = self.block(std::mem::take(&mut case.body));
+                    }
+                    Statement::Switch { selector, cases }
+                }
+                Statement::Loop {
+                    body,
+                    continuing,
+                    break_if,
+                } => Statement::Loop {
+                    body: self.block(body),
+                    continuing: self.block(continuing),
+                    break_if,
+                },
+                other => other,
+            };
+            out.push(stmt, span);
+        }
+        out
+    }
+
+    fn targets(&self, image: naga::Handle<naga::Expression>) -> bool {
+        use naga::{Expression, ImageClass, StorageFormat, TypeInner};
+
+        let ty = match self.expressions[image] {
+            Expression::GlobalVariable(gv) => self.globals[gv].ty,
+            Expression::FunctionArgument(i) => self.arguments[i as usize].ty,
+            _ => return false,
+        };
+        matches!(
+            self.types[ty].inner,
+            TypeInner::Image {
+                class: ImageClass::Storage {
+                    format: StorageFormat::Rgb10a2Unorm,
+                    ..
+                },
+                ..
+            }
+        )
+    }
+
+    // Returns the range to emit (literals stay outside it: they are pre-emit)
+    // and the handle of the rounded value.
+    fn append_rounding(
+        &mut self,
+        value: naga::Handle<naga::Expression>,
+    ) -> (
+        naga::Range<naga::Expression>,
+        naga::Handle<naga::Expression>,
+    ) {
+        use naga::{BinaryOperator, Expression, Literal, MathFunction, Range, Span, VectorSize};
+
+        let exprs = &mut *self.expressions;
+        let mut literal =
+            |v: f32| exprs.append(Expression::Literal(Literal::F32(v)), Span::UNDEFINED);
+        let l_half = literal(0.5);
+        let l_quarter = literal(0.25);
+        let l_rgb = literal(1023.0);
+        let l_alpha = literal(3.0);
+
+        let half = exprs.append(
+            Expression::Splat {
+                size: VectorSize::Quad,
+                value: l_half,
+            },
+            Span::UNDEFINED,
+        );
+        let quarter = exprs.append(
+            Expression::Splat {
+                size: VectorSize::Quad,
+                value: l_quarter,
+            },
+            Span::UNDEFINED,
+        );
+        let scale = exprs.append(
+            Expression::Compose {
+                ty: self.vec4_ty,
+                components: vec![l_rgb, l_rgb, l_rgb, l_alpha],
+            },
+            Span::UNDEFINED,
+        );
+        let math = |fun: MathFunction, arg| Expression::Math {
+            fun,
+            arg,
+            arg1: None,
+            arg2: None,
+            arg3: None,
+        };
+        let binary = |op: BinaryOperator, left, right| Expression::Binary { op, left, right };
+
+        let saturated = exprs.append(math(MathFunction::Saturate, value), Span::UNDEFINED);
+        let scaled = exprs.append(
+            binary(BinaryOperator::Multiply, saturated, scale),
+            Span::UNDEFINED,
+        );
+        let biased = exprs.append(binary(BinaryOperator::Add, scaled, half), Span::UNDEFINED);
+        let floored = exprs.append(math(MathFunction::Floor, biased), Span::UNDEFINED);
+        let centered = exprs.append(
+            binary(BinaryOperator::Add, floored, quarter),
+            Span::UNDEFINED,
+        );
+        let rounded = exprs.append(
+            binary(BinaryOperator::Divide, centered, scale),
+            Span::UNDEFINED,
+        );
+
+        (Range::new_from_bounds(half, rounded), rounded)
+    }
+}
+
 fn adjust_block_with_remap(
     remap: &HashMap<naga::Handle<naga::Expression>, naga::Handle<naga::Expression>>,
     block: &mut naga::Block,
@@ -11681,7 +12422,9 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     if !frontend_errors.is_empty() {
         return Err(frontend_errors);
     }
-    let strip = strip_diagnostic_directives(source);
+    let strip = strip_diagnostic_directives(&rename_continuing_shadows_source(
+        &split_minus_minus_source(source),
+    ));
     if strip.has_error {
         return Err(strip.messages);
     }
@@ -11696,7 +12439,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     let var_normalized_source =
         normalize_var_template_trailing_commas_source(&dynamic_index_source);
     let interpolated_source = normalize_interpolate_trailing_commas_source(&var_normalized_source);
-    let normalized_source = lower_struct_size5_align16_source(&interpolated_source);
+    let normalized_source = propagate_struct_align_source(&interpolated_source);
     let shadowed_builtin_errors =
         validate_shadowed_lowered_builtin_calls_source(&normalized_source);
     if !shadowed_builtin_errors.is_empty() {
@@ -11822,7 +12565,8 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source, None);
     let matrix_binary_source = lower_const_matrix_binary_source(&shadow_builtin_source, None);
     let bool_bitwise_source = lower_bool_bitwise_const_source(&matrix_binary_source);
-    let float_math_source = lower_const_float_math_source(&bool_bitwise_source, None);
+    let shift_source = lower_abstract_int_shift_source(&bool_bitwise_source);
+    let float_math_source = lower_const_float_math_source(&shift_source, None);
     let parse_source = lower_const_bitcasts_source(
         &lower_packed_builtins_source(
             &lower_bit_builtins_source(
@@ -11881,6 +12625,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // constant calls to literals before validation so const arrays and module
     // constants in CTS can compile.
     fold_bit_builtins(&mut module);
+    round_rgb10a2unorm_stores(&mut module);
 
     let info = match Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module) {
         Ok(i) => i,
@@ -12086,6 +12831,101 @@ mod tests {
     use super::*;
 
     #[test]
+    fn continuing_shadows_of_loop_body_declarations_are_renamed() {
+        let src = "fn f() { var i = 0u; loop { var i = 5u; continuing { var i = 6u; let j = i + s.i; break if i == 6u; } } }";
+        let lowered = rename_continuing_shadows_source(src);
+        assert!(lowered.contains("continuing { var i_pe_continuing = 6u; let j = i_pe_continuing + s.i; break if i_pe_continuing == 6u; }"));
+        assert!(lowered.contains("loop { var i = 5u;"));
+        assert!(compile_with_meta(&format!(
+            "struct S {{ i : u32 }} var<private> s : S;\n{src}\n"
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn rgb10a2unorm_store_rounding_keeps_value_type_errors() {
+        let decl = "@group(0) @binding(0) var t: texture_storage_2d<rgb10a2unorm, write>;\n";
+        let scalar = format!(
+            "{decl}@compute @workgroup_size(1) fn main() {{ textureStore(t, vec2i(0), 0); }}\n"
+        );
+        assert!(compile_with_meta(&scalar).is_err());
+        let vector = format!("{decl}@compute @workgroup_size(1) fn main() {{ textureStore(t, vec2i(0), vec4f(0.5)); }}\n");
+        assert!(compile_with_meta(&vector).is_ok());
+    }
+
+    #[test]
+    fn minus_minus_before_an_operand_is_split() {
+        assert_eq!(
+            split_minus_minus_source("kThree--kSeven; x--; f(i--)"),
+            "kThree- -kSeven; x--; f(i--)"
+        );
+        assert!(compile_with_meta(
+            "const a = 3--7;
+const_assert (a == 10);
+"
+        )
+        .is_ok());
+    }
+
+    #[test]
+    fn abstract_int_shifts_by_64_or_more_are_folded() {
+        let scalar = lower_abstract_int_shift_source("((-5)>>(64u)) + ((0)<<(65u)) + ((7)>>(1u))");
+        assert_eq!(scalar, "((-1)) + ((0)) + ((7)>>(1u))");
+
+        let vector = lower_abstract_int_shift_source("((vec2(-5, 5))>>(vec2<u32>(64u, 1u)))");
+        assert_eq!(vector, "((vec2(-1, 2)))");
+
+        // A non-zero value shifted past bit 63 is a shader-creation error; naga reports it.
+        assert_eq!(
+            lower_abstract_int_shift_source("((1)<<(64u))"),
+            "((1)<<(64u))"
+        );
+
+        let shader = "const_assert ((((-5)>>(64u))) == -1);
+const_assert ((((0)<<(64u))) == 0);
+";
+        assert!(compile_with_meta(shader).is_ok());
+    }
+
+    #[test]
+    fn const_pack_builtins_compute_packed_bits() {
+        let call = |name: &str, arg: &str| {
+            lower_packed_builtin_source_call(name, &[arg.to_string()], None)
+        };
+        // 0xFF80FF00: 0.5 * 255 + 0.5 floors to 128, 2.0 clamps to 255.
+        assert_eq!(
+            call("pack4x8unorm", "vec4<f32>(0.0, 1.0, 0.5, 2.0)").as_deref(),
+            Some("4286643968u")
+        );
+        // 0xC1007F81: -1 -> -127, 1 -> 127, -0.5 -> floor(0.5 - 63.5) = -63.
+        assert_eq!(
+            call("pack4x8snorm", "vec4<f32>(-1.0, 1.0, 0.0, -0.5)").as_deref(),
+            Some("3238035329u")
+        );
+        assert_eq!(
+            call("pack2x16unorm", "vec2<f32>(1.0, 0.0)").as_deref(),
+            Some("65535u")
+        );
+        assert_eq!(
+            call("pack2x16float", "vec2<f32>(1.0, -2.0)").as_deref(),
+            Some("3221240832u")
+        );
+        // Out-of-range components keep their low byte: 257 -> 0x01, 300 -> 0x2C, -1 -> 0xFF.
+        assert_eq!(
+            call("pack4xU8", "vec4<u32>(257u, 2u, 0u, 0u)").as_deref(),
+            Some("513u")
+        );
+        assert_eq!(
+            call("pack4xI8", "vec4<i32>(-1i, 300i, 0i, 0i)").as_deref(),
+            Some("11519u")
+        );
+        assert_eq!(
+            call("pack4xU8Clamp", "vec4<u32>(1u, 300u, 0u, 255u)").as_deref(),
+            Some("4278255361u")
+        );
+    }
+
+    #[test]
     fn no_entry_workgroup_pointer_params_are_sanitized_for_naga() {
         let source = "override size = 1;\nfn f(a: ptr<workgroup, array<u32, size>>) {}\n";
         let lowered = lower_no_entry_workgroup_pointer_params_source(source);
@@ -12195,6 +13035,11 @@ mod tests {
         assert!(lower_bool_bitwise_const_source(vector)
             .contains("const foo : vec2<bool> = vec2<bool>(false, true);"));
         assert!(compile_with_meta(vector).is_ok());
+
+        // The CTS const input source: literal operands inside an array, no named bools.
+        let array = "const values = array(\n  (true & false),\n  (vec2<bool>(true, false) | vec2<bool>(false, false))\n);";
+        assert!(lower_bool_bitwise_const_source(array)
+            .contains("array(false, vec2<bool>(true, false))"));
     }
 
     #[test]
@@ -12422,10 +13267,23 @@ mod tests {
         assert!(
             normalize_interpolate_trailing_commas_source("@interpolate(flat,)").contains("flat ")
         );
-        assert!(lower_struct_size5_align16_source(
+        assert!(propagate_struct_align_source(
             "struct T { @align(16) @size(5) x : u32 } struct S { x : u32, y : T }"
         )
         .contains("@align(16) y"));
+        // The CTS memory_layout shape, nested once more and through an array.
+        let nested = propagate_struct_align_source(
+            "struct Inner { @align(64) x : u32, }
+struct S { x : u32, y : Inner, }
+struct U { a : u32, b : array<S, 2>, c : vec4f }",
+        );
+        assert!(nested.contains("x : u32, @align(64) y : Inner"));
+        assert!(nested.contains("a : u32, @align(64) b : array<S, 2>, c : vec4f"));
+        // Members whose type keeps its natural alignment are left alone.
+        assert_eq!(
+            propagate_struct_align_source("struct T { @align(4) x : u32 } struct S { y : T }"),
+            "struct T { @align(4) x : u32 } struct S { y : T }"
+        );
     }
 
     #[test]
@@ -12628,7 +13486,8 @@ fn main() {
             "override o0 : f32; override o1 : f32; var<private> v = pack2x16float(vec2<f32>(o0, o1));",
             Some(&constants),
         );
-        assert!(lowered.contains("var<private> v = 0u;"));
+        // f16(65504) = 0x7BFF, f16(-65504) = 0xFBFF.
+        assert!(lowered.contains("var<private> v = 4227824639u;"));
     }
 
     #[test]
@@ -12944,7 +13803,9 @@ pub fn bake_wgsl_with_constants(
     if !validate_parse_frontend_source(source).is_empty() {
         return None;
     }
-    let strip = strip_diagnostic_directives(source);
+    let strip = strip_diagnostic_directives(&rename_continuing_shadows_source(
+        &split_minus_minus_source(source),
+    ));
     if strip.has_error {
         return None;
     }
@@ -12956,7 +13817,7 @@ pub fn bake_wgsl_with_constants(
     let var_normalized_source =
         normalize_var_template_trailing_commas_source(&dynamic_index_source);
     let interpolated_source = normalize_interpolate_trailing_commas_source(&var_normalized_source);
-    let normalized_source = lower_struct_size5_align16_source(&interpolated_source);
+    let normalized_source = propagate_struct_align_source(&interpolated_source);
     if !validate_shadowed_lowered_builtin_calls_source(&normalized_source).is_empty() {
         return None;
     }
@@ -13021,7 +13882,8 @@ pub fn bake_wgsl_with_constants(
     let matrix_binary_source =
         lower_const_matrix_binary_source(&shadow_builtin_source, Some(&constants));
     let bool_bitwise_source = lower_bool_bitwise_const_source(&matrix_binary_source);
-    let float_math_source = lower_const_float_math_source(&bool_bitwise_source, Some(&constants));
+    let shift_source = lower_abstract_int_shift_source(&bool_bitwise_source);
+    let float_math_source = lower_const_float_math_source(&shift_source, Some(&constants));
     let parse_source = lower_const_bitcasts_source(
         &lower_packed_builtins_source(
             &lower_bit_builtins_source(
@@ -13048,6 +13910,7 @@ pub fn bake_wgsl_with_constants(
     if !bridge_errors.is_empty() {
         return None;
     }
+    round_rgb10a2unorm_stores(&mut module);
     let info = Validator::new(ValidationFlags::all(), Capabilities::all())
         .validate(&module)
         .ok()?;

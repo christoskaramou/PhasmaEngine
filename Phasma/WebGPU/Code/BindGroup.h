@@ -4,6 +4,11 @@
 #include "API/Descriptor.h"
 #include "UsageTracker.h"
 
+namespace pe
+{
+    class CommandBuffer;
+}
+
 struct WGPUDeviceImpl;
 struct WGPUTextureViewImpl;
 struct WGPUSamplerImpl;
@@ -84,3 +89,9 @@ struct WGPUBindGroupImpl
 };
 
 bool BglGroupEquivalent(const WGPUBindGroupLayoutImpl *a, const WGPUBindGroupLayoutImpl *b);
+
+// True while a texture the group binds still has uninitialized subresources.
+bool BindGroupHasUninitializedTextures(const WGPUBindGroupImpl *bg);
+
+// Clears those subresources to zero into cmd, which must be outside a rendering scope.
+void LazyInitBindGroupTextures(pe::CommandBuffer *cmd, const WGPUBindGroupImpl *bg);
