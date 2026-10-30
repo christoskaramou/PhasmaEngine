@@ -36,7 +36,15 @@ namespace pwgpu
             WGPUTextureBindingLayout texture{};
             bool hasStorageTexture = false;
             WGPUStorageTextureBindingLayout storageTexture{};
+            bool hasExternalTexture = false;
         };
+
+        bool IsExternalTextureBinding(const std::set<BindingResourceKey> *resources,
+                                      uint32_t set,
+                                      uint32_t binding)
+        {
+            return resources && resources->count(BindingResourceKey{set, binding, "external-texture"}) > 0;
+        }
 
         struct SampledImageUsage
         {
@@ -493,7 +501,8 @@ namespace pwgpu
                     if (slot.hasBuffer != incoming.hasBuffer ||
                         slot.hasSampler != incoming.hasSampler ||
                         slot.hasTexture != incoming.hasTexture ||
-                        slot.hasStorageTexture != incoming.hasStorageTexture)
+                        slot.hasStorageTexture != incoming.hasStorageTexture ||
+                        slot.hasExternalTexture != incoming.hasExternalTexture)
                     {
                         errMsg = "auto-layout: binding type conflict across stages (different resource kind)";
                         return false;
@@ -639,10 +648,22 @@ namespace pwgpu
                 // Sampled images (separate_images: SampledImage-type bindings without combined sampler)
                 for (const auto &r : res.separate_images)
                 {
-                    if (!isStaticallyUsed(r.id, "texture"))
-                        continue;
                     uint32_t set = compiler.get_decoration(r.id, spv::DecorationDescriptorSet);
                     uint32_t bind = compiler.get_decoration(r.id, spv::DecorationBinding);
+
+                    // The WGSL bridge emits texture_external as texture_2d<f32>;
+                    // only its reflection kind tells the two apart.
+                    if (IsExternalTextureBinding(stage.staticallyUsedResources, set, bind))
+                    {
+                        ReflectedBinding rb = buildBase(set, bind);
+                        rb.hasExternalTexture = true;
+                        if (!mergeInto(set, bind, rb))
+                            return false;
+                        continue;
+                    }
+
+                    if (!isStaticallyUsed(r.id, "texture"))
+                        continue;
                     const auto &t = compiler.get_type(r.type_id);
                     ReflectedBinding rb = buildBase(set, bind);
                     rb.hasTexture = true;
@@ -1175,6 +1196,14 @@ namespace pwgpu
                     return "";
                 };
 
+                auto isExternalTex = [](const WGPUBindGroupLayoutEntryResolved &e,
+                                        const spirv_cross::Resource &) -> std::string
+                {
+                    if (!e.hasExternalTexture)
+                        return "binding type mismatch: shader expects external texture, layout has non-external-texture";
+                    return "";
+                };
+
                 std::string err;
                 if (!(err = checkList(res.uniform_buffers, "uniform-buffer", isUniformBuf)).empty())
                     return err;
@@ -1183,6 +1212,11 @@ namespace pwgpu
                 if (!(err = checkList(res.separate_samplers, "sampler", isSampler)).empty())
                     return err;
                 if (!(err = checkList(res.separate_images, "texture", isSampledTex)).empty())
+                    return err;
+                // External bindings are only known from reflection, so this
+                // pass needs the authoritative filter to skip plain textures.
+                if (stageIn.staticallyUsedAuthoritative && stageIn.staticallyUsedResources &&
+                    !(err = checkList(res.separate_images, "external-texture", isExternalTex)).empty())
                     return err;
                 if (!(err = checkList(res.sampled_images, "texture", isSampledTex)).empty())
                     return err;
@@ -1426,6 +1460,12 @@ namespace pwgpu
                             c.sampledTextures++;
                         else if (rb.hasStorageTexture)
                             c.storageTextures++;
+                        else if (rb.hasExternalTexture)
+                        {
+                            c.sampledTextures += 4;
+                            c.samplers++;
+                            c.uniformBuffers++;
+                        }
                     };
                     if (rb.visibility & WGPUShaderStage_Vertex)
                         accumulate(vertexCounters);
@@ -1561,6 +1601,7 @@ namespace pwgpu
                 e.sampler = rb.sampler;
                 e.texture = rb.texture;
                 e.storageTexture = rb.storageTexture;
+                e.hasExternalTexture = rb.hasExternalTexture;
                 bgl->entries.push_back(e);
 
                 pe::DescriptorBindingInfo info{};
@@ -1576,7 +1617,7 @@ namespace pwgpu
                 {
                     info.type = PE_DESCRIPTOR_TYPE_SAMPLER;
                 }
-                else if (rb.hasTexture)
+                else if (rb.hasTexture || rb.hasExternalTexture)
                 {
                     info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
                     info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

@@ -205,14 +205,10 @@ extern "C"
             if (bg->layout)
                 wgpuBindGroupLayoutRelease(bg->layout);
             {
-                std::vector<pe::Sampler *> samplers = std::move(bg->ownedSamplers);
                 pe::Descriptor *descriptor = bg->descriptor;
                 bg->descriptor = nullptr;
-                pwgpu::DeferDestroy(bg->device, [samplers, descriptor]() mutable
-                                    {
-                                        for (pe::Sampler *sampler : samplers)
-                                            pe::Sampler::Destroy(sampler);
-                                        pe::Descriptor::Destroy(descriptor); });
+                pwgpu::DeferDestroy(bg->device, [descriptor]() mutable
+                                    { pe::Descriptor::Destroy(descriptor); });
             }
             for (auto &use : bg->bufferUses)
                 wgpuBufferRelease(use.buffer);

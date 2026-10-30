@@ -513,42 +513,6 @@ namespace
         return nullptr;
     }
 
-    pe::Sampler *GetOrCreateExternalTextureSampler(WGPUBindGroupImpl *bindGroup,
-                                                   WGPUTextureViewImpl *view)
-    {
-        if (view && view->texture && view->texture->image)
-        {
-            if (pe::Sampler *sampler = view->texture->image->GetSampler())
-                return sampler;
-        }
-
-        pe::SamplerDesc samplerInfo = pe::Sampler::CreateInfoInit();
-        samplerInfo.magFilter = PE_FILTER_NEAREST;
-        samplerInfo.minFilter = PE_FILTER_NEAREST;
-        samplerInfo.mipmapMode = PE_SAMPLER_MIPMAP_MODE_NEAREST;
-        samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.addressModeW = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
-
-        std::string name = bindGroup && !bindGroup->label.empty()
-                               ? bindGroup->label + "_external_texture_sampler"
-                               : "wgpu_external_texture_sampler";
-        pe::Sampler *sampler = nullptr;
-        try
-        {
-            sampler = pe::Sampler::Create(samplerInfo, name);
-        }
-        catch (...)
-        {
-            sampler = nullptr;
-        }
-        if (bindGroup && sampler)
-            bindGroup->ownedSamplers.push_back(sampler);
-        return sampler;
-    }
-
     const pe::DescriptorBindingInfo *
     DescriptorBindingInfoForBinding(const WGPUBindGroupLayoutImpl *layout, uint32_t binding)
     {
@@ -614,8 +578,7 @@ namespace
 
     bool WriteDescriptorBufferBinding(WGPUBindGroupImpl *bg,
                                       const WGPUBindGroupLayoutEntryResolved &le,
-                                      const WGPUBindGroupEntry &entry,
-                                      pe::Sampler *externalTextureSampler = nullptr)
+                                      const WGPUBindGroupEntry &entry)
     {
         const pe::DescriptorBindingInfo *bindingInfo =
             DescriptorBindingInfoForBinding(bg ? bg->layout : nullptr, le.binding);
@@ -667,7 +630,8 @@ namespace
             return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
         }
 
-        if (le.texture.sampleType != WGPUTextureSampleType_BindingNotUsed &&
+        if ((le.texture.sampleType != WGPUTextureSampleType_BindingNotUsed ||
+             le.hasExternalTexture) &&
             entry.textureView)
         {
             pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView);
@@ -692,21 +656,6 @@ namespace
             imageInfo.imageLayout = static_cast<VkImageLayout>(
                 pe::ToVkImageLayout(bindingInfo->imageLayout));
             getInfo.data.pStorageImage = &imageInfo;
-            return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
-        }
-
-        if (le.hasExternalTexture && entry.textureView && externalTextureSampler)
-        {
-            pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView);
-            if (!nativeView)
-                return false;
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.sampler = static_cast<VkSampler>(
-                pe::GetVulkanSampler(externalTextureSampler));
-            imageInfo.imageView = static_cast<VkImageView>(pe::GetVulkanImageView(nativeView));
-            imageInfo.imageLayout = static_cast<VkImageLayout>(
-                pe::ToVkImageLayout(bindingInfo->imageLayout));
-            getInfo.data.pCombinedImageSampler = &imageInfo;
             return WriteDescriptorBufferBytes(bg, le.binding, bindingInfo->type, getInfo);
         }
 
@@ -2410,8 +2359,11 @@ extern "C"
             {
                 info.type = PE_DESCRIPTOR_TYPE_SAMPLER;
             }
-            else if (entry.texture.sampleType != WGPUTextureSampleType_BindingNotUsed)
+            else if (entry.texture.sampleType != WGPUTextureSampleType_BindingNotUsed ||
+                     entry.hasExternalTexture)
             {
+                // A texture_external bound to a GPUTextureView is one plane; the
+                // WGSL bridge emits it as texture_2d<f32>.
                 info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
                 info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             }
@@ -2419,10 +2371,6 @@ extern "C"
             {
                 info.type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
                 info.imageLayout = PE_IMAGE_LAYOUT_GENERAL;
-            }
-            else if (entry.hasExternalTexture)
-            {
-                info.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             }
 
             pwgpu::ApplyDx12WebGPURegisterRemap(info);
@@ -2873,7 +2821,9 @@ extern "C"
                         descriptorBufferWritesOk &=
                             WriteDescriptorBufferBinding(bg, le, entry);
                 }
-                else if (le.texture.sampleType != WGPUTextureSampleType_BindingNotUsed && entry.textureView)
+                else if ((le.texture.sampleType != WGPUTextureSampleType_BindingNotUsed ||
+                          le.hasExternalTexture) &&
+                         entry.textureView)
                 {
                     if (pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView))
                         bg->descriptor->SetImageView(entry.binding, nativeView);
@@ -2897,23 +2847,6 @@ extern "C"
                                     : pwgpu::SubresourceUsageKind::WriteOnlyStorage;
                     wgpuTextureViewAddRef(entry.textureView);
                     bg->textureUses.push_back({entry.textureView, kind});
-                }
-                else if (le.hasExternalTexture && entry.textureView)
-                {
-                    pe::Sampler *sampler =
-                        GetOrCreateExternalTextureSampler(bg, entry.textureView);
-                    pe::ImageView *nativeView = pwgpu::TextureBindingImageView(entry.textureView);
-                    if (nativeView && sampler)
-                    {
-                        bg->descriptor->SetImageView(
-                            entry.binding, nativeView, sampler);
-                    }
-                    if (bg->descriptorBufferValid)
-                        descriptorBufferWritesOk &=
-                            WriteDescriptorBufferBinding(bg, le, entry, sampler);
-                    wgpuTextureViewAddRef(entry.textureView);
-                    bg->textureUses.push_back(
-                        {entry.textureView, pwgpu::SubresourceUsageKind::Sampled});
                 }
             }
 

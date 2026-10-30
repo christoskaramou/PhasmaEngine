@@ -2139,6 +2139,90 @@ fn short_circuit_expr_has_non_bool_operand(
     false
 }
 
+// True when an initializer holds only literals and type constructors.
+fn is_literal_initializer(init: &str) -> bool {
+    let bytes = init.as_bytes();
+    let mut i = 0usize;
+    while i < bytes.len() {
+        let c = bytes[i];
+        if c.is_ascii_digit() || (c == b'.' && bytes.get(i + 1).is_some_and(u8::is_ascii_digit)) {
+            // Numeric literal, suffix and exponent included.
+            while i < bytes.len() {
+                let sign_after_exponent = matches!(bytes[i], b'+' | b'-')
+                    && matches!(bytes[i - 1], b'e' | b'E' | b'p' | b'P');
+                if !(is_ident_char(bytes[i]) || bytes[i] == b'.' || sign_after_exponent) {
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+        if c == b'_' || c.is_ascii_alphabetic() {
+            let start = i;
+            while i < bytes.len() && is_ident_char(bytes[i]) {
+                i += 1;
+            }
+            let ident = &init[start..i];
+            let scalar = matches!(
+                ident,
+                "f32" | "f16" | "i32" | "u32" | "bool" | "true" | "false" | "array"
+            );
+            if !scalar && !ident.starts_with("vec") && !ident.starts_with("mat") {
+                return false;
+            }
+            continue;
+        }
+        i += 1;
+    }
+    true
+}
+
+// naga 29's override processing treats `let x = f32(1e30);` as a constant, so a
+// composite mixing it with an override is evaluated whole and can overflow, where
+// WGSL keeps the let a runtime value. On the override-bake path, read such lets
+// through a function variable so naga sees a runtime value.
+fn runtime_constant_lets_source(source: &str) -> String {
+    let mut out = String::with_capacity(source.len());
+    let mut copied = 0usize;
+    let mut pos = 0usize;
+    while let Some(let_pos) = find_keyword_from(source, "let", pos) {
+        pos = let_pos + 3;
+        let Some(semi) = source[let_pos..].find(';').map(|p| let_pos + p) else {
+            break;
+        };
+        // `for (let i = ...` cannot take a second declaration.
+        if source[..let_pos].trim_end().ends_with('(') {
+            continue;
+        }
+
+        let stmt = &source[let_pos..semi];
+        let (Some(name), Some(eq)) = (
+            declaration_name_after_keyword(stmt, "let"),
+            find_assignment_eq(stmt),
+        ) else {
+            continue;
+        };
+        let init = &stmt[eq + 1..];
+        if !is_literal_initializer(init) {
+            continue;
+        }
+
+        let name_end = stmt[3..]
+            .find(name)
+            .map(|p| 3 + p + name.len())
+            .unwrap_or(eq);
+        let type_part = &stmt[name_end..eq];
+        out.push_str(&source[copied..let_pos]);
+        out.push_str(&format!(
+            "var {name}_pe_runtime{type_part}={init}; let {name} = {name}_pe_runtime"
+        ));
+        copied = semi;
+        pos = semi;
+    }
+    out.push_str(&source[copied..]);
+    out
+}
+
 fn find_assignment_eq(stmt: &str) -> Option<usize> {
     let bytes = stmt.as_bytes();
     let mut i = 0usize;
@@ -3676,6 +3760,91 @@ fn collect_texture_external_vars(scan: &str) -> HashSet<String> {
         }
     }
     names
+}
+
+// naga 29's spv writer is unimplemented!() for ImageClass::External. An
+// external binding backed by a plain GPUTextureView is one rgba plane, so emit
+// it as texture_2d<f32>; textureLoad on it takes no level, so append 0i.
+// shortcut: names come from `name: texture_external` declarations only, so an
+// alias-typed binding keeps the old no-SPIR-V result; resolve aliases if a
+// shader needs it.
+fn lower_texture_external_source(source: &str) -> String {
+    let scan = mask_comments_preserve_len(source);
+    let keyword = "texture_external";
+    let mut names: HashSet<&str> = HashSet::new();
+    // (position, replaced length, inserted text), applied back to front.
+    let mut edits: Vec<(usize, usize, &str)> = Vec::new();
+
+    let mut pos = 0usize;
+    while let Some(start) = find_keyword_from(&scan, keyword, pos) {
+        edits.push((start, keyword.len(), "texture_2d<f32>"));
+        pos = start + keyword.len();
+
+        let before = scan[..start].trim_end();
+        let Some(decl) = before.strip_suffix(':') else {
+            continue;
+        };
+        let decl = decl.trim_end();
+        let name_start = decl
+            .bytes()
+            .rposition(|b| !is_ident_char(b))
+            .map_or(0, |p| p + 1);
+        if name_start < decl.len() {
+            names.insert(&decl[name_start..]);
+        }
+    }
+
+    let call = "textureLoad";
+    let mut pos = 0usize;
+    while let Some(start) = find_keyword_from(&scan, call, pos) {
+        pos = start + call.len();
+        let Some((args, close)) = find_call_args(&scan, start, call.len()) else {
+            continue;
+        };
+        if args.len() == 2 && names.contains(trim_outer_parens(&args[0])) {
+            edits.push((close, 0, ", 0i"));
+        }
+    }
+
+    edits.sort_by_key(|edit| edit.0);
+    let mut out = source.to_string();
+    for (at, len, text) in edits.into_iter().rev() {
+        out.replace_range(at..at + len, text);
+    }
+    out
+}
+
+// Validation and reflection stay on the original module, which still has
+// ImageClass::External; only SPIR-V emit uses the lowered copy. None keeps the
+// original module (no externals, or the lowering did not parse/validate).
+fn texture_external_emit_module(
+    module: &naga::Module,
+    source: &str,
+) -> Option<(naga::Module, naga::valid::ModuleInfo)> {
+    let has_external = module.types.iter().any(|(_, ty)| {
+        matches!(
+            ty.inner,
+            naga::TypeInner::Image {
+                class: naga::ImageClass::External,
+                ..
+            }
+        )
+    });
+    if !has_external {
+        return None;
+    }
+
+    let lowered = lower_texture_external_source(source);
+    let mut lowered_module = wgsl::parse_str(&lowered).ok()?;
+    clamp_image_sample_bias(&mut lowered_module);
+    cloak_const_indices(&mut lowered_module, &lowered);
+    fold_bit_builtins(&mut lowered_module);
+    round_rgb10a2unorm_stores(&mut lowered_module);
+    center_per_sample_frag_position(&mut lowered_module);
+    let info = Validator::new(ValidationFlags::all(), Capabilities::all())
+        .validate(&lowered_module)
+        .ok()?;
+    Some((lowered_module, info))
 }
 
 fn collect_texture_var_types(scan: &str) -> HashMap<String, String> {
@@ -6808,6 +6977,7 @@ fn resource_kind(module: &naga::Module, gv: &naga::GlobalVariable) -> Option<&'s
             naga::TypeInner::Sampler { .. } => Some("sampler"),
             naga::TypeInner::Image { class, .. } => match class {
                 naga::ImageClass::Storage { .. } => Some("storage-texture"),
+                naga::ImageClass::External => Some("external-texture"),
                 _ => Some("texture"),
             },
             _ => None,
@@ -6853,6 +7023,219 @@ fn type_contains_atomic(
             .any(|member| type_contains_atomic(module, member.ty, visited)),
         _ => false,
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+enum PointerRoot {
+    Param(u32),
+    Global(naga::Handle<naga::GlobalVariable>),
+    Local(naga::Handle<naga::LocalVariable>),
+}
+
+// Reads and writes a function makes through its pointer parameters and to
+// module-scope variables, its callees included.
+#[derive(Clone, Default, PartialEq)]
+struct AliasEffects {
+    param_read: Vec<bool>,
+    param_write: Vec<bool>,
+    global_read: HashSet<naga::Handle<naga::GlobalVariable>>,
+    global_write: HashSet<naga::Handle<naga::GlobalVariable>>,
+}
+
+impl AliasEffects {
+    fn mark(&mut self, root: PointerRoot, read: bool, write: bool) {
+        match root {
+            PointerRoot::Param(i) => {
+                self.param_read[i as usize] |= read;
+                self.param_write[i as usize] |= write;
+            }
+            PointerRoot::Global(g) => {
+                if read {
+                    self.global_read.insert(g);
+                }
+                if write {
+                    self.global_write.insert(g);
+                }
+            }
+            PointerRoot::Local(_) => {}
+        }
+    }
+}
+
+fn pointer_root(
+    exprs: &naga::Arena<naga::Expression>,
+    mut h: naga::Handle<naga::Expression>,
+) -> Option<PointerRoot> {
+    loop {
+        match exprs[h] {
+            naga::Expression::Access { base, .. } | naga::Expression::AccessIndex { base, .. } => {
+                h = base
+            }
+            naga::Expression::FunctionArgument(i) => return Some(PointerRoot::Param(i)),
+            naga::Expression::GlobalVariable(g) => return Some(PointerRoot::Global(g)),
+            naga::Expression::LocalVariable(l) => return Some(PointerRoot::Local(l)),
+            _ => return None,
+        }
+    }
+}
+
+fn for_each_statement(block: &naga::Block, visit: &mut impl FnMut(&naga::Statement)) {
+    for stmt in block.iter() {
+        visit(stmt);
+        match stmt {
+            naga::Statement::Block(b) => for_each_statement(b, visit),
+            naga::Statement::If { accept, reject, .. } => {
+                for_each_statement(accept, visit);
+                for_each_statement(reject, visit);
+            }
+            naga::Statement::Switch { cases, .. } => {
+                for case in cases {
+                    for_each_statement(&case.body, visit);
+                }
+            }
+            naga::Statement::Loop {
+                body, continuing, ..
+            } => {
+                for_each_statement(body, visit);
+                for_each_statement(continuing, visit);
+            }
+            _ => {}
+        }
+    }
+}
+
+// Pointer arguments of a call: (callee parameter index, root in the caller).
+fn call_pointer_args(
+    module: &naga::Module,
+    caller: &naga::Function,
+    callee: naga::Handle<naga::Function>,
+    arguments: &[naga::Handle<naga::Expression>],
+) -> Vec<(usize, PointerRoot)> {
+    arguments
+        .iter()
+        .enumerate()
+        .filter(|(k, _)| {
+            let param_ty = module.functions[callee].arguments[*k].ty;
+            matches!(
+                module.types[param_ty].inner,
+                naga::TypeInner::Pointer { .. }
+            )
+        })
+        .filter_map(|(k, &arg)| pointer_root(&caller.expressions, arg).map(|root| (k, root)))
+        .collect()
+}
+
+fn alias_effects(
+    module: &naga::Module,
+    f: &naga::Function,
+    known: &HashMap<naga::Handle<naga::Function>, AliasEffects>,
+) -> AliasEffects {
+    let mut fx = AliasEffects {
+        param_read: vec![false; f.arguments.len()],
+        param_write: vec![false; f.arguments.len()],
+        ..Default::default()
+    };
+    for (_, expr) in f.expressions.iter() {
+        if let naga::Expression::Load { pointer } = *expr {
+            if let Some(root) = pointer_root(&f.expressions, pointer) {
+                fx.mark(root, true, false);
+            }
+        }
+    }
+    for_each_statement(&f.body, &mut |stmt| match stmt {
+        naga::Statement::Store { pointer, .. } => {
+            if let Some(root) = pointer_root(&f.expressions, *pointer) {
+                fx.mark(root, false, true);
+            }
+        }
+        naga::Statement::Atomic { pointer, .. } => {
+            if let Some(root) = pointer_root(&f.expressions, *pointer) {
+                fx.mark(root, true, true);
+            }
+        }
+        naga::Statement::Call {
+            function,
+            arguments,
+            ..
+        } => {
+            let Some(callee) = known.get(function) else {
+                return;
+            };
+            for (k, root) in call_pointer_args(module, f, *function, arguments) {
+                fx.mark(root, callee.param_read[k], callee.param_write[k]);
+            }
+            fx.global_read.extend(callee.global_read.iter().copied());
+            fx.global_write.extend(callee.global_write.iter().copied());
+        }
+        _ => {}
+    });
+    fx
+}
+
+// WGSL alias analysis (§ "Alias Analysis"): at a call, two pointer arguments with
+// the same root variable, or a pointer argument and a module-scope variable the
+// callee uses, must not both be accessed with either one written. naga 29 does
+// not check this.
+fn validate_alias_analysis(module: &naga::Module) -> Vec<WgslMessage> {
+    let mut effects: HashMap<naga::Handle<naga::Function>, AliasEffects> = HashMap::new();
+    for _ in 0..=module.functions.len() {
+        let mut changed = false;
+        for (h, f) in module.functions.iter() {
+            let fx = alias_effects(module, f, &effects);
+            if effects.get(&h) != Some(&fx) {
+                effects.insert(h, fx);
+                changed = true;
+            }
+        }
+        if !changed {
+            break;
+        }
+    }
+
+    let mut errors = Vec::new();
+    let callers = module
+        .functions
+        .iter()
+        .map(|(_, f)| f)
+        .chain(module.entry_points.iter().map(|ep| &ep.function));
+    for caller in callers {
+        for_each_statement(&caller.body, &mut |stmt| {
+            let naga::Statement::Call {
+                function,
+                arguments,
+                ..
+            } = stmt
+            else {
+                return;
+            };
+            let Some(callee) = effects.get(function) else {
+                return;
+            };
+            let accessed = |k: usize| callee.param_read[k] || callee.param_write[k];
+            let pointer_args = call_pointer_args(module, caller, *function, arguments);
+            for (i, &(a, root_a)) in pointer_args.iter().enumerate() {
+                for &(b, root_b) in &pointer_args[i + 1..] {
+                    let written = callee.param_write[a] || callee.param_write[b];
+                    if root_a == root_b && accessed(a) && accessed(b) && written {
+                        errors.push(wgsl_error(
+                            "alias analysis: two pointer arguments alias the same variable and one is written",
+                        ));
+                    }
+                }
+                if let PointerRoot::Global(g) = root_a {
+                    let global_accessed =
+                        callee.global_read.contains(&g) || callee.global_write.contains(&g);
+                    let written = callee.param_write[a] || callee.global_write.contains(&g);
+                    if accessed(a) && global_accessed && written {
+                        errors.push(wgsl_error(
+                            "alias analysis: a pointer argument aliases a module-scope variable the callee uses, and one is written",
+                        ));
+                    }
+                }
+            }
+        });
+    }
+    errors
 }
 
 fn validate_storage_atomic_access(module: &naga::Module) -> Vec<WgslMessage> {
@@ -7837,6 +8220,7 @@ fn validate_math_domain_source(
         && !source.contains("reflect")
         && !source.contains("refract")
         && !source.contains("faceForward")
+        && !source.contains("normalize")
     {
         return Vec::new();
     }
@@ -7853,6 +8237,7 @@ fn validate_math_domain_source(
         "reflect",
         "refract",
         "faceForward",
+        "normalize",
     ] {
         let mut i = 0usize;
         while let Some(rel) = scan[i..].find(builtin) {
@@ -7882,6 +8267,22 @@ fn check_math_call_args(
     errors: &mut Vec<WgslMessage>,
 ) {
     match builtin {
+        // naga evaluates normalize(v) as v / length(v): when the squared length
+        // overflows the type (f64 for abstract) it divides by infinity instead of
+        // reporting it.
+        "normalize" => {
+            if let Some(values) = args
+                .first()
+                .and_then(|a| resolve_math_float_values(a, constants))
+            {
+                let squared_length = values.values.iter().map(|v| v * v).sum::<f64>();
+                if checked_source_float(values.kind, squared_length).is_none() {
+                    errors.push(wgsl_error(
+                        "normalize(e): the squared length of e overflows its type",
+                    ));
+                }
+            }
+        }
         "acosh" => {
             if args.len() == 1 {
                 if let Some(Err(message)) = eval_const_float_builtin_call(builtin, args, constants)
@@ -9411,7 +9812,12 @@ fn eval_float_builtin_source_call(
         }
         "length" => {
             let a = resolve_math_float_values(&args.first()?, constants)?;
-            let value = a.values.iter().map(|v| v * v).sum::<f64>().sqrt();
+            // A scalar's length is its absolute value; squaring would overflow early.
+            let value = if a.values.len() == 1 {
+                a.values[0].abs()
+            } else {
+                a.values.iter().map(|v| v * v).sum::<f64>().sqrt()
+            };
             Some(SourceFloatValues {
                 kind: a.kind,
                 values: vec![checked_source_float(a.kind, value)?],
@@ -9425,14 +9831,18 @@ fn eval_float_builtin_source_call(
             if pairs.is_empty() {
                 return None;
             }
-            let value = pairs
-                .iter()
-                .map(|(x, y)| {
-                    let d = x - y;
-                    d * d
-                })
-                .sum::<f64>()
-                .sqrt();
+            let value = if pairs.len() == 1 {
+                (pairs[0].0 - pairs[0].1).abs()
+            } else {
+                pairs
+                    .iter()
+                    .map(|(x, y)| {
+                        let d = x - y;
+                        d * d
+                    })
+                    .sum::<f64>()
+                    .sqrt()
+            };
             Some(SourceFloatValues {
                 kind,
                 values: vec![checked_source_float(kind, value)?],
@@ -9441,7 +9851,7 @@ fn eval_float_builtin_source_call(
         "normalize" => {
             let a = resolve_math_float_values(&args.first()?, constants)?;
             let len = a.values.iter().map(|v| v * v).sum::<f64>().sqrt();
-            if len == 0.0 {
+            if len == 0.0 || !len.is_finite() {
                 return None;
             }
             let mut out = Vec::with_capacity(a.values.len());
@@ -9553,12 +9963,25 @@ fn lower_const_float_math_call(
     args: &[String],
     constants: Option<&HashMap<String, f64>>,
 ) -> Option<String> {
+    // A wrong argument count stays in the source so naga reports it.
+    let arity = if name == "distance" { 2 } else { 1 };
+    if args.len() != arity {
+        return None;
+    }
+
     match name {
         // CTS checks f32 atanh near ±1 against a tight inherited-accuracy
         // interval. Some shader backends lower the const form inaccurately, so
         // resolve source-constant calls before Naga emits them.
         "atanh" => eval_float_builtin_source_call(name, args, constants)
             .and_then(|values| format_source_float_values(&values)),
+        // naga concretizes abstract arguments to f32 before evaluating these, so
+        // representable abstract results (`length(-1.7e308)`) were rejected.
+        "length" | "normalize" | "distance" => {
+            eval_float_builtin_source_call(name, args, constants)
+                .filter(|values| values.kind == SourceFloatKind::Abstract)
+                .and_then(|values| format_source_float_values(&values))
+        }
         _ => None,
     }
 }
@@ -9746,7 +10169,7 @@ fn source_field_after_call(source: &str, offset: usize) -> Option<(&'static str,
 }
 
 fn lower_const_float_math_source(source: &str, constants: Option<&HashMap<String, f64>>) -> String {
-    const BUILTINS: [&str; 3] = ["atanh", "frexp", "modf"];
+    const BUILTINS: [&str; 6] = ["atanh", "frexp", "modf", "length", "normalize", "distance"];
     if !BUILTINS.iter().any(|name| source.contains(name)) {
         return source.to_string();
     }
@@ -12087,6 +12510,194 @@ impl Rgb10a2StoreRounding<'_> {
     }
 }
 
+// With per-sample shading (an `@interpolate(.., sample)` input or `sample_index`),
+// Vulkan's FragCoord.xy is the sample position, where WGSL `position` is the pixel
+// centre. Rewrite such an entry point's `position` input (an argument or a member
+// of an input struct) to vec4(floor(p.xy) + 0.5, p.zw).
+fn center_per_sample_frag_position(module: &mut naga::Module) {
+    use naga::{Binding, BuiltIn, Sampling, ShaderStage, Span, Type, TypeInner};
+
+    let is_per_sample = |b: &Option<Binding>| {
+        matches!(
+            b,
+            Some(Binding::Location {
+                sampling: Some(Sampling::Sample),
+                ..
+            }) | Some(Binding::BuiltIn(BuiltIn::SampleIndex))
+        )
+    };
+    let is_position =
+        |b: &Option<Binding>| matches!(b, Some(Binding::BuiltIn(BuiltIn::Position { .. })));
+    let is_vec4f = |ty: naga::Handle<Type>| {
+        matches!(
+            module.types[ty].inner,
+            TypeInner::Vector {
+                size: naga::VectorSize::Quad,
+                scalar: naga::Scalar::F32
+            }
+        )
+    };
+
+    // (entry point, argument, struct member) of each `position` input to rewrite.
+    let mut targets: Vec<(usize, u32, Option<u32>)> = Vec::new();
+    for (ep_index, ep) in module.entry_points.iter().enumerate() {
+        if ep.stage != ShaderStage::Fragment {
+            continue;
+        }
+        let mut per_sample = false;
+        let mut position = None;
+        for (arg_index, arg) in ep.function.arguments.iter().enumerate() {
+            per_sample |= is_per_sample(&arg.binding);
+            if is_position(&arg.binding) && is_vec4f(arg.ty) {
+                position = Some((arg_index as u32, None));
+            }
+            if let TypeInner::Struct { ref members, .. } = module.types[arg.ty].inner {
+                for (member_index, member) in members.iter().enumerate() {
+                    per_sample |= is_per_sample(&member.binding);
+                    if is_position(&member.binding) && is_vec4f(member.ty) {
+                        position = Some((arg_index as u32, Some(member_index as u32)));
+                    }
+                }
+            }
+        }
+        if let (true, Some((arg, member))) = (per_sample, position) {
+            targets.push((ep_index, arg, member));
+        }
+    }
+    if targets.is_empty() {
+        return;
+    }
+
+    let vec4_ty = module.types.insert(
+        Type {
+            name: None,
+            inner: TypeInner::Vector {
+                size: naga::VectorSize::Quad,
+                scalar: naga::Scalar::F32,
+            },
+        },
+        Span::UNDEFINED,
+    );
+    for (ep_index, arg, member) in targets {
+        center_position_in_function(
+            &mut module.entry_points[ep_index].function,
+            arg,
+            member,
+            vec4_ty,
+        );
+    }
+}
+
+fn center_position_in_function(
+    f: &mut naga::Function,
+    arg: u32,
+    member: Option<u32>,
+    vec4_ty: naga::Handle<naga::Type>,
+) {
+    use naga::{
+        BinaryOperator, Block, Expression, Handle, Literal, MathFunction, Range, Span, Statement,
+        SwizzleComponent, VectorSize,
+    };
+    use std::mem;
+
+    let drained: Vec<(Handle<Expression>, Expression, Span)> =
+        mem::take(&mut f.expressions).drain().collect();
+    let mut remap: HashMap<Handle<Expression>, Handle<Expression>> = HashMap::new();
+    let mut emitted_in_place: HashMap<
+        Handle<Expression>,
+        (Handle<Expression>, Handle<Expression>),
+    > = HashMap::new();
+    let mut prologue = None;
+
+    for (old_h, mut expr, span) in drained {
+        adjust_expr_with_map(&remap, &mut expr);
+        let is_target = match (&expr, member) {
+            (Expression::FunctionArgument(i), None) => *i == arg,
+            (Expression::AccessIndex { base, index }, Some(m)) => {
+                *index == m
+                    && matches!(f.expressions[*base], Expression::FunctionArgument(i) if i == arg)
+            }
+            _ => false,
+        };
+        if !is_target {
+            let new_h = f.expressions.append(expr, span);
+            remap.insert(old_h, new_h);
+            continue;
+        }
+
+        // The literal is pre-emit, so it goes before the emitted range.
+        let half = f
+            .expressions
+            .append(Expression::Literal(Literal::F32(0.5)), Span::UNDEFINED);
+        let raw = f.expressions.append(expr, span);
+        let mut add = |e: Expression| f.expressions.append(e, Span::UNDEFINED);
+        let xy = add(Expression::Swizzle {
+            size: VectorSize::Bi,
+            vector: raw,
+            pattern: [
+                SwizzleComponent::X,
+                SwizzleComponent::Y,
+                SwizzleComponent::X,
+                SwizzleComponent::X,
+            ],
+        });
+        let floored = add(Expression::Math {
+            fun: MathFunction::Floor,
+            arg: xy,
+            arg1: None,
+            arg2: None,
+            arg3: None,
+        });
+        let half2 = add(Expression::Splat {
+            size: VectorSize::Bi,
+            value: half,
+        });
+        let center = add(Expression::Binary {
+            op: BinaryOperator::Add,
+            left: floored,
+            right: half2,
+        });
+        let z = add(Expression::AccessIndex {
+            base: raw,
+            index: 2,
+        });
+        let w = add(Expression::AccessIndex {
+            base: raw,
+            index: 3,
+        });
+        let fixed = add(Expression::Compose {
+            ty: vec4_ty,
+            components: vec![center, z, w],
+        });
+        remap.insert(old_h, fixed);
+
+        // A struct member access is already emitted where it was; a bare argument is
+        // pre-emit, so its rewrite is emitted at the top of the body.
+        if member.is_some() {
+            emitted_in_place.insert(old_h, (raw, fixed));
+        } else {
+            prologue = Some(Range::new_from_bounds(xy, fixed));
+        }
+    }
+
+    adjust_block_for_bias(&remap, &emitted_in_place, &mut f.body);
+    if let Some(range) = prologue {
+        let old = mem::take(&mut f.body);
+        let mut body = Block::with_capacity(old.len() + 1);
+        body.push(Statement::Emit(range), Span::UNDEFINED);
+        for (stmt, span) in old.span_into_iter() {
+            body.push(stmt, span);
+        }
+        f.body = body;
+    }
+
+    let old_named = mem::take(&mut f.named_expressions);
+    for (old_h, name) in old_named {
+        f.named_expressions
+            .insert(remap.get(&old_h).copied().unwrap_or(old_h), name);
+    }
+}
+
 fn adjust_block_with_remap(
     remap: &HashMap<naga::Handle<naga::Expression>, naga::Handle<naga::Expression>>,
     block: &mut naga::Block,
@@ -12604,6 +13215,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     let mut bridge_errors = validate_storage_atomic_access(&module);
     bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
     bridge_errors.extend(validate_bool_order_comparisons(&module));
+    bridge_errors.extend(validate_alias_analysis(&module));
     bridge_errors.extend(validate_div_rem(&module));
     // WGSL §17.6.3.4 / §17.6.3.21: clamp(v, low, high) and smoothstep(e0,
     // e1, x) require low ≤ high / e0 ≤ e1 when both are const- or override-
@@ -12626,6 +13238,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // constants in CTS can compile.
     fold_bit_builtins(&mut module);
     round_rgb10a2unorm_stores(&mut module);
+    center_per_sample_frag_position(&mut module);
 
     let info = match Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module) {
         Ok(i) => i,
@@ -12648,6 +13261,12 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         }
     }
 
+    let external_emit = texture_external_emit_module(&module, &parse_source);
+    let (emit_module, emit_info) = match &external_emit {
+        Some((lowered_module, lowered_info)) => (lowered_module, lowered_info),
+        None => (&module, &info),
+    };
+
     // catch_unwind: naga 29's SPIR-V writer has todo!() panics for some
     // unimplemented features. Emit failure leaves spirv=None; reflection survives.
     let mut options = spv::Options::default();
@@ -12657,7 +13276,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     options.bounds_check_policies = robust_access_policies();
     let spirv_words: Option<Vec<u32>> =
         std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            process_overrides(&module, &info, None, &pipeline_constants)
+            process_overrides(emit_module, emit_info, None, &pipeline_constants)
                 .ok()
                 .and_then(|(processed_module, _processed_info)| {
                     let mut processed_module = processed_module.into_owned();
@@ -12840,6 +13459,99 @@ mod tests {
             "struct S {{ i : u32 }} var<private> s : S;\n{src}\n"
         ))
         .is_ok());
+    }
+
+    #[test]
+    fn const_length_normalize_distance_follow_wgsl_precision() {
+        // Abstract arguments are evaluated in abstract precision, not concretized to f32.
+        assert!(compile_with_meta("const v = length(-1.7976931348623157e+308);").is_ok());
+        assert!(compile_with_meta(
+            "const v = normalize(vec2(-1.577304530685975e+146, -1.577304530685975e+146));"
+        )
+        .is_ok());
+        assert!(compile_with_meta("const v = distance(-1.7e308, 1.0);").is_ok());
+        // An f32 normalize whose squared length overflows is an error.
+        assert!(compile_with_meta(
+            "const v = normalize(vec2(-3.4028234663852886e+38f, -3.4028234663852886e+38f));"
+        )
+        .is_err());
+        assert!(compile_with_meta("const v = normalize(vec2(3.0f, 4.0f));").is_ok());
+        // A wrong argument count must still be reported, not folded away.
+        assert!(compile_with_meta("const v = atanh(0, .2);").is_err());
+        assert!(compile_with_meta("const v = length(1.0, 2.0);").is_err());
+        // An abstract normalize whose squared length overflows f64 is an error too.
+        assert!(compile_with_meta(
+            "const v = normalize(vec2(-1.7976931348623157e+308, -1.7976931348623157e+308));"
+        )
+        .is_err());
+    }
+
+    #[test]
+    fn override_bake_keeps_constant_lets_runtime() {
+        let src = "override o : f32;\nfn foo() -> u32 {\n  let l = f32(1e30);\n  let tmp = vec4(o) * vec4(vec3(o), l);\n  return 0;\n}\n@compute @workgroup_size(1) fn main() { _ = o; _ = foo(); }\n";
+        let lowered = runtime_constant_lets_source(src);
+        assert!(lowered.contains("var l_pe_runtime = f32(1e30); let l = l_pe_runtime;"));
+        assert!(lowered.contains("let tmp = vec4(o)"));
+        let loop_header = runtime_constant_lets_source("fn f() { for (let i = 0; false;) {} }");
+        assert!(loop_header.contains("for (let i = 0;"));
+        let mut constants = HashMap::new();
+        constants.insert("o".to_string(), 1e30);
+        assert!(bake_wgsl_with_constants(src, constants, Some("main")).is_some());
+    }
+
+    #[test]
+    fn alias_analysis_rejects_written_aliases() {
+        let two = "var<private> x : i32;\nfn f(a : ptr<private, i32>, b : ptr<private, i32>) { *a = 42; _ = *b + 1; }\n";
+        assert!(compile_with_meta(&format!("{two}fn g() {{ f(&x, &x); }}")).is_err());
+        let mut fn_space = String::from(
+            "fn f(a : ptr<function, i32>, b : ptr<function, i32>) { *a = 42; *b = 1; }\n",
+        );
+        fn_space.push_str("fn g() { var v : i32; f(&v, &v); }");
+        assert!(compile_with_meta(&fn_space).is_err());
+        // Distinct roots, or no write, are fine.
+        assert!(compile_with_meta(&format!(
+            "{two}var<private> y : i32;\nfn g() {{ f(&x, &y); }}"
+        ))
+        .is_ok());
+        let reads = "var<private> x : i32;\nfn f(a : ptr<private, i32>, b : ptr<private, i32>) { _ = *a + *b; }\nfn g() { f(&x, &x); }";
+        assert!(compile_with_meta(reads).is_ok());
+        // A pointer argument aliasing a module-scope variable the callee writes.
+        let module_scope = "var<private> x : i32;\nfn f(a : ptr<private, i32>) { _ = *a; x = 1; }\nfn g() { f(&x); }";
+        assert!(compile_with_meta(module_scope).is_err());
+        // Through a nested call.
+        let sub = "var<private> x : i32;\nfn w(p : ptr<private, i32>) { *p = 1; }\nfn f(a : ptr<private, i32>, b : ptr<private, i32>) { w(a); _ = *b; }\nfn g() { f(&x, &x); }";
+        assert!(compile_with_meta(sub).is_err());
+    }
+
+    #[test]
+    fn per_sample_fragment_position_is_centred() {
+        let direct = "@fragment fn fs(@builtin(position) p: vec4f, @location(0) @interpolate(perspective, sample) v: f32) -> @location(0) vec4f { return p + vec4f(v); }\n";
+        let member = "struct In { @builtin(position) p: vec4f, @builtin(sample_index) i: u32 }\n@fragment fn fs(fin: In) -> @location(0) vec4f { return fin.p; }\n";
+        let plain =
+            "@fragment fn fs(@builtin(position) p: vec4f) -> @location(0) vec4f { return p; }\n";
+        for src in [direct, member, plain] {
+            let mut module = naga::front::wgsl::parse_str(src).unwrap();
+            center_per_sample_frag_position(&mut module);
+            let floors = module.entry_points[0]
+                .function
+                .expressions
+                .iter()
+                .filter(|(_, e)| {
+                    matches!(
+                        e,
+                        naga::Expression::Math {
+                            fun: naga::MathFunction::Floor,
+                            ..
+                        }
+                    )
+                })
+                .count();
+            assert_eq!(floors, if src == plain { 0 } else { 1 });
+            assert!(Validator::new(ValidationFlags::all(), Capabilities::all())
+                .validate(&module)
+                .is_ok());
+            assert!(compile_with_meta(src).is_ok());
+        }
     }
 
     #[test]
@@ -13119,6 +13831,63 @@ const_assert ((((0)<<(64u))) == 0);
             "fn f(){ loop { if false { continue; } let cond = false; continuing { break if cond; } } }"
         )
         .is_empty());
+    }
+
+    const EXTERNAL_LOAD_SHADER: &str = "
+@group(0) @binding(0) var T : texture_external;
+@group(0) @binding(1) var S : sampler;
+@group(1) @binding(0) var<storage, read_write> results: array<vec4f>;
+fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
+@compute @workgroup_size(1) fn main(@builtin(global_invocation_id) id: vec3u) {
+  let d = textureDimensions(T);
+  results[id.x] = textureLoad(T, vec2i(id.xy)) + load(T, id.xy)
+      + textureSampleBaseClampToEdge(T, S, vec2f(d)) /* textureLoad(T, x) */;
+}
+";
+
+    #[test]
+    fn texture_external_lowers_to_texture_2d_with_level() {
+        let lowered = lower_texture_external_source(EXTERNAL_LOAD_SHADER);
+        assert!(!lowered.contains("texture_external"));
+        assert!(lowered.contains("var T : texture_2d<f32>;"));
+        assert!(lowered.contains("fn load(t: texture_2d<f32>, c: vec2u)"));
+        assert!(lowered.contains("textureLoad(t, c, 0i)"));
+        assert!(lowered.contains("textureLoad(T, vec2i(id.xy), 0i)"));
+        assert!(lowered.contains("textureSampleBaseClampToEdge(T, S, vec2f(d))"));
+        assert!(lowered.contains("/* textureLoad(T, x) */"));
+
+        let storage = "@group(0) @binding(0) var s : texture_storage_2d<r32float, read>;\n";
+        assert_eq!(lower_texture_external_source(storage), storage);
+    }
+
+    #[test]
+    fn texture_external_compiles_to_spirv_and_reflects_as_external() {
+        let Ok(result) = compile_with_meta(EXTERNAL_LOAD_SHADER) else {
+            panic!("external shader must compile");
+        };
+        assert!(result.spirv.is_some());
+        let kinds: Vec<_> = result.entry_points[0]
+            .statically_used
+            .iter()
+            .map(|b| (b.binding, b.kind.clone().unwrap_or_default()))
+            .collect();
+        assert!(kinds.contains(&(0, "external-texture".to_string())));
+        assert!(
+            bake_wgsl_with_constants(EXTERNAL_LOAD_SHADER, HashMap::new(), Some("main")).is_some()
+        );
+    }
+
+    #[test]
+    fn texture_external_keeps_external_only_validation() {
+        let prelude = "@group(0) @binding(0) var t: texture_external;\n@group(0) @binding(1) var s: sampler;\n";
+        for body in [
+            "_ = textureSample(t, s, vec2f(0));",
+            "_ = textureLoad(t, vec2i(0), 0);",
+            "_ = textureNumLevels(t);",
+        ] {
+            let src = format!("{prelude}@fragment fn fs() {{ {body} }}\n");
+            assert!(compile_with_meta(&src).is_err(), "{body} must be rejected");
+        }
     }
 
     #[test]
@@ -13901,19 +14670,24 @@ pub fn bake_wgsl_with_constants(
         Some(&constants),
     );
     let parse_source = lower_abstract_float_output_snippets_source(&parse_source, Some(&constants));
+    let parse_source = runtime_constant_lets_source(&parse_source);
     let mut module = wgsl::parse_str(&parse_source).ok()?;
     clamp_image_sample_bias(&mut module);
     cloak_const_indices(&mut module, &parse_source);
     let mut bridge_errors = validate_storage_atomic_access(&module);
     bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
     bridge_errors.extend(validate_bool_order_comparisons(&module));
+    bridge_errors.extend(validate_alias_analysis(&module));
     if !bridge_errors.is_empty() {
         return None;
     }
     round_rgb10a2unorm_stores(&mut module);
+    center_per_sample_frag_position(&mut module);
     let info = Validator::new(ValidationFlags::all(), Capabilities::all())
         .validate(&module)
         .ok()?;
+    let (module, info) =
+        texture_external_emit_module(&module, &parse_source).unwrap_or((module, info));
 
     // 0.0 stubs for missing no-default overrides; engine-side validation still
     // enforces "required but not provided" separately.

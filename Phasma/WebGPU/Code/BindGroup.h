@@ -76,7 +76,6 @@ struct WGPUBindGroupImpl
     std::vector<WGPUBindGroupTextureUse> textureUses;
     std::vector<WGPUBindGroupBufferUse> bufferUses;
     std::vector<WGPUSamplerImpl *> retainedSamplers;
-    std::vector<pe::Sampler *> ownedSamplers;
 
     struct DynamicBinding
     {
