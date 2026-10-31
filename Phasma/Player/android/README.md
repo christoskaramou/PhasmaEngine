@@ -10,6 +10,7 @@ This is the first Android host scaffold for `PhasmaPlayer`. It builds the normal
    - `sdk.dir` to the Android SDK path.
    - `sdl2Root` to a full SDL2 source checkout/release that contains `android-project/app/src/main/java/org/libsdl/app/SDLActivity.java`.
    - `spirvCrossRoot` to a full SPIRV-Cross source checkout/release with its CMake project.
+   - Optionally `PE_PROJECT_DIR` to a game project root: its `Assets/` ships in the APK and its shaders are baked (pass the same root to `tools/bake_android_shaders.ps1 -ProjectPath`).
 
 The repository's current `Phasma/Core/third_party/SDL2` directory is header-only for this purpose; do not point `sdl2Root` at it.
 The repository's current `Phasma/Core/third_party/spirv_cross` directory is also headers-only; Android needs the full source tree so CMake can build `spirv-cross-core` for the NDK.

@@ -51,6 +51,9 @@ val androidAbiFilters = (localProperty("androidAbiFilters") ?: "arm64-v8a")
 val prebakedSpvDir = rootProject.layout.projectDirectory.dir("prebaked/ShaderCache/_spv")
 val prebakedSpvManifest = rootProject.layout.projectDirectory.file("prebaked/ShaderCache/bake-manifest.json")
 
+// Optional game project: PE_PROJECT_DIR in local.properties, the same root the bake gets as -ProjectPath.
+val gameAssets = localProperty("PE_PROJECT_DIR")?.takeIf { it.isNotBlank() }?.let { file(it).canonicalFile.resolve("Assets") }
+
 val androidShaderBakeInputs: () -> List<File> = {
     buildList {
         add(engineRoot.resolve("tools/bake_android_shaders.ps1"))
@@ -65,9 +68,9 @@ val androidShaderBakeInputs: () -> List<File> = {
         addAll(fileTree(engineRoot.resolve("Phasma/Runtime/RuntimeAssets/PassInfo")).files)
         addAll(fileTree(rootProject.file("app/src/main/assets/Assets")).files)
         // The game's own shaders and passes (staged below) are baked too (tools/bake_android_shaders.ps1 -ProjectPath).
-        val gameAssets = engineRoot.resolve("../AgainstTheHero/Assets")
-        for (dir in listOf("Shaders", "PassInfo"))
-            if (gameAssets.resolve(dir).isDirectory) addAll(fileTree(gameAssets.resolve(dir)).files)
+        if (gameAssets != null)
+            for (dir in listOf("Shaders", "PassInfo"))
+                if (gameAssets.resolve(dir).isDirectory) addAll(fileTree(gameAssets.resolve(dir)).files)
     }.map { it.canonicalFile }.filter { it.isFile }.distinct().sortedBy { it.invariantSeparatorsPath }
 }
 
@@ -120,25 +123,21 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
     from(prebakedModelsDir) {
         into("Assets/Models")
     }
-    // AgainstTheHero game project (sibling repo): stage the complete runtime asset tree.
-    // Old archived modes and the desktop-only entry script stay excluded, and so do the desktop
+    // Game project (PE_PROJECT_DIR): stage its complete runtime asset tree, except the desktop
     // player's saves (extraction copies over the device's own Save/) and the editor's local files
     // (editor_config.json would clash with the Android-local one that picks the boot scene).
-    val athAssets = engineRoot.resolve("../AgainstTheHero/Assets")
-    if (athAssets.isDirectory) {
-        from(athAssets) {
+    if (gameAssets?.isDirectory == true) {
+        from(gameAssets) {
             into("Assets")
             exclude(
-                "Scripts/old/**",
-                "Scripts/Player/against_the_hero.lua",
                 "Save/**",
                 "editor_config.json",
                 "editor_windows.json",
                 "imgui.ini"
             )
         }
-    } else {
-        logger.warn("AgainstTheHero project not found at $athAssets — APK will lack the game.")
+    } else if (gameAssets != null) {
+        logger.warn("PE_PROJECT_DIR has no Assets/ at $gameAssets — APK will lack the game.")
     }
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     into(stagedAssetsDir)
