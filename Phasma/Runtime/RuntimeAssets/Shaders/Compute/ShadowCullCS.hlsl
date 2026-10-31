@@ -12,10 +12,11 @@ struct DrawIndexedIndirectCommand
 
 [[vk::binding(0, 0)]] StructuredBuffer<DrawIndexedIndirectCommand> IndirectCommandsIn;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> MeshConstants;
-[[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [regular, voxels, instance batches, generated masks]
+[[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [regular, voxels, instance batches, generated masks, tints]
 [[vk::binding(3, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectRegularOut;
 [[vk::binding(4, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectVoxelsOut;
 [[vk::binding(5, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectMaskOut;
+[[vk::binding(6, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectTintOut; // Transmission: ShadowPass tint maps
 [[vk::binding(12, 0)]] ByteAddressBuffer NodeData;
 
 // Same LOD params buffer the main CullingCS consumes (Scene::UpdateLodUniforms, binding 16). Lets the
@@ -147,11 +148,14 @@ uint WaveAppend(uint counterIndex, bool emit)
 
     const bool isVoxel = idx >= pc.arenaSlotBase;
     const bool isMask = !isVoxel && pc.generatedMasks != 0u && PeUsesGeneratedMask(constants);
-    const bool batchLeader = BatchInstances(cmd, idx, isMask ? 1u : 0u,
+    const bool isTint = !isVoxel && constants.renderType == 4u; // RenderType::Transmission
+    const uint bucket = isTint ? 2u : (isMask ? 1u : 0u);
+    const bool batchLeader = BatchInstances(cmd, idx, bucket,
                                             skinnedInstancing != 0u && skinBoundsOffset != 0u && !isVoxel,
                                             drawCapacity * 4u, 2u);
-    const bool emitRegular = !isVoxel && !isMask && batchLeader;
+    const bool emitRegular = !isVoxel && !isMask && !isTint && batchLeader;
     const bool emitMask = isMask && batchLeader;
+    const bool emitTint = isTint && batchLeader;
     const bool emitVoxel = isVoxel;
 
     uint slot;
@@ -166,4 +170,8 @@ uint WaveAppend(uint counterIndex, bool emit)
     slot = WaveAppend(3, emitMask);
     if (emitMask)
         IndirectMaskOut[slot] = cmd;
+
+    slot = WaveAppend(4, emitTint);
+    if (emitTint)
+        IndirectTintOut[slot] = cmd;
 }

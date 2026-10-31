@@ -347,6 +347,10 @@ namespace pe
             settings.AddMember("render_scale", gSettings.render_scale, allocator);
             settings.AddMember("randomize_lights", gSettings.randomize_lights, allocator);
             settings.AddMember("skybox_path", rapidjson::Value(gSettings.skybox_path.c_str(), allocator), allocator);
+            rapidjson::Value skyboxRotation(rapidjson::kArrayType);
+            for (float degrees : gSettings.skybox_rotation)
+                skyboxRotation.PushBack(degrees, allocator);
+            settings.AddMember("skybox_rotation", skyboxRotation.Move(), allocator);
             settings.AddMember("time_scale", gSettings.time_scale, allocator);
             settings.AddMember("physics_rate", gSettings.physics_rate, allocator);
             rapidjson::Value layerNames(rapidjson::kArrayType), layerIgnore(rapidjson::kArrayType);
@@ -638,6 +642,7 @@ namespace pe
         {
             auto &gSettings = Settings::Get<SceneSettings>();
             const std::string previousSkyboxPath = gSettings.skybox_path;
+            const std::array<float, 3> previousSkyboxRotation = gSettings.skybox_rotation;
             ApplyPipelineMembers(settings);
             if (settings.HasMember("right_handed") && settings["right_handed"].GetBool() != gSettings.right_handed)
             {
@@ -669,8 +674,24 @@ namespace pe
             gSettings.skybox_path = settings.HasMember("skybox_path") && settings["skybox_path"].IsString()
                                         ? settings["skybox_path"].GetString()
                                         : SceneSettings::DefaultSkyboxPath;
-            if (gSettings.skybox_path != previousSkyboxPath)
+
+            // Absent (scenes saved before the setting) = unrotated, not the previous scene's rotation.
+            gSettings.skybox_rotation = {};
+            if (settings.HasMember("skybox_rotation") && settings["skybox_rotation"].IsArray())
+            {
+                const auto &rotation = settings["skybox_rotation"];
+                for (rapidjson::SizeType i = 0; i < rotation.Size() && i < 3; ++i)
+                {
+                    if (rotation[i].IsNumber())
+                        gSettings.skybox_rotation[i] = rotation[i].GetFloat();
+                }
+            }
+
+            const bool skyChanged = gSettings.skybox_path != previousSkyboxPath ||
+                                    gSettings.skybox_rotation != previousSkyboxRotation;
+            if (skyChanged)
                 RefreshSceneSky();
+
             if (settings.HasMember("time_scale"))
                 gSettings.time_scale = settings["time_scale"].GetFloat();
             // Absent (scenes saved before the setting) = the old fixed 30 Hz, not the previous scene's rate.
@@ -1621,7 +1642,7 @@ namespace pe
                 return;
             }
 
-            const OpenPBRLayout &layout = GetOpenPBRSource(instance).module->layout;
+            const OpenPBRLayout &layout = GetOpenPBRSource(instance).layout;
             for (auto it = inputs.MemberBegin(); it != inputs.MemberEnd(); ++it)
             {
                 const std::string identity(it->name.GetString(), it->name.GetStringLength());
@@ -1869,7 +1890,7 @@ namespace pe
 
             const MaterialInstance &instance = *mesh.materialInstance;
             const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
-            const bool hasInputs = std::any_of(source.module->layout.inputs.begin(), source.module->layout.inputs.end(),
+            const bool hasInputs = std::any_of(source.layout.inputs.begin(), source.layout.inputs.end(),
                                                [&](const OpenPBRInput &input)
                                                {
                                                    return instance.HasParamOverride(input.identity);
@@ -1893,7 +1914,7 @@ namespace pe
             }
 
             rapidjson::Value inputs(rapidjson::kObjectType);
-            for (const OpenPBRInput &input : source.module->layout.inputs)
+            for (const OpenPBRInput &input : source.layout.inputs)
             {
                 if (input.type == "SamplerTexture2D" || !instance.HasParamOverride(input.identity))
                     continue;

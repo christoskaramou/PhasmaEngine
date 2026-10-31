@@ -35,6 +35,27 @@ namespace pe
             texture->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
         }
 
+        // Cleared to full transmittance (rgb 1) and no caster (depth 0, reverse-Z far).
+        m_tints.resize(m_textures.size());
+        for (size_t c = 0; c < m_tints.size(); c++)
+        {
+            ImageDesc desc{};
+            desc.format = PE_FORMAT_R16G16B16A16_SFLOAT;
+            desc.width = std::max(1u, Settings::Get<SceneSettings>().shadow_map_size / 2u);
+            desc.height = desc.width;
+            desc.usage = PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED;
+            desc.clearColor = vec4(1.0f, 1.0f, 1.0f, Color::Depth);
+            desc.name = "ShadowTint_" + std::to_string(c);
+            m_tints[c] = Image::Create(desc);
+            m_tints[c]->SetClearColor(desc.clearColor);
+            m_tints[c]->CreateRTV();
+            m_tints[c]->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+        }
+
+        m_tintAttachment = {};
+        m_tintAttachment.loadOp = PE_LOAD_OP_CLEAR;
+        m_tintAttachment.storeOp = PE_STORE_OP_STORE;
+
         SamplerDesc samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
         samplerInfo.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -98,7 +119,45 @@ namespace pe
         m_cullPassInfo->Update();
         if (m_maskEnabled)
             UpdateFallbackPassInfo();
+
+        UpdateTintPassInfo();
         m_masks.Rebuild();
+    }
+
+    void ShadowPass::UpdateTintPassInfo()
+    {
+        if (!m_tintPassInfo)
+            m_tintPassInfo = std::make_shared<PassInfo>();
+
+        // rgb: dst * (1 - src) with src = 1 - transmittance, the product of every surface; alpha: the nearest depth.
+        const BlendState tintBlend(true,
+                                   PE_BLEND_FACTOR_ZERO,
+                                   PE_BLEND_FACTOR_ONE_MINUS_SRC_COLOR,
+                                   PE_BLEND_OP_ADD,
+                                   PE_BLEND_FACTOR_ONE,
+                                   PE_BLEND_FACTOR_ONE,
+                                   PE_BLEND_OP_MAX,
+                                   PE_COLOR_COMPONENT_RGBA);
+
+        const std::vector<Define> defines{{"PE_SHADOW_TINT", "1"}};
+        PassInfo &info = *m_tintPassInfo;
+        info.name = "shadows_tint_pipeline";
+        info.pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Shadows/ShadowsVS.hlsl",
+                                           .entryPoint = "mainVS",
+                                           .stage = PE_SHADER_STAGE_VERTEX,
+                                           .defines = defines});
+        info.pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Shadows/ShadowsVS.hlsl",
+                                           .entryPoint = "mainTintPS",
+                                           .stage = PE_SHADER_STAGE_FRAGMENT,
+                                           .defines = defines});
+        info.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+        info.cullMode = PE_CULL_MODE_NONE;
+        info.blendEnable = true;
+        info.colorBlendAttachments = {tintBlend};
+        info.colorFormats = {PE_FORMAT_R16G16B16A16_SFLOAT};
+        info.depthTestEnable = false;
+        info.depthWriteEnable = false;
+        info.Update();
     }
 
     void ShadowPass::UpdateFallbackPassInfo()
@@ -143,7 +202,41 @@ namespace pe
             set->SetBuffer(2, scene.GetIndirectAll());
         if (set->HasBinding(3))
             set->SetBuffer(3, scene.GetOpenPBRSkinningBinding(frame));
+        if (set->HasBinding(4))
+            set->SetBuffer(4, scene.GetMaterialTable());
         set->Update();
+    }
+
+    void ShadowPass::DrawTints(CommandBuffer *cmd, uint32_t cascade, const PushConstants_Shadows &pc, bool shadowCull,
+                               uint32_t regularCount)
+    {
+        m_tintAttachment.image = m_tints[cascade];
+        cmd->BeginPass(1, &m_tintAttachment, "Tint_" + std::to_string(cascade));
+        cmd->SetViewport(0.f, 0.f, m_tints[cascade]->GetWidth_f(), m_tints[cascade]->GetHeight_f());
+        cmd->SetScissor(0, 0, m_tints[cascade]->GetWidth(), m_tints[cascade]->GetHeight());
+        cmd->BindPipeline(*m_tintPassInfo);
+        cmd->SetConstants(pc);
+        cmd->PushConstants();
+        cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
+        cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
+        m_scene->BindDrawIdBuffer(cmd);
+
+        // ShadowCullCS lists Transmission casters apart (counter 4); without the cull, the VS drops every other caster.
+        if (shadowCull)
+        {
+            const uint32_t frame = RHII.GetFrameIndex();
+            cmd->DrawIndexedIndirectCount(m_scene->GetShadowIndirectTint(frame),
+                                          0,
+                                          m_scene->GetShadowCullCounters(frame),
+                                          4 * sizeof(uint32_t),
+                                          regularCount);
+        }
+        else
+        {
+            cmd->DrawIndexedIndirect(m_scene->GetIndirectAll(), 0, regularCount);
+        }
+
+        cmd->EndPass();
     }
 
     void ShadowPass::DrawFallback(CommandBuffer *cmd, const PushConstants_Shadows &pc,
@@ -212,7 +305,7 @@ namespace pe
     bool ShadowPass::HasLiveResources() const
     {
         const uint32_t cascadeCount = Settings::Get<SceneSettings>().num_cascades;
-        if (cascadeCount == 0 || !m_sampler || m_textures.size() < cascadeCount ||
+        if (cascadeCount == 0 || !m_sampler || m_textures.size() < cascadeCount || m_tints.size() < cascadeCount ||
             m_uniforms.size() < RHII.GetSwapchainImageCount())
         {
             return false;
@@ -220,19 +313,30 @@ namespace pe
 
         for (uint32_t i = 0; i < cascadeCount; i++)
         {
-            if (!m_textures[i])
+            if (!m_textures[i] || !m_tints[i])
                 return false;
         }
 
         return true;
     }
 
+    std::vector<Image *> ShadowPass::GetTextures() const
+    {
+        std::vector<Image *> textures = m_textures;
+        textures.insert(textures.end(), m_tints.begin(), m_tints.end());
+        return textures;
+    }
+
     std::vector<ImageView *> ShadowPass::GetTextureViews() const
     {
         const uint32_t cascadeCount = Settings::Get<SceneSettings>().num_cascades;
-        std::vector<ImageView *> views(cascadeCount);
+        std::vector<ImageView *> views(cascadeCount * 2);
         for (uint32_t i = 0; i < cascadeCount; i++)
+        {
             views[i] = m_textures[i]->GetSRV();
+            views[cascadeCount + i] = m_tints[i]->GetSRV();
+        }
+
         return views;
     }
 
@@ -269,7 +373,7 @@ namespace pe
             m_masks.Update(scene);
             if (scene.GetMeshCount() > 0)
             {
-                for (PassInfo *info : {m_passInfo.get(), m_voxelPassInfo.get(), m_fallbackPassInfo.get()})
+                for (PassInfo *info : {m_passInfo.get(), m_voxelPassInfo.get(), m_fallbackPassInfo.get(), m_tintPassInfo.get()})
                 {
                     if (info && info->pVertShader)
                         BindScene(*info, scene);
@@ -292,6 +396,12 @@ namespace pe
                 continue;
 
             builder.OutputDepth(texture);
+        }
+
+        for (auto *tint : m_tints)
+        {
+            if (tint)
+                builder.OutputColor(tint);
         }
     }
 
@@ -547,6 +657,10 @@ namespace pe
                 }
 
                 cmd->EndPass();
+
+                // Lighting reads the tint maps only on frames they were drawn (PushConstants_Lighting::shadow_tint).
+                if (m_scene->HasTransmissionMeshes() && regularCount > 0)
+                    DrawTints(cmd, i, pushConstants, shadowCull, regularCount);
             }
         }
 
@@ -618,6 +732,10 @@ namespace pe
         for (auto &texture : m_textures)
             Image::Destroy(texture);
         m_textures.clear();
+
+        for (auto &tint : m_tints)
+            Image::Destroy(tint);
+        m_tints.clear();
 
         Sampler::Destroy(m_sampler);
         m_sampler = nullptr;

@@ -76,7 +76,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         DirectionalLight sun = LoadDirectionalLight(0);
         float3 sunDir = RotateVectorByQuat(float3(0, 0, -1), sun.rotation);
         float viewDepth = max(0.0f, dot(wolrdPos - cb_camPos.xyz, cb_camForward.xyz));
-        float shadow = CalculateShadows(wolrdPos, viewDepth, dot(normal, -sunDir), normal);
+        float3 shadowTint;
+        float shadow = CalculateShadows(wolrdPos, viewDepth, dot(normal, -sunDir), normal, shadowTint);
 
         if (pc.shadow_debug_mode == 1)
         {
@@ -86,7 +87,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         }
         if (pc.shadow_debug_mode == 2)
         {
-            output.color = float4(shadow.xxx, 1.0f);
+            output.color = float4(shadow * shadowTint, 1.0f);
             return output;
         }
 
@@ -95,6 +96,9 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
             DirectionalLight light = LoadDirectionalLight(i);
             // Use shadow only for the first one for now or all if they share shadow map (unlikely)
             float s = (i == 0) ? shadow : 1.0;
+            if (i == 0)
+                light.color.rgb *= shadowTint;
+
             fragColor += DirectLight(light, material, wolrdPos, cb_camPos.xyz, normal, occlusion, s, energyCompensation);
         }
     }

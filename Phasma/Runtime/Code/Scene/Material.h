@@ -19,6 +19,7 @@ namespace pe
         vec4 pbrParams;            // x = metallic, y = roughness, z = alphaCutoff, w = occlusionStrength
         vec4 transmissionVolume;   // x = thicknessFactor, y = attenuationDistance, z = ior, w = raw uint OpenPBR module index (runtime byte record only)
         vec4 attenuationColor;     // xyz = attenuationColor, w = nightEmissive
+        vec4 shadowTransmittance;  // xyz = light a sun shadow keeps through one surface of a Transmission mesh
     };
 
     // Identifies which VS/PS shaders a material uses per render pass.

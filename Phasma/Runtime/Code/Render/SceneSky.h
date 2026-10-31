@@ -8,7 +8,7 @@ namespace pe
 
     std::string MakeSceneSkyPathSetting(const std::string &path);
     void LoadConfiguredSceneSkybox(CommandBuffer *cmd, SkyBox &skybox);
-    bool LoadSceneSkyPath(CommandBuffer *cmd, SkyBox &skybox, const std::string &path);
+    bool LoadSceneSkyPath(CommandBuffer *cmd, SkyBox &skybox, const std::string &path, const quat &rotation);
     void LoadDefaultSceneSky(CommandBuffer *cmd, SkyBox &skybox, Image *&iblBrdfLut);
     void LoadFallbackSceneSky(CommandBuffer *cmd, SkyBox &skybox);
     // The solid-colour fallback is showing (no configured skybox, or it failed to load).

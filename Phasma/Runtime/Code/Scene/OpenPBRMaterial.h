@@ -4,7 +4,7 @@
 
 namespace pe
 {
-    inline constexpr uint32_t kOpenPBRModuleAbi = 5;
+    inline constexpr uint32_t kOpenPBRModuleAbi = 8;
 
     struct Mesh;
     class Scene;
@@ -35,16 +35,15 @@ namespace pe
     struct OpenPBRModule
     {
         std::string hash;
-        uint32_t index = 0; // runtime only: stamped into each record, never saved
-        OpenPBRLayout layout;
-        std::string thinSource;
-        std::string shadeSource;
-        std::string maskSource;
-        std::string hitSource;     // RT closest-hit wrapper (MaterialHit*.slang)
-        std::string forwardSource; // forward pixel shader for alpha-blend/transmission (MaterialForward*.slang)
-        std::string document;      // the first document with this code, named by its compile warning
+        uint32_t index = 0;    // runtime only: stamped into each record, never saved
+        OpenPBRLayout layout;  // the first source's names: read only for valid, byteSize and types/offsets
+        std::string code;      // the generated module file (raster passes compile it in its shape group)
+        std::string hitSource; // RT closest-hit wrapper (MaterialHit*.slang)
+        std::string document;  // the first document with this code, named by its compile warning
         // Runtime only: see RejectOpenPBRModule.
         mutable std::atomic<bool> rejected = false;
+        // Runtime only: the session's shape list position, set by the first GetOpenPBRPassSources (main thread).
+        mutable std::atomic<uint32_t> shapeIndex = UINT32_MAX;
     };
 
     struct OpenPBRTexture
@@ -59,6 +58,7 @@ namespace pe
         std::string path;
         std::string material;
         std::shared_ptr<const OpenPBRModule> module;
+        OpenPBRLayout layout;                                         // its own input names; types, offsets and byteSize equal the module's
         std::unordered_map<std::string, MaterialParamValue> defaults; // by OpenPBRInput::identity
         std::unordered_map<std::string, OpenPBRTexture> textures;     // by OpenPBRInput::identity
     };
@@ -67,12 +67,29 @@ namespace pe
     // raster G-buffer, RT hits and the off path read it, all but transmissionVolume.w), then the module's inputs.
     inline constexpr uint32_t kOpenPBRInputsOffset = sizeof(MaterialGpuData);
     inline constexpr uint32_t kOpenPBRModuleOffset = offsetof(MaterialGpuData, transmissionVolume) + 3 * sizeof(uint32_t);
-    static_assert(kOpenPBRInputsOffset == 80, "PE_OPENPBR_INPUTS_OFFSET in VisibilityCommon.slang must match");
+    static_assert(kOpenPBRInputsOffset == 96, "PE_OPENPBR_INPUTS_OFFSET in VisibilityCommon.slang must match");
     static_assert(kOpenPBRModuleOffset == 60, "PE_OPENPBR_MODULE_OFFSET in VisibilityCommon.slang must match");
 
     std::shared_ptr<const OpenPBRMaterialSource> GetOpenPBRDefaultSource();
     const OpenPBRMaterialSource &GetOpenPBRSource(const MaterialInstance &instance); // the default when none is assigned
     const OpenPBRModule &GetOpenPBRModule(uint32_t index);
+
+    // Raster passes compile shape groups, not modules: one combined module (OpenPBRShapes.h) per group of the project's
+    // append-only shape list (Assets/MaterialX/Cooked/shapes_abi<N>.txt), every shape on Vulkan, 8 on DX12, which inlines
+    // each shape into the entry function. A module's slot in its group is fixed for the session, so pipelines built
+    // from any version of its group still match it.
+    struct OpenPBRPassSources
+    {
+        std::string thin, shade, mask, forward; // ShaderCache/MaterialX/group_<key>.<pass>.slang
+        std::string key;                        // FNV-1a 64 of the combined text
+        uint32_t members = 0;
+    };
+
+    // Main thread. The group's current members: registered or cooked in the project, not rejected. A group marked broken
+    // compiles the module's shape alone.
+    OpenPBRPassSources GetOpenPBRPassSources(const OpenPBRModule &module);
+    uint32_t GetOpenPBRShapeSlot(const OpenPBRModule &module); // pushed by thin, shade, forward and masks
+    void MarkOpenPBRGroupBroken(const std::string &key);
 
     // Loads a cooked source from Assets/MaterialX/Cooked, or generates it with PhasmaCook --mtlx when missing.
     // A relative path resolves like any asset. Null with `error` set (and logged once) when it cannot be used.
@@ -122,4 +139,8 @@ namespace pe
     // hits, the raster G-buffer under the material passes) shows the same base colour, opacity (its alpha), metalness,
     // roughness, IOR and emission. A connected input has no constant: its legacy field keeps the material's own value.
     void MirrorOpenPBRToLegacy(MaterialInstance &instance);
+
+    // Light a sun shadow keeps through one surface of a Transmission mesh (MaterialGpuData::shadowTransmittance): the
+    // uncovered share, plus the covered share's non-metallic transmission tinted by transmission_color and the coat.
+    vec3 OpenPBRShadowTransmittance(const MaterialInstance &instance);
 } // namespace pe

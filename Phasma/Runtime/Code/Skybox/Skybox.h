@@ -9,7 +9,7 @@ namespace pe
     {
     public:
         bool LoadSkyBox(CommandBuffer *cmd, const std::array<std::string, 6> &textureNames);
-        bool LoadSkyBox(CommandBuffer *cmd, const std::string &path);
+        bool LoadSkyBox(CommandBuffer *cmd, const std::string &path, const quat &rotation);
         void LoadSolidColor(CommandBuffer *cmd, const vec4 &color, const std::string &name = "Skybox_Cubemap_SolidColor");
         void Destroy();
         Image *GetCubeMap() const { return m_cubeMap; }

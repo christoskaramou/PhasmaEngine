@@ -272,6 +272,7 @@ namespace pe
                                     { AccelerationStructure* b = blas; AccelerationStructure::Destroy(b); });
         m_blases.clear();
         m_blasByMesh.clear();
+        m_blasTransparent.clear();
 
         RHII.AddToDeletionQueue([t = m_tlas]()
                                 { AccelerationStructure* as = t; AccelerationStructure::Destroy(as); });
@@ -2013,7 +2014,7 @@ namespace pe
         const bool needsIndirectCountFallback = !RHII.GetCaps().indirectCount;
         const uint64_t indirectSize = static_cast<uint64_t>(m_indirectCapacity) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE;
         const uint64_t indirectAllSize = static_cast<uint64_t>(m_indirectAll->Size());
-        const uint64_t countersSize = 4 * sizeof(uint32_t);
+        const uint64_t countersSize = 5 * sizeof(uint32_t); // ShadowCullCS's Counters
 
         auto makeBufferBarrier = [](Buffer *buffer, PeBarrierSync stageMask, PeBarrierAccess accessMask, uint64_t size)
         {
@@ -2034,6 +2035,7 @@ namespace pe
                 cmd->FillBuffer(m_shadowIndirectRegular[frame], 0, indirectSize, 0);
                 cmd->FillBuffer(m_shadowIndirectVoxels[frame], 0, indirectSize, 0);
                 cmd->FillBuffer(m_shadowIndirectMask[frame], 0, indirectSize, 0);
+                cmd->FillBuffer(m_shadowIndirectTint[frame], 0, indirectSize, 0);
             }
         }
 
@@ -2057,6 +2059,7 @@ namespace pe
             barriers.push_back(makeBufferBarrier(m_shadowIndirectRegular[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectRegular[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowIndirectVoxels[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectVoxels[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowIndirectMask[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectMask[frame]->Size()));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectTint[frame], PE_STAGE_COMPUTE_SHADER, rw, m_shadowIndirectTint[frame]->Size()));
             cmd->BufferBarriers(barriers);
         }
 
@@ -2073,6 +2076,7 @@ namespace pe
             set->SetBuffer(3, m_shadowIndirectRegular[frame]);
             set->SetBuffer(4, m_shadowIndirectVoxels[frame]);
             set->SetBuffer(5, m_shadowIndirectMask[frame]);
+            set->SetBuffer(6, m_shadowIndirectTint[frame]);
             set->SetBuffer(12, GetUniforms(frame));
             set->SetBuffer(19, m_drawInstanceIds[frame]);
             // LOD params (binding 16) so shadow casters pick the same distance-based LOD as the main pass.
@@ -2126,6 +2130,7 @@ namespace pe
             recordComputeWrite(m_shadowIndirectRegular[frame]);
             recordComputeWrite(m_shadowIndirectVoxels[frame]);
             recordComputeWrite(m_shadowIndirectMask[frame]);
+            recordComputeWrite(m_shadowIndirectTint[frame]);
         }
 
         {
@@ -2148,6 +2153,10 @@ namespace pe
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,
                                                  m_shadowIndirectMask[frame]->Size()));
+            barriers.push_back(makeBufferBarrier(m_shadowIndirectTint[frame],
+                                                 PE_STAGE_DRAW_INDIRECT,
+                                                 PE_ACCESS_INDIRECT_COMMAND_READ,
+                                                 m_shadowIndirectTint[frame]->Size()));
             barriers.push_back(makeBufferBarrier(m_shadowCullCounters[frame],
                                                  PE_STAGE_DRAW_INDIRECT,
                                                  PE_ACCESS_INDIRECT_COMMAND_READ,
@@ -2371,9 +2380,9 @@ namespace pe
         if (rtSupport)
         {
             PE_PROFILE_SCOPE("Scene RT Rebuild");
-            if (m_blasDirty)
+            if (m_blasDirty || (m_tlasDirty && BlasOpacityStale()))
             {
-                // Full BLAS + TLAS rebuild (geometry buffer changed)
+                // Full BLAS + TLAS rebuild (geometry buffer changed, or a mesh changed opacity class)
                 CommandBuffer *cmd = RHII.GetMainQueue()->AcquireCommandBuffer();
                 cmd->Begin();
                 BuildAccelerationStructures(cmd);

@@ -5,6 +5,13 @@
 [[vk::binding(1)]] Texture2D<float4> inEquirectangular : register(t1);
 [[vk::binding(2)]] SamplerState samplerLinear : register(s2);
 
+struct PushConstants
+{
+    float4 sourceRotation; // quaternion: a sky direction into the equirect's frame (the sky rotation's inverse)
+};
+
+[[vk::push_constant]] ConstantBuffer<PushConstants> pc;
+
 float2 SampleSphericalMap(float3 v)
 {
     float2 uv = float2(atan2(v.z, v.x), asin(v.y));
@@ -48,7 +55,7 @@ void main(uint3 id : SV_DispatchThreadID)
         break;
     }
 
-    float2 srcUV = SampleSphericalMap(dir);
+    float2 srcUV = SampleSphericalMap(RotateVectorByQuat(dir, pc.sourceRotation));
     float4 color = inEquirectangular.SampleLevel(samplerLinear, srcUV, 0);
 
     outCubeMap[id] = color;

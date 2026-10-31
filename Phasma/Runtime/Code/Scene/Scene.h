@@ -536,6 +536,7 @@ namespace pe
         Buffer *GetShadowIndirectRegular(uint32_t frame) const { return m_shadowIndirectRegular[frame]; }
         Buffer *GetShadowIndirectVoxels(uint32_t frame) const { return m_shadowIndirectVoxels[frame]; }
         Buffer *GetShadowIndirectMask(uint32_t frame) const { return m_shadowIndirectMask[frame]; }
+        Buffer *GetShadowIndirectTint(uint32_t frame) const { return m_shadowIndirectTint[frame]; }
         Buffer *GetShadowCullCounters(uint32_t frame) const { return m_shadowCullCounters[frame]; }
         // Two-phase Hi-Z occlusion sets (opaque-only). A = last-frame-visible (phase 1),
         // B = newly-disoccluded (phase 2). Consumed by DepthPass/DepthLatePass/GBuffer only when
@@ -824,6 +825,7 @@ namespace pe
         void BuildAccelerationStructures(CommandBuffer *cmd);      // full BLAS+TLAS rebuild
         void BuildAllBLASes(CommandBuffer *cmd);                   // only BLAS build, populates m_blasByMesh
         void BuildTLASFromInstances(CommandBuffer *cmd);           // only TLAS build, uses m_blasByMesh
+        bool BlasOpacityStale() const;                             // a mesh left the opacity class its BLAS bakes
         void RebuildTLASOnly();                                    // creates cmd, rebuilds TLAS, submits
         void RetireTLASUpdateInstanceBuffers();
         size_t RTInstanceDescSize() const;
@@ -874,6 +876,7 @@ namespace pe
         std::vector<Buffer *> m_shadowIndirectRegular;
         std::vector<Buffer *> m_shadowIndirectVoxels;
         std::vector<Buffer *> m_shadowIndirectMask;
+        std::vector<Buffer *> m_shadowIndirectTint; // Transmission casters (ShadowPass tint maps)
         std::vector<Buffer *> m_shadowCullCounters;
         std::vector<Buffer *> m_sortKeysAlphaBlend;
         std::vector<Buffer *> m_sortKeysTransmission;
@@ -974,6 +977,7 @@ namespace pe
         // Ray tracing
         std::vector<AccelerationStructure *> m_blases;
         std::unordered_map<int, AccelerationStructure *> m_blasByMesh; // keyed by mesh index, persistent across TLAS-only rebuilds
+        std::unordered_map<int, bool> m_blasTransparent;               // the opacity class each mesh's BLAS was built in
         AccelerationStructure *m_tlas = nullptr;
         Buffer *m_instanceBuffer = nullptr;
         std::vector<Buffer *> m_tlasUpdateInstanceBuffers;

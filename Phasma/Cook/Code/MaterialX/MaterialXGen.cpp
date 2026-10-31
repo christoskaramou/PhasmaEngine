@@ -89,6 +89,24 @@ namespace pe
             return std::regex_search(text, std::regex("\\b" + name + "\\b"));
         }
 
+        // A combined module keeps one copy of the code outside these regions and one copy per shape of the code inside.
+        constexpr const char *kShapeBegin = "// PE_SHAPE_BEGIN\n";
+        constexpr const char *kShapeEnd = "// PE_SHAPE_END\n";
+
+        // Every vertex field pe_fill_vertex_data can fill, so all modules share one VertexData and vd: MaterialX's
+        // surface shading reads vd. A shape fills only the fields its graph uses.
+        constexpr const char *kVertexData = "struct VertexData\n"
+                                            "{\n"
+                                            "    float4 SV_Position : SV_Position;\n"
+                                            "    float2 texcoord_0 : texcoord_0;\n"
+                                            "    float3 normalWorld : normalWorld;\n"
+                                            "    float3 tangentWorld : tangentWorld;\n"
+                                            "    float3 bitangentWorld : bitangentWorld;\n"
+                                            "    float3 positionWorld : positionWorld;\n"
+                                            "    float4 color_0 : color_0;\n"
+                                            "}\n"
+                                            "static VertexData vd;\n";
+
         // RT hit stages (PE_MATERIAL_HIT) have no derivatives: zero differentials there (mip 0, as legacy hits sample),
         // fine derivatives everywhere else, as MaterialX's GLSL reference gets them on our drivers (DXIL's plain ddx/fwidth
         // are coarse). Subsurface's curvature ratio would become 0/0 in hits, so they read the hit triangle's.
@@ -170,6 +188,24 @@ float pe_curvature(float3 N, float3 P)
             }
 
             return {std::string::npos, std::string::npos};
+        }
+
+        bool ShareVertexData(std::string &text, const std::string &name, std::string &error)
+        {
+            const auto [start, end] = FindBlock(text, "\nstruct VertexData\n");
+            const std::string decl = "\nstatic VertexData vd;\n";
+            if (start == std::string::npos || text.compare(end + 1, decl.size(), decl) != 0)
+            {
+                error = name + ": generated pixel stage has no 'struct VertexData' followed by 'static VertexData vd;'";
+                return false;
+            }
+
+            const bool color3 = text.substr(start, end - start).find("float3 color_0") != std::string::npos;
+            text.replace(start + 1, end + decl.size() - start, kVertexData);
+            if (color3)
+                text = std::regex_replace(text, std::regex(R"(\b(_?vd)\.color_0\b)"), "$1.color_0.rgb");
+
+            return true;
         }
 
         // "0.8, 0.8, 0.8" -> [0.8,0.8,0.8]; booleans -> [1]/[0]; textures -> [].
@@ -286,10 +322,83 @@ float pe_curvature(float3 N, float3 P)
                              context.getShaderGenerator().getUpstreamResult(input, context) + ";\n";
             }
 
-            evaluator += "    return p;\n}\n\n";
+            evaluator = kShapeBegin + evaluator + "    return p;\n}\n" + kShapeEnd + "\n";
             text.replace(start, end - start + 1,
                          SurfaceInputStruct(surface, context) + evaluator +
                              SurfaceInputBlend(surface, context) + SurfaceInputShade(surface));
+        }
+
+        // Every variable MaterialX named after a graph node: node numbering and the material's surface name live there.
+        std::unordered_set<std::string> GraphVariables(const mx::ShaderGraph &graph,
+                                                       const std::vector<PeMaterialInput> &inputs)
+        {
+            std::unordered_set<std::string> names;
+            for (const mx::ShaderNode *node : graph.getNodes())
+            {
+                for (const mx::ShaderInput *input : node->getInputs())
+                    names.insert(input->getVariable());
+
+                for (const mx::ShaderOutput *output : node->getOutputs())
+                    names.insert(output->getVariable());
+            }
+
+            for (const mx::ShaderGraphInputSocket *socket : graph.getInputSockets())
+                names.insert(socket->getVariable());
+
+            for (const PeMaterialInput &in : inputs)
+                names.insert(in.var);
+
+            return names;
+        }
+
+        // Same-shape graphs must cook to identical text to share a module (RegisterModule keys on its hash), so graph
+        // variables become pe_n<k> in order of first appearance. A name also used as a member or a function keeps it:
+        // library code and PeSurfaceInputs members are never renamed. pe_* names are the engine's own (the default
+        // document's pe_openpbr_* statics), so they keep theirs too.
+        void NormalizeShapeNames(std::string &text, std::vector<PeMaterialInput> &inputs, const mx::ShaderGraph &graph)
+        {
+            std::unordered_set<std::string> names = GraphVariables(graph, inputs);
+            std::erase_if(names, [](const std::string &name)
+                          { return name.starts_with("pe_"); });
+
+            const std::regex identifier("[A-Za-z_][A-Za-z0-9_]*");
+            const std::sregex_iterator end;
+            for (std::sregex_iterator it(text.begin(), text.end(), identifier); it != end; ++it)
+            {
+                const size_t at = static_cast<size_t>(it->position());
+                const size_t next = text.find_first_not_of(" \t", at + it->length());
+                const bool member = at > 0 && text[at - 1] == '.';
+                const bool call = next != std::string::npos && text[next] == '(';
+                if (member || call)
+                    names.erase(it->str());
+            }
+
+            std::unordered_map<std::string, std::string> renamed;
+            std::string out;
+            size_t copied = 0;
+            for (std::sregex_iterator it(text.begin(), text.end(), identifier); it != end; ++it)
+            {
+                if (!names.contains(it->str()))
+                    continue;
+
+                const auto [entry, added] = renamed.try_emplace(it->str());
+                if (added)
+                    entry->second = "pe_n" + std::to_string(renamed.size() - 1);
+
+                const size_t at = static_cast<size_t>(it->position());
+                out.append(text, copied, at - copied);
+                out += entry->second;
+                copied = at + it->length();
+            }
+
+            out.append(text, copied);
+            text = std::move(out);
+
+            for (PeMaterialInput &in : inputs)
+            {
+                if (const auto it = renamed.find(in.var); it != renamed.end())
+                    in.var = it->second;
+            }
         }
 
         std::string SurfaceFrameEvaluator(bool hasUv)
@@ -528,13 +637,17 @@ float pe_curvature(float3 N, float3 P)
                     return false;
                 }
 
-                std::string statics;
+                std::string statics = kShapeBegin;
                 for (const PeMaterialInput &in : inputs)
                     statics += "static " + in.type + " " + in.var + ";\n";
+
+                statics += kShapeEnd;
                 if (refractionTwoSided)
                     statics += "static const bool u_refractionTwoSided = PE_REFRACTION_TWO_SIDED;\n";
 
                 text.replace(cbStart, cbEnd - cbStart + 1, statics);
+                if (!ShareVertexData(text, name, error))
+                    return false;
                 text = std::regex_replace(text, std::regex("\\bu_viewPosition\\b"), "pe_view_position()");
                 if (!AddDerivativeSeams(text, name, error))
                     return false;
@@ -560,7 +673,17 @@ float pe_curvature(float3 N, float3 P)
                 CaptureThinInputs(text, *surfaceNode, ctx);
 
                 // --- Loader, vertex data, shade, thin values. ---
-                std::string tail = "\nvoid pe_load_material(ByteAddressBuffer b, uint o)\n{\n";
+                // PeThin stays shared: pass mains use the type.
+                std::string tail = "\nstruct PeThin\n"
+                                   "{\n"
+                                   "    float3 normal;\n"
+                                   "    float3 albedo;\n"
+                                   "    float roughness;\n"
+                                   "    float metalness;\n"
+                                   "};\n"
+                                   "\n";
+                tail += kShapeBegin;
+                tail += "void pe_load_material(ByteAddressBuffer b, uint o)\n{\n";
                 for (const PeMaterialInput &in : inputs)
                 {
                     for (const std::string &line : LoaderLines(in))
@@ -596,8 +719,7 @@ float pe_curvature(float3 N, float3 P)
                         return false;
                     }
 
-                    const std::string swizzle = var == "color_0" && type == "float3" ? ".rgb" : "";
-                    tail += "    vd." + var + " = " + it->second + swizzle + ";\n";
+                    tail += "    vd." + var + " = " + it->second + ";\n"; // kVertexData's color_0 is float4
                     vertexData.push_back(var);
                 }
                 tail += "}\n\n" + SurfaceFrameEvaluator(
@@ -613,14 +735,7 @@ float pe_curvature(float3 N, float3 P)
                         "float4 pe_material_shade()\n{\n"
                         "    return pe_material_shade(float2(0.0, 0.0), 0.0);\n}\n#endif\n";
 
-                tail += "\nstruct PeThin\n"
-                        "{\n"
-                        "    float3 normal;\n"
-                        "    float3 albedo;\n"
-                        "    float roughness;\n"
-                        "    float metalness;\n"
-                        "};\n"
-                        "\n"
+                tail += "\n"
                         "PeThin pe_material_thin(PeSurfacePoint sp, float2 nextUv, float blend)\n"
                         "{\n"
                         "    pe_fill_vertex_data(sp);\n"
@@ -635,7 +750,9 @@ float pe_curvature(float3 N, float3 P)
                         "}\n\n"
                         "PeThin pe_material_thin(PeSurfacePoint sp)\n{\n"
                         "    return pe_material_thin(sp, float2(0.0, 0.0), 0.0);\n}\n";
+                tail += kShapeEnd;
                 text = "#define PE_OPENPBR_MODULE_ABI " + std::to_string(kOpenPBRModuleAbi) + "\n" + text + tail;
+                NormalizeShapeNames(text, inputs, graph);
 
                 std::string json = "{\"module_abi\":" + std::to_string(kOpenPBRModuleAbi) + ",\"material\":\"" + name +
                                    "\",\"surface\":\"" + surface->getNamePath() + "\",\"inputs\":[";

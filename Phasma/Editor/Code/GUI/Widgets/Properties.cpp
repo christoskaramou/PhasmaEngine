@@ -23,6 +23,7 @@
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 #include "Scene/SceneNode.h"
+#include "Scene/SceneRuntimeHooks.h"
 #include "Scene/SelectionManager.h"
 #include "Script/CppScriptPath.h"
 #include "Script/ScriptSystem.h"
@@ -1502,6 +1503,24 @@ namespace pe
             };
 
             drawRow();
+
+            // The value follows the drag; the sky reloads (HDR decode and prefilter) once the edit ends.
+            auto &settings = Settings::Get<SceneSettings>();
+            ImGui::DragFloat3(ui::LabelAbove("Rotation##skybox"),
+                              settings.skybox_rotation.data(),
+                              0.5f,
+                              -360.0f,
+                              360.0f,
+                              "%.1f");
+            if (ImGui::IsItemDeactivatedAfterEdit())
+            {
+                scene.MarkDirty();
+                RefreshSceneSky();
+                if (m_gui)
+                    m_gui->NotifyChange();
+            }
+
+            ui::ItemTooltip("Sky orientation in degrees, applied X, then Y, then Z.");
         };
 
         // Set when the selected node can receive a .lua script drop;

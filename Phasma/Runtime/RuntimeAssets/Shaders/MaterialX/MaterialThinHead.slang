@@ -13,6 +13,7 @@ struct PushConstants_MaterialThin
     uint moduleIndex;
     uint binsCount; // byte offsets of the module's tile count and tiles in pe_bins (MaterialClassify)
     uint binsTiles;
+    uint shape; // the module's slot in its shape group (GetOpenPBRShapeSlot)
 };
 
 [[vk::push_constant]] PushConstants_MaterialThin pc;

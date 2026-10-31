@@ -12,7 +12,7 @@ struct PushConstants_OpenPBRMask
     uint jointsCount;
     uint verticesOffset;
     uint moduleIndex;
-    uint padding;
+    uint shape; // the module's slot in its shape group (GetOpenPBRShapeSlot)
     float4 cameraPosition;
     float4x4 lightViewProjection;
 };
@@ -103,6 +103,7 @@ struct PushConstants_Lighting
     uint num_point_lights;
     uint num_spot_lights;
     uint num_area_lights;
+    uint shadow_tint; // dword 3: ShadowPass drew Transmission casters into the tint maps this frame
     float2 framebufferSize;
     uint passType;
     float4 max_cascade_dist;
@@ -118,13 +119,15 @@ struct PushConstants_Lighting
     uint module_index;    // dword 23: the runtime OpenPBR module this dispatch shades
     uint bins_count;      // dword 24: byte offset of the module's tile count in pe_bins (MaterialClassify)
     uint bins_tiles;      // dword 25: byte offset of the module's tiles in pe_bins
+    uint shape;           // dword 26: the module's slot in its shape group (GetOpenPBRShapeSlot)
 #endif
 #ifdef PE_OPENPBR_FORWARD
     uint env_samples; // dword 21: OpenPBR filtered importance samples
     uint jointsCount; // dword 22: GBufferVS's joint count (OpenPBRForwardPass)
-    uint forwardPad;  // dword 23: keeps the jitters 8-byte aligned (std430 and root-constant packing)
+    uint shape;       // dword 23: the module's slot in its shape group; also keeps the jitters 8-byte aligned
     float2 projJitter;     // dwords 24-25: TAA jitter, removed from the velocity as GBufferPS does
     float2 prevProjJitter; // dwords 26-27: last frame's
+    uint depth_only;       // dword 28: 1 for the depth draw that precedes each mesh's shading draw
 #endif
 };
 #endif
@@ -183,6 +186,7 @@ struct MaterialGpuData
     float4 pbrParams;            // .x = metallic, .y = roughness, .z = alphaCutoff, .w = occlusionStrength
     float4 transmissionVolume;   // .x = thicknessFactor, .y = attenuationDistance, .z = ior, .w = raw uint OpenPBR module index (runtime byte record only)
     float4 attenuationColor;     // .xyz = attenuationColor, .w = nightEmissive
+    float4 shadowTransmittance;  // .rgb = light a sun shadow keeps through one surface of a Transmission mesh
 };
 
 // -----------------------------------------
@@ -240,6 +244,9 @@ struct VS_OUTPUT_Position_Uv
     float2 uv : TEXCOORD0;
 #ifdef PE_MASK_FALLBACK
     nointerpolation uint maskEligible : TEXCOORD1;
+#endif
+#ifdef PE_SHADOW_TINT
+    nointerpolation float3 transmittance : TEXCOORD2;
 #endif
     float4 position : SV_POSITION;
 };

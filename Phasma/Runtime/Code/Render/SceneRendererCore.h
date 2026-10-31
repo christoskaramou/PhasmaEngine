@@ -127,6 +127,8 @@ namespace pe
             };
 
             uint32_t module = 0;
+            std::string groupKey; // the module's shape group (GetOpenPBRPassSources)
+            uint32_t groupMembers = 0;
             std::vector<ModulePipelines *> owners;
             std::vector<uint64_t> generations;
             std::vector<size_t> counts;

@@ -25,6 +25,7 @@ namespace pe
             uint32_t moduleIndex;
             uint32_t binsCount;
             uint32_t binsTiles;
+            uint32_t shape; // the module's slot in its shape group
         };
 
         struct PushConstants_MaterialClassify
@@ -71,7 +72,7 @@ namespace pe
         if (m_builtEmissiveFormat == PE_FORMAT_R8G8B8A8_UNORM)
             defines.push_back(Define{"PE_EMISSIVE_RGBA8", "1"});
 
-        return [module, defines, source = GetOpenPBRModule(module).thinSource](PassInfo &info)
+        return [module, defines, source = GetOpenPBRPassSources(GetOpenPBRModule(module)).thin](PassInfo &info)
         {
             info.name = "MaterialThin_pipeline_" + std::to_string(module);
             info.pCompShader = Shader::Create({.sourcePath = source,
@@ -347,6 +348,7 @@ namespace pe
                 continue;
 
             pc.moduleIndex = module;
+            pc.shape = GetOpenPBRShapeSlot(GetOpenPBRModule(module));
             pc.binsCount = BinThinArgsOffset(slot) + 12u;
             pc.binsTiles = BinTilesOffset(slot);
             cmd->BindPipeline(*info);

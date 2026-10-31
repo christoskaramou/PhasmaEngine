@@ -19,10 +19,11 @@ namespace pe
         uint32_t IBL;
         uint32_t renderMode; // 0=Raster, 1=Hybrid, 2=RayTracing
         uint32_t orthographicCamera;
-        uint32_t linear_color; // decode authored colours at hits
-        uint32_t env_samples;  // MaterialX hits: openpbr_env_samples (RTCommon cb_envSamples)
-        uint32_t frame;        // RTCommon cb_frame: the frame counter sun-disk samples step with
-        float sunTanHalfAngle; // tan of half sun_angular_diameter (RTCommon TraceSunShadow; 0 = hard)
+        uint32_t linear_color;    // decode authored colours at hits
+        uint32_t env_samples;     // MaterialX hits: openpbr_env_samples (RTCommon cb_envSamples)
+        uint32_t frame;           // RTCommon cb_frame: the frame counter sun-disk samples step with
+        float sunTanHalfAngle;    // tan of half sun_angular_diameter (RTCommon TraceSunShadow; 0 = hard)
+        uint32_t physicalFalloff; // physical_point_falloff (RTCommon cb_physicalFalloff)
     };
 
     class RayTracingPass : public IRenderPassComponent

@@ -348,6 +348,7 @@ namespace pe
                                       ? std::clamp(gSettings.sun_angular_diameter, 0.f, 30.f)
                                       : 0.53f;
         ubo.sunTanHalfAngle = std::tan(glm::radians(sunDiameter) * 0.5f);
+        ubo.physicalFalloff = gSettings.physical_point_falloff ? 1u : 0u;
 
         BufferRange range{};
         range.data = &ubo;

@@ -19,7 +19,7 @@ namespace pe
             uint32_t jointsCount;
             uint32_t verticesOffset;
             uint32_t moduleIndex;
-            uint32_t padding;
+            uint32_t shape; // the module's slot in its shape group
             vec4 cameraPosition;
             mat4 lightViewProjection;
         };
@@ -35,7 +35,7 @@ namespace pe
                 shadow = m_shadow,
                 depthBias = std::array<float, 3>{settings.depth_bias[0], settings.depth_bias[1], settings.depth_bias[2]},
                 depthFormat = RHII.GetDepthFormat(),
-                source = GetOpenPBRModule(module).maskSource](PassInfo &info)
+                source = GetOpenPBRPassSources(GetOpenPBRModule(module)).mask](PassInfo &info)
         {
             std::vector<Define> defines;
             if (shadow)
@@ -229,6 +229,7 @@ namespace pe
             }
 
             pc.moduleIndex = module;
+            pc.shape = GetOpenPBRShapeSlot(GetOpenPBRModule(module));
             cmd->SetConstants(pc);
             cmd->PushConstants();
             if (counters)

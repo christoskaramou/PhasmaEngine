@@ -20,6 +20,7 @@ MaterialGpuData LoadMaterialFromBytes(uint byteOffset)
     m.pbrParams            = asfloat(materialBytes.Load4(byteOffset + 32));
     m.transmissionVolume   = asfloat(materialBytes.Load4(byteOffset + 48));
     m.attenuationColor     = asfloat(materialBytes.Load4(byteOffset + 64));
+    m.shadowTransmittance  = asfloat(materialBytes.Load4(byteOffset + 80));
     return m;
 }
 

@@ -68,7 +68,7 @@ TexSamplerDecl(9, 0, LutIBL)
 
 // Set 1
 [[vk::binding(0, 1)]] cbuffer shadow_buffer {float4x4 cb_cascades[SHADOWMAP_CASCADES];};
-[[vk::binding(1, 1)]] Texture2D Shadow[SHADOWMAP_CASCADES];
+[[vk::binding(1, 1)]] Texture2D Shadow[SHADOWMAP_CASCADES * 2]; // depth maps, then ShadowPass's tint maps
 [[vk::binding(2, 1)]] SamplerComparisonState sampler_Shadow;
 
  // Set 2
@@ -234,8 +234,29 @@ float3 ShadowCascadeDebugColor(int cascade)
     return float3(1.00f, 0.85f, 0.15f);
 }
 
-float SampleShadowMap(int i, float zBias, float3 worldPos, float3 normal, float normalBiasScale)
+// Transmittance of the Transmission casters between the light and coords: ShadowPass's half-size tint map of cascade i,
+// bilinear over 2x2 texels, each tinting only receivers behind its surface nearest the light (alpha, reverse-Z).
+float3 SampleShadowTint(int i, float4 coords)
 {
+    const float size = SHADOWMAP_SIZE * 0.5f;
+    const float2 pixel = coords.xy / coords.w * size - 0.5f;
+    const int2 base = int2(floor(pixel));
+    const float2 f = pixel - float2(base);
+
+    float3 taps[4];
+    for (int t = 0; t < 4; t++)
+    {
+        const int2 texel = clamp(base + int2(t & 1, t >> 1), 0, int(size) - 1);
+        const float4 tint = Shadow[NonUniformResourceIndex(SHADOWMAP_CASCADES + i)].Load(int3(texel, 0));
+        taps[t] = coords.z < tint.a ? tint.rgb : 1.0f;
+    }
+
+    return lerp(lerp(taps[0], taps[1], f.x), lerp(taps[2], taps[3], f.x), f.y);
+}
+
+float SampleShadowMap(int i, float zBias, float3 worldPos, float3 normal, float normalBiasScale, out float3 tint)
+{
+    tint = 1.0f;
     worldPos += normal * pc.shadow_normal_bias * normalBiasScale * pc.cascade_texel_size_world[i];
     float4 coords   = mul(float4(worldPos, 1.0), mul(cb_cascades[i], biasMat));
     coords.z        += zBias;
@@ -243,6 +264,9 @@ float SampleShadowMap(int i, float zBias, float3 worldPos, float3 normal, float 
 
     if (any(projCoords.xy < 0.0f) || any(projCoords.xy > 1.0f) || projCoords.z < 0.0f || projCoords.z > 1.0f)
         return 1.0f;
+
+    if (pc.shadow_tint != 0u)
+        tint = SampleShadowTint(i, coords);
 
     // TOTO: fix this annoying looking code snippet
     // Randomly figured how to fix a bug, possibly in the Vulkan or AMD driver (or there is something in my code that other GPU drivers are forgiving)
@@ -257,9 +281,11 @@ float SampleShadowMap(int i, float zBias, float3 worldPos, float3 normal, float 
         return FilterPCF(coords, Shadow[i], sampler_Shadow);
 }
 
-float CalculateShadows(float3 worldPos, float depth, float NdL, float3 normal)
+// The first directional light's visibility from the depth maps; tint is the light's colour through Transmission casters.
+float CalculateShadows(float3 worldPos, float depth, float NdL, float3 normal, out float3 tint)
 {
     float shadow = 1.0;
+    tint = 1.0;
 
     if (cb_shadows)
     {
@@ -274,10 +300,16 @@ float CalculateShadows(float3 worldPos, float depth, float NdL, float3 normal)
                 // Blend between cascades
                 float dist      = pc.max_cascade_dist[i] - depth;
 				float blendDist = 1.0;
-                shadow          = SampleShadowMap(i, zBias, worldPos, normal, normalBiasScale);
+                shadow          = SampleShadowMap(i, zBias, worldPos, normal, normalBiasScale, tint);
 
                 if (i < SHADOWMAP_CASCADES - 1 && dist < blendDist)
-                    shadow = lerp(shadow, SampleShadowMap(i + 1, zBias, worldPos, normal, normalBiasScale), 1.0 - dist / blendDist);
+                {
+                    float3 nextTint;
+                    const float next = SampleShadowMap(i + 1, zBias, worldPos, normal, normalBiasScale, nextTint);
+                    const float t = 1.0 - dist / blendDist;
+                    shadow = lerp(shadow, next, t);
+                    tint = lerp(tint, nextTint, t);
+                }
 
                 break;
             }
@@ -288,6 +320,7 @@ float CalculateShadows(float3 worldPos, float depth, float NdL, float3 normal)
             float fadeStart = max(pc.shadow_distance - pc.shadow_fade_distance, 0.0f);
             float fade = saturate((depth - fadeStart) / pc.shadow_fade_distance);
             shadow = lerp(shadow, 1.0f, fade);
+            tint = lerp(tint, 1.0f, fade);
         }
     }
 
@@ -442,6 +475,8 @@ float3 ComputeSpotLight(int lightIndex, Material material, float3 worldPos, floa
     float attenuation       = (1.0 - lightDistRatio * lightDistRatio);
     attenuation             = max(0.0, attenuation);
     attenuation             *= attenuation;
+    if (cb_physicalPointFalloff > 0.5)
+        attenuation /= max(lightDist * lightDist, 1e-4);
 
     float3 spotColor = light.color.xyz * attenuation * spotIntensity;
     spotColor       *= light.color.w; // intensity is .w
@@ -554,8 +589,9 @@ float3 ComputeAreaLight(int lightIndex, Material material, float3 worldPos, floa
     attenuation = max(0.0, attenuation);
     attenuation *= attenuation;
     
-    // Use distToTarget for inverse square to keep intensity correct at distance
-    attenuation /= (distToTarget * distToTarget + 1.0);
+    // Use distToTarget for inverse square to keep intensity correct at distance (softened unless physical)
+    const float distSq = distToTarget * distToTarget;
+    attenuation /= cb_physicalPointFalloff > 0.5 ? max(distSq, 1e-4) : distSq + 1.0;
 
     float lightOutputCos = dot(-L, lightForward);
     if (lightOutputCos <= 0.0) return 0.0;

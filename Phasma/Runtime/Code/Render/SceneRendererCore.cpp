@@ -369,6 +369,9 @@ namespace pe
 
         ModuleBuild build;
         build.module = *next;
+        const OpenPBRPassSources group = GetOpenPBRPassSources(GetOpenPBRModule(build.module));
+        build.groupKey = group.key;
+        build.groupMembers = group.members;
         std::vector<std::function<void(PassInfo &)>> builders;
         for (const auto &[owner, modules] : owners)
         {
@@ -456,6 +459,13 @@ namespace pe
             if (result.error.empty())
             {
                 PE_INFO("[OpenPBR] module pipelines dropped: module %u (stale)", build.module);
+            }
+            else if (build.groupMembers > 1)
+            {
+                // Any member can break a combined group: this frame's sync builds the module's shape alone.
+                MarkOpenPBRGroupBroken(build.groupKey);
+                PE_WARN("[OpenPBR] shape group %s failed to compile; its modules build alone", build.groupKey.c_str());
+                PE_INFO("[OpenPBR] module pipelines dropped: module %u (group compile failed)", build.module);
             }
             else
             {

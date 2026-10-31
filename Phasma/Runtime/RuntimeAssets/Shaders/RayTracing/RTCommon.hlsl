@@ -94,6 +94,7 @@ struct Vertex
     uint cb_envSamples;  // MaterialX hits: openpbr_env_samples
     uint cb_frame;       // frame counter: TraceSunShadow's sample sequence
     float cb_sunTanHalfAngle; // tan(sun_angular_diameter / 2); 0 = hard sun shadows
+    uint cb_physicalFalloff;  // physical_point_falloff: local lights fall off by inverse square (RT_DistanceFalloff)
 };
 
 // Set 2
@@ -103,9 +104,20 @@ struct Vertex
 // unbounded texture array (binding 12), which must stay the last binding of its set.
 [[vk::image_format("r32f")]][[vk::binding(3, 1)]] RWTexture2D<float> rtDepth;
 
-// 1 when nothing blocks the ray up to dist, the any-hit's transmittance through alpha-blended surfaces, 0 when opaque
-// geometry does.
-float TraceVisibility(float3 origin, float3 dir, float dist)
+// LightingPS's physical_point_falloff: windowed inverse square for point, spot and area lights (intensity in luminance *
+// distance^2), else the hit's own artistic falloff.
+float RT_DistanceFalloff(float dist, float range, float artistic)
+{
+    if (cb_physicalFalloff == 0u)
+        return artistic;
+
+    const float window = saturate(1.0 - (dist / range) * (dist / range));
+    return window * window / max(dist * dist, 1e-4);
+}
+
+// 1 when nothing blocks the ray up to dist, the any-hits' transmittance through alpha-blended surfaces and Transmission
+// meshes' tints, 0 when opaque geometry does.
+float3 TraceTransmittance(float3 origin, float3 dir, float dist)
 {
     RayDesc ray;
     ray.Origin    = origin;
@@ -131,7 +143,12 @@ float TraceVisibility(float3 origin, float3 dir, float dist)
     if (shadowPayload.t != -1.0)
         return 0.0;
 
-    return shadowPayload.radiance.x; // Assumes monochromatic for now or use .rgb in DirectLight
+    return shadowPayload.radiance;
+}
+
+float TraceVisibility(float3 origin, float3 dir, float dist)
+{
+    return dot(TraceTransmittance(origin, dir, dist), 1.0 / 3.0);
 }
 
 #if defined(GI_SHADING) || defined(REFLECTIONS)
@@ -340,18 +357,19 @@ float3 ShadowTerminatorOffset(float3 p0, float3 p1, float3 p2, float3 n0, float3
     return -below;
 }
 
-float TraceShadowRay(float3 origin, float3 dir, float dist)
+// Every light's shadow ray: RGB, so glass tints point, spot and area light as it tints the sun.
+float3 TraceShadowRay(float3 origin, float3 dir, float dist)
 {
     if (cb_shadows == 0)
         return 1.0;
 
-    return TraceVisibility(origin, dir, dist);
+    return TraceTransmittance(origin, dir, dist);
 }
 
 // The sun is a disk sun_angular_diameter wide: each frame the shadow ray aims at another point of it (a per-pixel offset
 // into the R2 sequence), and the passes' temporal filters (reflection history, TAA, probe averages) turn the hits into a
 // penumbra. L points to the sun's centre.
-float TraceSunShadow(float3 origin, float3 L)
+float3 TraceSunShadow(float3 origin, float3 L)
 {
     float3 dir = L;
     if (cb_sunTanHalfAngle > 0.0)
@@ -372,7 +390,19 @@ float TraceSunShadow(float3 origin, float3 L)
     return TraceShadowRay(origin, dir, 10000.0);
 }
 
-float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float shadow, float3 energyCompensation)
+// Area light shadow rays aim at the rectangle's centre and stop 1% short of it, so a fixture touching the emitter (a
+// lamp's bulb) does not shadow its own light. The lighting keeps its representative point; aimed at that specular
+// point instead, a light set inside a lamp shade was hidden from most of the table, and sampling the whole rectangle
+// per frame left a 1 m window light's penumbra as noise without a denoiser.
+// ponytail: hard shadows from the centre; several stratified rays (and a denoiser) for soft area shadows.
+float3 TraceAreaShadow(float3 origin, float3 centre)
+{
+    float3 toCentre = centre - origin;
+    float dist = length(toCentre);
+    return TraceShadowRay(origin, toCentre / max(dist, 1e-6), dist * 0.99);
+}
+
+float3 RT_DirectLight(DirectionalLight light, float3 worldPos, float3 materialNormal, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float occlusion, float3 shadow, float3 energyCompensation)
 {
     roughness = max(roughness, 0.04);
 
@@ -432,10 +462,10 @@ float3 RT_ComputePointLight(int index, float3 worldPos, float3 shadowOrigin, flo
     float3 H = normalize(V + L);
 
     float attenuation = 1.0 - (dist / range);
-    attenuation *= attenuation; // Quadratic
+    attenuation = RT_DistanceFalloff(dist, range, attenuation * attenuation); // Quadratic
 
     // Shadow
-    float shadow = TraceShadowRay(shadowOrigin, L, dist);
+    float3 shadow = TraceShadowRay(shadowOrigin, L, dist);
 
     float NoV_clamped = clamp(dot(materialNormal, V), 0.001, 1.0);
     float NoL_raw = dot(materialNormal, L);
@@ -498,11 +528,10 @@ float3 RT_ComputeSpotLight(int index, float3 worldPos, float3 shadowOrigin, floa
     float spotIntensity = smoothstep(outerCutoffCos, cutoffCos, theta);
 
     float attenuation = 1.0 - (dist / range);
-    attenuation *= attenuation;
-    attenuation = max(0.0, attenuation);
+    attenuation = RT_DistanceFalloff(dist, range, max(0.0, attenuation * attenuation));
 
     // Shadow
-    float shadow = TraceShadowRay(shadowOrigin, L, dist);
+    float3 shadow = TraceShadowRay(shadowOrigin, L, dist);
 
     float intensity = light.color.w; // intensity is .w
 
@@ -613,13 +642,14 @@ float3 RT_ComputeAreaLight(int index, float3 worldPos, float3 shadowOrigin, floa
     attenuation *= attenuation;
 
     // Use distToTarget for inverse square to keep intensity correct at distance
-    attenuation /= (distToTarget * distToTarget + 1.0);
+    float distSq = distToTarget * distToTarget;
+    attenuation /= cb_physicalFalloff != 0u ? max(distSq, 1e-4) : distSq + 1.0;
 
     float lightOutputCos = dot(-L, lightForward);
     if (lightOutputCos <= 0.0) return 0.0;
 
     // Shadow (using L to target point)
-    float shadow = TraceShadowRay(shadowOrigin, L, distToTarget);
+    float3 shadow = TraceAreaShadow(shadowOrigin, lightPos);
 
     float3 areaColor = light.color.xyz * light.color.w * attenuation * lightOutputCos;
 
@@ -717,11 +747,11 @@ float3 RT_LightOpaque(float3 P,
     DirectionalLight sun = LoadDirectionalLight(0);
     float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
     float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
-    float sunShadow = TraceSunShadow(shadowOrigin, L);
+    float3 sunShadow = TraceSunShadow(shadowOrigin, L);
     for (uint i = 0; i < cb_numDirectionalLights; i++)
     {
         // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
-        float s = (i == 0) ? sunShadow : 1.0;
+        float3 s = (i == 0) ? sunShadow : float3(1.0, 1.0, 1.0);
         lighting += RT_DirectLight(LoadDirectionalLight(i), P, N, V, albedo, metallic, roughness, F0, occlusion, s,
                                    energyCompensation);
     }

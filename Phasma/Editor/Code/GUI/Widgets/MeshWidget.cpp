@@ -585,7 +585,7 @@ namespace pe
         ImGui::TableHeadersRow();
 
         std::string node;
-        for (const OpenPBRInput &input : source.module->layout.inputs)
+        for (const OpenPBRInput &input : source.layout.inputs)
         {
             if (node != input.node)
             {

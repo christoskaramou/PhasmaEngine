@@ -639,7 +639,8 @@ namespace pe
         EnsureBufferRing(m_shadowIndirectRegular, swapCount, "shadow_indirect_regular_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_shadowIndirectVoxels, swapCount, "shadow_indirect_voxels_", indirectBytes, indirectUsage);
         EnsureBufferRing(m_shadowIndirectMask, swapCount, "shadow_indirect_mask_", indirectBytes, indirectUsage);
-        EnsureBufferRing(m_shadowCullCounters, swapCount, "shadow_cull_counters_", 4 * sizeof(uint32_t), counterUsage);
+        EnsureBufferRing(m_shadowIndirectTint, swapCount, "shadow_indirect_tint_", indirectBytes, indirectUsage);
+        EnsureBufferRing(m_shadowCullCounters, swapCount, "shadow_cull_counters_", 5 * sizeof(uint32_t), counterUsage);
 
         const size_t sortKeyBytes = static_cast<size_t>(m_indirectCapacity) * sizeof(float);
         EnsureBufferRing(m_sortKeysAlphaBlend, swapCount, "sortKeys_AlphaBlend_", sortKeyBytes,
@@ -1917,6 +1918,7 @@ namespace pe
         destroyBufferVec(m_shadowIndirectRegular);
         destroyBufferVec(m_shadowIndirectVoxels);
         destroyBufferVec(m_shadowIndirectMask);
+        destroyBufferVec(m_shadowIndirectTint);
         destroyBufferVec(m_shadowCullCounters);
         destroyBufferVec(m_sortKeysAlphaBlend);
         destroyBufferVec(m_sortKeysTransmission);
@@ -2167,6 +2169,8 @@ namespace pe
                 growIndirectVec(m_shadowIndirectVoxels, "shadow_indirect_voxels_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_shadowIndirectMask, "shadow_indirect_mask_", indFlags,
+                                PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
+                growIndirectVec(m_shadowIndirectTint, "shadow_indirect_tint_", indFlags,
                                 PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE);
                 growIndirectVec(m_sortKeysAlphaBlend, "sortKeys_AlphaBlend_", sortFlags,
                                 sizeof(float));

@@ -166,7 +166,7 @@ namespace pe
                 }
             }
 
-            views.assign(cascadeCount, texture->GetSRV());
+            views.assign(cascadeCount * 2, texture->GetSRV()); // Lighting.hlsl's Shadow[]: depth maps, then tint maps
         }
 
         Buffer *CreateZeroedStorageBuffer(size_t size, const std::string &name)
@@ -226,6 +226,12 @@ namespace pe
         bool ShadowsActive(const ShadowPass &shadows)
         {
             return Settings::Get<SceneSettings>().shadows && SceneSettingsActive() && shadows.HasLiveResources();
+        }
+
+        // PushConstants_Lighting::shadow_tint: ShadowPass draws the tint maps when the scene has Transmission meshes.
+        uint32_t ShadowTintActive(const ShadowPass &shadows)
+        {
+            return ShadowsActive(shadows) && GetActiveScene()->HasTransmissionMeshes() ? 1u : 0u;
         }
 
         std::vector<ImageView *> GetLiveShadowViews(const ShadowPass &shadows)
@@ -331,7 +337,7 @@ namespace pe
             cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
             cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
             cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
-            cmd->SetConstantAt(3, 0u);                                      // padding
+            cmd->SetConstantAt(3, ShadowTintActive(shadows));               // shadow tint maps drawn
             cmd->SetConstantAt(4, viewport->GetWidth_f());                  // framebuffer width
             cmd->SetConstantAt(5, viewport->GetHeight_f());                 // framebuffer height
             cmd->SetConstantAt(6, passType);                                // is transparent pass
@@ -839,7 +845,7 @@ namespace pe
         cmd->SetConstantAt(0, (uint32_t)scene.GetPointLights().size()); // num point lights
         cmd->SetConstantAt(1, (uint32_t)scene.GetSpotLights().size());  // num spot lights
         cmd->SetConstantAt(2, (uint32_t)scene.GetAreaLights().size());  // num area lights
-        cmd->SetConstantAt(3, 0u);                                      // padding
+        cmd->SetConstantAt(3, ShadowTintActive(shadows));               // shadow tint maps drawn
         cmd->SetConstantAt(4, m_viewportRT->GetWidth_f());              // framebuffer width
         cmd->SetConstantAt(5, m_viewportRT->GetHeight_f());             // framebuffer height
         cmd->SetConstantAt(6, 1u);                                      // transparent pass
@@ -918,7 +924,7 @@ namespace pe
 
     std::function<void(PassInfo &)> MaterialShadePass::PipelineBuilder(uint32_t module) const
     {
-        return [module, defines = Defines(), source = GetOpenPBRModule(module).shadeSource](PassInfo &info)
+        return [module, defines = Defines(), source = GetOpenPBRPassSources(GetOpenPBRModule(module)).shade](PassInfo &info)
         {
             info.name = "MaterialShade_pipeline_" + std::to_string(module);
             info.pCompShader = Shader::Create({.sourcePath = source,
@@ -1176,9 +1182,10 @@ namespace pe
             if (slot == UINT32_MAX)
                 continue;
 
-            cmd->SetConstantAt(23, module);                              // module_index (PE_OPENPBR_SHADE)
-            cmd->SetConstantAt(24, thin->BinThinArgsOffset(slot) + 12u); // bins_count
-            cmd->SetConstantAt(25, thin->BinTilesOffset(slot));          // bins_tiles
+            cmd->SetConstantAt(23, module);                                        // module_index (PE_OPENPBR_SHADE)
+            cmd->SetConstantAt(24, thin->BinThinArgsOffset(slot) + 12u);           // bins_count
+            cmd->SetConstantAt(25, thin->BinTilesOffset(slot));                    // bins_tiles
+            cmd->SetConstantAt(26, GetOpenPBRShapeSlot(GetOpenPBRModule(module))); // shape
             cmd->BindPipeline(*info);
             cmd->PushConstants();
             cmd->DispatchIndirect(thin->GetBins(), thin->BinShadeArgsOffset(slot));
@@ -1279,7 +1286,7 @@ namespace pe
 
         return [module,
                 defines = Defines(),
-                source = GetOpenPBRModule(module).forwardSource,
+                source = GetOpenPBRPassSources(GetOpenPBRModule(module)).forward,
                 reverseDepth = Settings::Get<SceneSettings>().reverse_depth,
                 colorFormats,
                 blendStates,
@@ -1296,11 +1303,12 @@ namespace pe
                                                .defines = defines});
             info.dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
 
-            // standard_pbr.pass "transparent" raster state without depth writes, and MaterialX's own blend over a
-            // colour that already carries its opacity (GlslRenderer; plan Decision 2 = A).
+            // standard_pbr.pass "transparent" raster state, and MaterialX's own blend over a colour that already
+            // carries its opacity (GlslRenderer; plan Decision 2 = A). Depth writes let ExecutePass's depth draw keep
+            // each mesh's nearest surface, as the legacy transparent G-buffer writes depth.
             info.cullMode = PE_CULL_MODE_FRONT;
             info.depthTestEnable = true;
-            info.depthWriteEnable = false;
+            info.depthWriteEnable = true;
             info.depthCompareOp = reverseDepth ? PE_COMPARE_OP_GREATER_OR_EQUAL : PE_COMPARE_OP_LESS_OR_EQUAL;
             info.blendEnable = true;
             info.colorBlendAttachments = blendStates;
@@ -1367,10 +1375,19 @@ namespace pe
                 cmd->BindIndexBuffer(scene->GetBuffer(), 0);
                 cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetVerticesOffset());
                 scene->BindDrawIdBuffer(cmd);
+                cmd->SetConstantAt(23, GetOpenPBRShapeSlot(GetOpenPBRModule(draw.module))); // shape
                 cmd->PushConstants();
                 boundModule = draw.module;
             }
 
+            // Depth first, then shading: a thick-walled bottle's far inner wall also faces the camera, and drawn after
+            // its near wall it covered it (index order); the greater-or-equal test now shades only the nearest surface.
+            cmd->SetConstantAt(28, 1u); // depth_only
+            cmd->PushConstants();
+            cmd->DrawIndexed(draw.indexCount, 1, draw.firstIndex, draw.vertexOffset, draw.slot);
+
+            cmd->SetConstantAt(28, 0u);
+            cmd->PushConstants();
             cmd->DrawIndexed(draw.indexCount, 1, draw.firstIndex, draw.vertexOffset, draw.slot);
         }
 

@@ -33,7 +33,8 @@ namespace pe
         void Destroy() override;
 
         [[nodiscard]] bool HasLiveResources() const;
-        [[nodiscard]] const std::vector<Image *> &GetTextures() const { return m_textures; }
+        // Every image the lighting passes sample: the depth maps, then the tint maps (Lighting.hlsl's Shadow[]).
+        [[nodiscard]] std::vector<Image *> GetTextures() const;
         [[nodiscard]] std::vector<ImageView *> GetTextureViews() const;
         [[nodiscard]] Buffer *GetUniform(uint32_t frame) const;
         [[nodiscard]] Sampler *GetSampler() const { return m_sampler; }
@@ -54,6 +55,8 @@ namespace pe
                 passInfos.push_back(m_cullPassInfo.get());
             if (m_fallbackPassInfo)
                 passInfos.push_back(m_fallbackPassInfo.get());
+            if (m_tintPassInfo)
+                passInfos.push_back(m_tintPassInfo.get());
             m_masks.AppendPassInfos(passInfos);
             return passInfos;
         }
@@ -66,6 +69,9 @@ namespace pe
 
         void CalculateCascades(Camera *camera);
         void UpdateFallbackPassInfo();
+        void UpdateTintPassInfo();
+        void DrawTints(CommandBuffer *cmd, uint32_t cascade, const PushConstants_Shadows &pc, bool shadowCull,
+                       uint32_t regularCount);
         void BindScene(PassInfo &info, Scene &scene);
         void DrawFallback(CommandBuffer *cmd, const PushConstants_Shadows &pc,
                           Buffer *indirect, Buffer *counters, uint32_t counter, uint32_t capacity);
@@ -78,11 +84,17 @@ namespace pe
         vec4 m_viewZ = vec4(0.0f);
         vec4 m_texelSizeWorld = vec4(0.0f);
         std::vector<Image *> m_textures{};
+        // Half-size RGBA16F per cascade: Transmission casters' transmittance product (rgb) and nearest depth (a).
+        // ponytail: always allocated (32 MB at the default 2048 maps) so the lighting descriptors never change with
+        // the scene; allocate on the first Transmission mesh if that VRAM matters.
+        std::vector<Image *> m_tints{};
+        Attachment m_tintAttachment{};
         Sampler *m_sampler = nullptr;
         Scene *m_scene = nullptr;
         std::shared_ptr<PassInfo> m_voxelPassInfo; // packed-voxel shadow caster pipeline
         std::shared_ptr<PassInfo> m_cullPassInfo;  // per-cascade light-frustum compact
         std::shared_ptr<PassInfo> m_fallbackPassInfo;
+        std::shared_ptr<PassInfo> m_tintPassInfo; // Transmission casters into m_tints
 
         std::vector<std::array<vec4, 6>> m_cascadePlanes; // [cascade]
     };

@@ -8,6 +8,28 @@
 [[vk::binding(0, 0)]] ByteAddressBuffer data;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> constants;
 
+#ifdef PE_SHADOW_TINT
+[[vk::binding(4, 0)]] StructuredBuffer<MaterialGpuData> materials;
+
+// The tint maps keep the product of every surface's transmittance (blend dst * (1 - src)) and, in alpha, the depth of
+// the surface nearest the light (MAX, reverse-Z), which CalculateShadows compares receivers against.
+float4 mainTintPS(VS_OUTPUT_Position_Uv input) : SV_Target0
+{
+    return float4(1.0 - input.transmittance, input.position.z);
+}
+#endif
+
+// Transmission meshes cast into the tint maps alone; the depth maps skip them.
+bool PeSkipsShadowCaster(Mesh_Constants mesh)
+{
+    const bool transmission = mesh.renderType == 4u; // RenderType::Transmission
+#ifdef PE_SHADOW_TINT
+    return !transmission;
+#else
+    return transmission;
+#endif
+}
+
 #ifdef PE_MASK_FALLBACK
 [[vk::binding(3, 0)]] ByteAddressBuffer pe_deformed;
 #ifdef PE_DX12
@@ -77,6 +99,17 @@ VS_OUTPUT_Position_Uv mainVS(VS_INPUT_Depth input)
     VS_OUTPUT_Position_Uv output = (VS_OUTPUT_Position_Uv)0;
 
     const uint id = input.id;
+
+#ifndef PE_MASK_FALLBACK
+    if (PeSkipsShadowCaster(constants[id]))
+    {
+        output.position = float4(0.0, 0.0, -1.0, 1.0);
+        return output;
+    }
+#endif
+#ifdef PE_SHADOW_TINT
+    output.transmittance = materials[constants[id].materialId].shadowTransmittance.rgb;
+#endif
 
 #ifdef PE_GENERATED_MASK
     const bool generatedMask = PeUsesGeneratedMask(constants[id]);

@@ -6,6 +6,7 @@ struct PushConstants
     uint faceSize;
     uint sampleCount;
     float roughness;
+    float4 sourceRotation; // as in EquirectangularToCubemap.hlsl
 };
 
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
@@ -157,6 +158,6 @@ void main(uint3 id : SV_DispatchThreadID)
     float2 uv = (float2(id.xy) + 0.5) / float2(pc.faceSize, pc.faceSize);
     uv = uv * 2.0 - 1.0;
 
-    float3 dir = CubemapDirection(id.z, uv);
+    float3 dir = RotateVectorByQuat(CubemapDirection(id.z, uv), pc.sourceRotation);
     outCubeMips[pc.mipLevel][id] = float4(PrefilterEnvironment(dir), 1.0);
 }

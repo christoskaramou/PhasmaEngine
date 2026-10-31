@@ -19,7 +19,7 @@ float3 pe_view_position()
 }
 
 // Directional, point, spot, then area (LightSystemUBO counts: enabled lights only). MaterialX has no area light:
-// an area light is its centre point with the point-light window (the spec's representative-point limit).
+// an area light is its centre point with LightingPS's area falloff (the spec's representative-point limit).
 uint pe_light_count()
 {
     return cb_numDirectionalLights + cb_numPointLights + cb_numSpotLights + cb_numAreaLights;
@@ -32,7 +32,8 @@ float PeWindow(float dist, float range)
 }
 
 // L points to the light; radiance excludes N.L (MaterialX's BSDF responses include it). Mirrors LightingPS's
-// DirectLight / ComputePointLight / ComputeSpotLight attenuation, and its CSM for the first directional light.
+// DirectLight / ComputePointLight / ComputeSpotLight / ComputeAreaLight attenuation, and its CSM for the first
+// directional light.
 void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out float occlusion)
 {
     occlusion = 1.0;
@@ -44,7 +45,9 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         if (i == 0 && cb_shadows != 0)
         {
             const float viewDepth = max(0.0f, dot(P - cb_camPos.xyz, cb_camForward.xyz));
-            occlusion = CalculateShadows(P, viewDepth, dot(pe_N, L), pe_N);
+            float3 tint;
+            occlusion = CalculateShadows(P, viewDepth, dot(pe_N, L), pe_N, tint);
+            radiance *= tint;
         }
         return;
     }
@@ -77,7 +80,11 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         const float cutoffCos = cos(radians(light.params.x));
         const float outerCutoffCos = cos(radians(light.params.x + light.params.y));
         const float cone = theta < outerCutoffCos ? 0.0 : smoothstep(outerCutoffCos, cutoffCos, theta);
-        radiance = dist > range ? float3(0.0, 0.0, 0.0) : light.color.xyz * PeWindow(dist, range) * cone * light.color.w;
+        float attenuation = PeWindow(dist, range);
+        if (cb_physicalPointFalloff > 0.5)
+            attenuation /= dist * dist;
+
+        radiance = dist > range ? float3(0.0, 0.0, 0.0) : light.color.xyz * attenuation * cone * light.color.w;
         return;
     }
 
@@ -87,7 +94,12 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
     const float range = light.position.w;
     const float dist = max(0.1, length(toSurface));
     L = normalize(-toSurface);
-    radiance = dist > range ? float3(0.0, 0.0, 0.0) : light.color.xyz * PeWindow(dist, range) * light.color.w;
+
+    // LightingPS's area falloff from the centre: one-sided, inverse square (softened unless physical).
+    const float3 forward = normalize(RotateVectorByQuat(float3(0, 0, -1), light.rotation));
+    const float outputCos = max(dot(-L, forward), 0.0);
+    const float attenuation = PeWindow(dist, range) / (cb_physicalPointFalloff > 0.5 ? dist * dist : dist * dist + 1.0);
+    radiance = dist > range ? float3(0.0, 0.0, 0.0) : light.color.xyz * attenuation * outputCos * light.color.w;
 }
 
 #include "PeEnvironment.slang"

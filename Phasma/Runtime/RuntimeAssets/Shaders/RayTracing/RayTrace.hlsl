@@ -229,6 +229,15 @@ void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes a
 #endif
     uint instanceId = InstanceID();
     uint constantsId = meshInfos[instanceId].constantsIndex;
+
+    // Shadow rays pass Transmission surfaces, keeping each surface's tint (the raster tint maps' value).
+    if (payload.rayType == 1 && meshInfos[instanceId].renderType == 4)
+    {
+        payload.radiance *= LoadMaterial(constantsId).shadowTransmittance.rgb;
+        IgnoreHit();
+        return;
+    }
+
     uint primitiveId = PrimitiveIndex();
 
     uint3 indices = GetIndices(instanceId, primitiveId);
@@ -418,11 +427,11 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         DirectionalLight sun = LoadDirectionalLight(0);
         float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
         float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
-        float sunShadow = TraceSunShadow(shadowOrigin, L);
+        float3 sunShadow = TraceSunShadow(shadowOrigin, L);
         for (uint i = 0; i < cb_numDirectionalLights; i++)
         {
             // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)
-            float s = (i == 0) ? sunShadow : 1.0;
+            float3 s = (i == 0) ? sunShadow : float3(1.0, 1.0, 1.0);
             lighting += RT_DirectLight(LoadDirectionalLight(i), positionWorld, N, V, combinedColor.rgb, metallic, roughness, F0, occlusion, s, energyCompensation);
         }
 
@@ -562,11 +571,17 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     }
     else if (isTransmissive)
     {
-        // Bounce budget exhausted inside the glass (TIR chains): sample the environment along the
-        // current direction instead of this interior face's near-black surface lighting. Untinted —
-        // the entry hit applies the medium tint. Do NOT raise the bounce cap instead: depth-2 hits
-        // already put their shadow rays at maxRecursionDepth (4).
+        // Bounce budget exhausted inside the glass (TIR chains, a thick-walled bottle's four faces): what lies along
+        // the current direction instead of this interior face's near-black surface lighting, the probes' light where
+        // they cover it (an enclosed room hides the sky), else the environment. Untinted: the entry hit applies the
+        // medium tint. Do NOT raise the bounce cap instead: depth-2 hits already put their shadow rays at
+        // maxRecursionDepth (4).
         lighting = skybox.SampleLevel(material_sampler, WorldRayDirection(), 0).rgb * cb_iblIntensity;
+#ifdef GI_SHADING
+        float4 behind = ProbeLighting(positionWorld, WorldRayDirection());
+        if (behind.a > 0.0 && gi_intensity > 0.0)
+            lighting = lerp(lighting, behind.rgb * (gi_intensity / PI), behind.a);
+#endif
     }
 
     // Glass emits on top of what it transmits, once at its entry face, as LightingPS adds emissive after its

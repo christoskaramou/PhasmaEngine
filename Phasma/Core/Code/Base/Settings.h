@@ -196,13 +196,15 @@ namespace pe
         float fog_density = 0.008f;
         float fog_start = 150.0f;
         bool randomize_lights = false;
-        // Point lights attenuate by windowed inverse-square (intensity in units of
-        // luminance * distance^2) instead of the range-relative artistic falloff.
+        // Point, spot and area lights attenuate by windowed inverse-square (intensity in units of
+        // luminance * distance^2) instead of the range-relative artistic falloff, in raster and ray tracing.
         bool physical_point_falloff = false;
         // No default skybox shipped; it is up to the user/scene to set one. An empty path takes the
         // silent solid-color fallback (no missing-file warnings); a non-empty bad path still warns.
         static constexpr const char *DefaultSkyboxPath = "";
         std::string skybox_path = DefaultSkyboxPath;
+        // The sky's orientation in degrees, applied X, then Y, then Z (quat(radians(...))) when the sky loads.
+        std::array<float, 3> skybox_rotation{};
         std::array<float, 3> depth_bias{0.0f, 0.0f, -6.2f};
         float time_scale = 1.f;
         uint32_t physics_rate = 30; // fixed 3D physics (Jolt) steps per second; clamped to 10..240 Hz

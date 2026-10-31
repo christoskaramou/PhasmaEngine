@@ -50,12 +50,6 @@ namespace pe
         {
             return vec4(SceneColor(vec3(0.48f, 0.58f, 0.68f)), 1.0f);
         }
-
-        const std::string &ConfiguredSceneSkyPath()
-        {
-            const auto &settings = Settings::Get<SceneSettings>();
-            return settings.skybox_path;
-        }
     } // namespace
 
     std::string MakeSceneSkyPathSetting(const std::string &path)
@@ -81,7 +75,7 @@ namespace pe
         return NormalizeSeparators(PathToUtf8String(normalizedPath));
     }
 
-    bool LoadSceneSkyPath(CommandBuffer *cmd, SkyBox &skybox, const std::string &path)
+    bool LoadSceneSkyPath(CommandBuffer *cmd, SkyBox &skybox, const std::string &path, const quat &rotation)
     {
         const std::filesystem::path resolvedPath = ResolveSceneSkyPath(path);
         if (resolvedPath.empty())
@@ -91,7 +85,7 @@ namespace pe
         }
 
         const std::string skyboxPath = NormalizeSeparators(PathToUtf8String(resolvedPath));
-        if (skybox.LoadSkyBox(cmd, skyboxPath))
+        if (skybox.LoadSkyBox(cmd, skyboxPath, rotation))
         {
             g_fallbackSky = false;
             return true;
@@ -104,7 +98,10 @@ namespace pe
 
     void LoadConfiguredSceneSkybox(CommandBuffer *cmd, SkyBox &skybox)
     {
-        LoadSceneSkyPath(cmd, skybox, ConfiguredSceneSkyPath());
+        const auto &settings = Settings::Get<SceneSettings>();
+        const auto &degrees = settings.skybox_rotation;
+        const quat rotation(radians(vec3(degrees[0], degrees[1], degrees[2])));
+        LoadSceneSkyPath(cmd, skybox, settings.skybox_path, rotation);
     }
 
     void LoadDefaultSceneSky(CommandBuffer *cmd, SkyBox &skybox, Image *&iblBrdfLut)

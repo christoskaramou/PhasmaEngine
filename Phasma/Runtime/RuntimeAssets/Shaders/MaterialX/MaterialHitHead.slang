@@ -33,6 +33,14 @@ uint pe_light_count()
     return cb_numDirectionalLights + cb_numPointLights + cb_numSpotLights + cb_numAreaLights;
 }
 
+// A shadow ray's occlusion keeps its strongest channel; glass's tint moves into the light's radiance.
+float PeShadowOcclusion(float3 transmittance, inout float3 radiance)
+{
+    const float occlusion = max(transmittance.r, max(transmittance.g, transmittance.b));
+    radiance *= occlusion > 0.0 ? transmittance / occlusion : float3(0.0, 0.0, 0.0);
+    return occlusion;
+}
+
 // The legacy hit's light terms (RT_DirectLight, RT_Compute{Point,Spot,Area}Light) without their BRDF: L points to the
 // light, radiance excludes N.L, occlusion is the shadow ray (directional light 0 only, as the legacy hit shadows it).
 void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out float occlusion)
@@ -47,7 +55,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         L = normalize(-RotateVectorByQuat(float3(0, 0, -1), light.rotation));
         radiance = light.color.rgb * light.color.w;
         if (i == 0)
-            occlusion = TraceSunShadow(P + pe_shadow_offset, L);
+            occlusion = PeShadowOcclusion(TraceSunShadow(P + pe_shadow_offset, L), radiance);
 
         return;
     }
@@ -63,11 +71,11 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
             return;
 
         float attenuation = 1.0 - dist / range;
-        attenuation *= attenuation;
+        attenuation = RT_DistanceFalloff(dist, range, attenuation * attenuation);
 
         L = normalize(-toSurface);
         radiance = light.color.rgb * light.color.w * attenuation;
-        occlusion = TraceShadowRay(P + pe_shadow_offset, L, dist);
+        occlusion = PeShadowOcclusion(TraceShadowRay(P + pe_shadow_offset, L, dist), radiance);
         return;
     }
 
@@ -90,10 +98,10 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
             return;
 
         float attenuation = 1.0 - dist / range;
-        attenuation = max(0.0, attenuation * attenuation);
+        attenuation = RT_DistanceFalloff(dist, range, max(0.0, attenuation * attenuation));
 
         radiance = light.color.rgb * light.color.w * attenuation * smoothstep(outerCutoffCos, cutoffCos, theta);
-        occlusion = TraceShadowRay(P + pe_shadow_offset, L, dist);
+        occlusion = PeShadowOcclusion(TraceShadowRay(P + pe_shadow_offset, L, dist), radiance);
         return;
     }
 
@@ -140,14 +148,15 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
     const float ratio = closestDist / light.position.w;
     float attenuation = max(0.0, 1.0 - ratio * ratio);
     attenuation *= attenuation;
-    attenuation /= distToTarget * distToTarget + 1.0;
+    const float distSq = distToTarget * distToTarget;
+    attenuation /= cb_physicalFalloff != 0u ? max(distSq, 1e-4) : distSq + 1.0;
 
     const float outputCos = dot(-L, forward);
     if (outputCos <= 0.0)
         return;
 
     radiance = light.color.xyz * light.color.w * attenuation * outputCos;
-    occlusion = TraceShadowRay(P + pe_shadow_offset, L, distToTarget);
+    occlusion = PeShadowOcclusion(TraceAreaShadow(P + pe_shadow_offset, light.position.xyz), radiance);
 }
 
 #include "PeEnvironment.slang"

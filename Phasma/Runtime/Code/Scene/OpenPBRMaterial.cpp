@@ -1,4 +1,5 @@
 #include "Scene/OpenPBRMaterial.h"
+#include "Scene/OpenPBRShapes.h"
 #include "Base/Process.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -326,12 +327,10 @@ namespace pe
                     const std::string code = ReadOpenPBRFile(dir + "Generated/PeOpenPBRDefault.slang");
                     module->layout = ReadLayout(ReadOpenPBRFile(source->path), code, *source);
                     CheckDefaultLayout(module->layout);
+                    source->layout = module->layout;
                     module->hash = std::to_string(Fnv1a64(code));
-                    module->thinSource = dir + "MaterialThin.slang";
-                    module->shadeSource = dir + "MaterialShade.slang";
-                    module->maskSource = dir + "MaterialMask.slang";
+                    module->code = dir + "Generated/PeOpenPBRDefault.slang";
                     module->hitSource = dir + "MaterialHit.slang";
-                    module->forwardSource = dir + "MaterialForward.slang";
                 }
                 catch (const std::exception &error)
                 {
@@ -347,16 +346,17 @@ namespace pe
             return registry;
         }
 
+        // Same-shape graphs share code under their own names (OpenPBRMaterialSource::layout): only the bytes must agree.
         void CheckSharedLayout(const OpenPBRLayout &a, const OpenPBRLayout &b)
         {
-            if (a.byteSize != b.byteSize || a.inputs.size() != b.inputs.size() || a.surfaceNode != b.surfaceNode)
+            if (a.byteSize != b.byteSize || a.inputs.size() != b.inputs.size())
                 throw std::runtime_error("identical module code has a different byte layout");
 
             for (size_t i = 0; i < a.inputs.size(); ++i)
             {
                 const auto &x = a.inputs[i];
                 const auto &y = b.inputs[i];
-                if (x.identity != y.identity || x.type != y.type || x.offset != y.offset)
+                if (x.type != y.type || x.offset != y.offset)
                     throw std::runtime_error("identical module code has a different input layout");
             }
         }
@@ -386,19 +386,173 @@ namespace pe
             module->index = static_cast<uint32_t>(registry.modules.size());
             module->document = document;
             module->layout = std::move(layout);
-            module->thinSource = cached + ".thin.slang";
-            module->shadeSource = cached + ".shade.slang";
-            module->maskSource = cached + ".mask.slang";
+            module->code = modulePath;
             module->hitSource = cached + ".hit.slang";
-            module->forwardSource = cached + ".forward.slang";
-            WriteWrapper(module->thinSource, modulePath, "MaterialThin");
-            WriteWrapper(module->shadeSource, modulePath, "MaterialShade");
-            WriteWrapper(module->maskSource, modulePath, "MaterialMask");
             WriteWrapper(module->hitSource, modulePath, "MaterialHit");
-            WriteWrapper(module->forwardSource, modulePath, "MaterialForward");
 
             registry.modules.push_back(module);
             return module;
+        }
+
+        // The session's shape order: each project's list is read when first used, then shapes are only appended.
+        struct ShapeList
+        {
+            std::vector<std::string> hashes;
+            std::unordered_map<std::string, uint32_t> index;
+            std::unordered_set<std::string> seeded;                      // assets paths whose list was read
+            std::unordered_set<std::string> broken;                      // group keys whose combined compile failed
+            std::unordered_map<std::string, OpenPBRPassSources> sources; // by member list
+        };
+
+        ShapeList &Shapes()
+        {
+            static ShapeList shapes;
+            return shapes;
+        }
+
+        std::string CookedModuleDir()
+        {
+            return Path::AssetsPath() + "MaterialX/Cooked/";
+        }
+
+        std::string ShapeListPath()
+        {
+            return CookedModuleDir() + "shapes_abi" + std::to_string(kOpenPBRModuleAbi) + ".txt";
+        }
+
+        // DX12 inlines every shape into the entry function, so its compile grows with the group (shade, 8 shapes: 5.6 s,
+        // 54: 34.6 s; 2026-10-29). SPIR-V keeps each shape a [noinline] function, so one group holds every shape.
+        uint32_t ShapeGroupSize()
+        {
+            return RHII.GetApi() == PE_GRAPHICS_API_DX12 ? 8u : UINT32_MAX;
+        }
+
+        bool IsCookedModule(const std::string &code)
+        {
+            return code.starts_with("#define PE_OPENPBR_MODULE_ABI " + std::to_string(kOpenPBRModuleAbi) + "\n");
+        }
+
+        // The project's list; a project without one starts from its cooked modules of this ABI, in hash order.
+        void SeedShapes(ShapeList &shapes)
+        {
+            if (!shapes.seeded.insert(Path::AssetsPath()).second)
+                return;
+
+            std::vector<std::string> hashes;
+            std::ifstream file(PathFromUtf8(ShapeListPath()));
+            for (std::string line; std::getline(file, line);)
+            {
+                if (!line.empty())
+                    hashes.push_back(line);
+            }
+
+            if (!file.is_open())
+            {
+                std::error_code ec;
+                for (const auto &entry : std::filesystem::directory_iterator(PathFromUtf8(CookedModuleDir()), ec))
+                {
+                    const std::string stem = PathUtf8(entry.path().stem());
+                    const bool named = entry.path().extension() == ".slang" &&
+                                       stem.find_first_not_of("0123456789") == std::string::npos;
+                    if (named && IsCookedModule(ReadOpenPBRFile(PathUtf8(entry.path()))))
+                        hashes.push_back(stem);
+                }
+
+                std::sort(hashes.begin(), hashes.end());
+                std::string text;
+                for (const std::string &hash : hashes)
+                    text += hash + "\n";
+
+                std::filesystem::create_directories(PathFromUtf8(CookedModuleDir()), ec);
+                std::ofstream(PathFromUtf8(ShapeListPath()), std::ios::binary) << text;
+            }
+
+            for (const std::string &hash : hashes)
+            {
+                if (shapes.index.emplace(hash, static_cast<uint32_t>(shapes.hashes.size())).second)
+                    shapes.hashes.push_back(hash);
+            }
+        }
+
+        // A shape new to the session joins the end, and the project's list.
+        uint32_t ShapeIndex(ShapeList &shapes, const std::string &hash)
+        {
+            SeedShapes(shapes);
+            const auto [it, added] = shapes.index.emplace(hash, static_cast<uint32_t>(shapes.hashes.size()));
+            if (added)
+            {
+                shapes.hashes.push_back(hash);
+                std::error_code ec;
+                std::filesystem::create_directories(PathFromUtf8(CookedModuleDir()), ec);
+                std::ofstream(PathFromUtf8(ShapeListPath()), std::ios::binary | std::ios::app) << hash << "\n";
+            }
+
+            return it->second;
+        }
+
+        // The file holding a list entry's generated code: a registered module's, else the project's cooked module.
+        // Empty for a rejected module and for a missing file.
+        std::string ShapeCodePath(const std::string &hash)
+        {
+            for (const auto &module : Registry().modules)
+            {
+                if (module->hash == hash)
+                    return module->rejected ? std::string() : module->code;
+            }
+
+            const std::string cooked = CookedModuleDir() + hash + ".slang";
+            return AssetFileExists(cooked) ? cooked : std::string();
+        }
+
+        // Empty unless the file holds a module of this ABI with that hash.
+        std::string ShapeCode(const std::string &hash, const std::string &path)
+        {
+            try
+            {
+                const std::string code = ReadOpenPBRFile(path);
+                return IsCookedModule(code) && std::to_string(Fnv1a64(code)) == hash ? code : std::string();
+            }
+            catch (const std::exception &)
+            {
+                return {};
+            }
+        }
+
+        OpenPBRPassSources WriteGroup(const std::string &text, uint32_t members)
+        {
+            const std::string dir = Path::RootPath() + "ShaderCache/MaterialX/";
+            OpenPBRPassSources sources;
+            sources.key = std::to_string(Fnv1a64(text));
+            sources.members = members;
+
+            const std::string stem = dir + "group_" + sources.key;
+            sources.thin = stem + ".thin.slang";
+            sources.shade = stem + ".shade.slang";
+            sources.mask = stem + ".mask.slang";
+            sources.forward = stem + ".forward.slang";
+            if (std::filesystem::exists(PathFromUtf8(sources.forward)))
+                return sources;
+
+            std::filesystem::create_directories(PathFromUtf8(dir));
+            WriteOpenPBRFile(stem + ".slang", text);
+            WriteWrapper(sources.thin, stem + ".slang", "MaterialThin");
+            WriteWrapper(sources.shade, stem + ".slang", "MaterialShade");
+            WriteWrapper(sources.mask, stem + ".slang", "MaterialMask");
+            WriteWrapper(sources.forward, stem + ".slang", "MaterialForward");
+            return sources;
+        }
+
+        // The group text, or a module that fails with the reason when the code cannot be combined.
+        std::string CombineGroup(const std::vector<OpenPBRShapeCode> &members, uint32_t slots)
+        {
+            try
+            {
+                return CombineOpenPBRShapes(ReadOpenPBRFile(Registry().modules.front()->code), members, slots);
+            }
+            catch (const std::exception &e)
+            {
+                return std::string("#error \"") + e.what() + "\"\n";
+            }
         }
 
         ResourceHandle<Image> LoadOpenPBRImage(CommandBuffer *cmd, const std::string &path)
@@ -546,9 +700,9 @@ namespace pe
             auto source = std::make_shared<OpenPBRMaterialSource>();
             source->path = path;
             source->material = material;
-            OpenPBRLayout layout = ReadLayout(json, code, *source);
+            source->layout = ReadLayout(json, code, *source);
             LoadSourceImages(*source);
-            source->module = RegisterModule(path, module, code, std::move(layout));
+            source->module = RegisterModule(path, module, code, source->layout);
             return source;
         }
 
@@ -582,10 +736,10 @@ namespace pe
                 source->path = path;
                 source->material = material;
                 const std::string json = ReadOpenPBRFile(PathUtf8(stem) + ".json");
-                OpenPBRLayout layout = ReadLayout(json, code, *source);
+                source->layout = ReadLayout(json, code, *source);
                 LoadSourceImages(*source);
                 const std::string module = CookSourceFiles(json, code, cooked);
-                source->module = RegisterModule(path, module, code, std::move(layout));
+                source->module = RegisterModule(path, module, code, source->layout);
             }
             catch (...)
             {
@@ -617,7 +771,7 @@ namespace pe
         template <typename T>
         std::optional<T> ConstantInput(const MaterialInstance &instance, const char *name)
         {
-            const OpenPBRInput *input = GetOpenPBRSource(instance).module->layout.Find(name);
+            const OpenPBRInput *input = GetOpenPBRSource(instance).layout.Find(name);
             if (!input)
                 return std::nullopt;
 
@@ -654,6 +808,64 @@ namespace pe
     const OpenPBRModule &GetOpenPBRModule(uint32_t index)
     {
         return *Registry().modules.at(index);
+    }
+
+    OpenPBRPassSources GetOpenPBRPassSources(const OpenPBRModule &module)
+    {
+        ShapeList &shapes = Shapes();
+        const uint32_t index = ShapeIndex(shapes, module.hash);
+        module.shapeIndex = index;
+
+        const uint64_t size = ShapeGroupSize();
+        const uint64_t first = index / size * size;
+        const uint64_t end = std::min<uint64_t>(first + size, shapes.hashes.size());
+        const uint32_t slots = static_cast<uint32_t>(end - first);
+
+        // Keyed by the members' files, so a cache hit reads no code.
+        std::string key = std::to_string(shapes.broken.size());
+        std::vector<std::pair<uint64_t, std::string>> paths;
+        for (uint64_t i = first; i < end; ++i)
+        {
+            std::string path = ShapeCodePath(shapes.hashes[i]);
+            if (path.empty())
+                continue;
+
+            key += "\n" + path;
+            paths.emplace_back(i, std::move(path));
+        }
+
+        if (const auto cached = shapes.sources.find(key); cached != shapes.sources.end())
+            return cached->second;
+
+        std::vector<OpenPBRShapeCode> members;
+        for (const auto &[i, path] : paths)
+        {
+            std::string code = ShapeCode(shapes.hashes[i], path);
+            if (!code.empty())
+                members.push_back({static_cast<uint32_t>(i - first), shapes.hashes[i], std::move(code)});
+        }
+
+        std::string text = CombineGroup(members, slots);
+        const bool broken = text.starts_with("#error") || shapes.broken.contains(std::to_string(Fnv1a64(text)));
+        if (!broken || members.size() <= 1)
+            return shapes.sources[key] = WriteGroup(text, static_cast<uint32_t>(members.size()));
+
+        // A group that failed to compile builds each member alone, so a broken shape only fails its own modules.
+        // ponytail: not cached (it depends on the module); a broken group re-reads its members per build.
+        std::erase_if(members, [&](const OpenPBRShapeCode &member)
+                      { return member.hash != module.hash; });
+        return WriteGroup(CombineGroup(members, slots), static_cast<uint32_t>(members.size()));
+    }
+
+    uint32_t GetOpenPBRShapeSlot(const OpenPBRModule &module)
+    {
+        const uint32_t index = module.shapeIndex;
+        return index == UINT32_MAX ? UINT32_MAX : index % ShapeGroupSize();
+    }
+
+    void MarkOpenPBRGroupBroken(const std::string &key)
+    {
+        Shapes().broken.insert(key);
     }
 
     std::shared_ptr<const OpenPBRMaterialSource> LoadOpenPBRMaterial(
@@ -850,7 +1062,7 @@ namespace pe
                          const MaterialParamValue &value, std::string &error)
     {
         const OpenPBRMaterialSource &source = GetOpenPBRSource(instance);
-        const OpenPBRInput *input = source.module->layout.Find(name);
+        const OpenPBRInput *input = source.layout.Find(name);
         if (!source.module->layout.valid || !input)
         {
             error = "[OpenPBR] Unknown input or unavailable layout: " + name;
@@ -897,7 +1109,7 @@ namespace pe
 
     static uint32_t OpenPBRSamplerIndex(const MaterialInstance &instance, const OpenPBRInput &texture)
     {
-        const OpenPBRLayout &layout = GetOpenPBRSource(instance).module->layout;
+        const OpenPBRLayout &layout = GetOpenPBRSource(instance).layout;
         auto integer = [&](const char *name, int32_t fallback)
         {
             const OpenPBRInput *input = layout.Find(texture.node + "." + name);
@@ -925,7 +1137,7 @@ namespace pe
         std::memcpy(bytes.data(), &legacy, sizeof(legacy));
         std::memcpy(bytes.data() + kOpenPBRModuleOffset, &module.index, sizeof(module.index));
 
-        for (const OpenPBRInput &input : module.layout.inputs)
+        for (const OpenPBRInput &input : source.layout.inputs)
         {
             const uint32_t offset = kOpenPBRInputsOffset + input.offset;
             if (input.type == "SamplerTexture2D")
@@ -969,6 +1181,30 @@ namespace pe
             instance.SetBaseColorFactor(color);
         }
 
+        // The legacy hit's glass (RT refraction): the weight, the entry tint in the one base colour both lobes share
+        // (blended by the weight, from the constant base or white so repeated mirrors agree) and Beer's-law volume.
+        const auto transmission = ConstantInput<float>(instance, "transmission_weight");
+        if (transmission && *transmission > 0.0f)
+        {
+            const float glass = std::clamp(*transmission, 0.0f, 1.0f);
+            const vec3 color = glm::clamp(ConstantInput<vec3>(instance, "transmission_color").value_or(vec3(1.0f)), 0.0f, 1.0f);
+            const float depth = ConstantInput<float>(instance, "transmission_depth").value_or(0.0f);
+            const float coatWeight = std::clamp(ConstantInput<float>(instance, "coat_weight").value_or(0.0f), 0.0f, 1.0f);
+            const vec3 coatColor = glm::clamp(ConstantInput<vec3>(instance, "coat_color").value_or(vec3(1.0f)), 0.0f, 1.0f);
+            const vec3 coat = glm::sqrt(glm::mix(vec3(1.0f), coatColor, coatWeight));
+            const vec3 tint = depth > 0.0f ? coat : color * coat;
+
+            const vec3 opaque = base && weight ? glm::clamp(*base * *weight, vec3(0.0f), vec3(1.0f)) : vec3(1.0f);
+            const vec3 mixed = glm::mix(opaque, tint, glass);
+            instance.SetBaseColorFactor(vec4(glm::convertLinearToSRGB(mixed), instance.GetBaseColorFactor().a));
+            instance.SetTransmissionFactor(glass);
+            if (depth > 0.0f)
+            {
+                instance.SetAttenuationColor(color);
+                instance.SetAttenuationDistance(depth);
+            }
+        }
+
         if (const auto value = ConstantInput<float>(instance, "base_metalness"))
             instance.SetMetallic(*value);
 
@@ -987,5 +1223,29 @@ namespace pe
             const float peak = std::max({color.r, color.g, color.b, 1.0f});
             instance.SetEmissiveFactor(glm::convertLinearToSRGB(color / peak) * peak);
         }
+    }
+
+    vec3 OpenPBRShadowTransmittance(const MaterialInstance &instance)
+    {
+        // Connected inputs take OpenPBR's defaults.
+        const float opacity = std::clamp(ConstantInput<float>(instance, "geometry_opacity").value_or(1.0f), 0.0f, 1.0f);
+        const float metalness = ConstantInput<float>(instance, "base_metalness").value_or(0.0f);
+        const float weight = ConstantInput<float>(instance, "transmission_weight").value_or(0.0f);
+        const float transmitted = std::clamp((1.0f - metalness) * weight, 0.0f, 1.0f);
+
+        // With a volume, transmission_color is reached after transmission_depth: two surfaces of an object about that
+        // thick give it, so one surface keeps its square root.
+        vec3 tint = glm::clamp(ConstantInput<vec3>(instance, "transmission_color").value_or(vec3(1.0f)), 0.0f, 1.0f);
+        if (ConstantInput<float>(instance, "transmission_depth").value_or(0.0f) > 0.0f)
+            tint = glm::sqrt(tint);
+
+        // coat_color tints light that crosses the coat twice (in and out), so one crossing keeps its square root.
+        const float coatWeight = std::clamp(ConstantInput<float>(instance, "coat_weight").value_or(0.0f), 0.0f, 1.0f);
+        const vec3 coatColor = glm::clamp(ConstantInput<vec3>(instance, "coat_color").value_or(vec3(1.0f)), 0.0f, 1.0f);
+        const vec3 coat = glm::sqrt(glm::mix(vec3(1.0f), coatColor, coatWeight));
+
+        // ponytail: Fresnel reflection, refraction's focusing (caustics) and graph-driven inputs are ignored; a
+        // generated per-texel transmittance (like pe_material_mask) is the upgrade path.
+        return vec3(1.0f - opacity) + opacity * transmitted * tint * coat;
     }
 } // namespace pe

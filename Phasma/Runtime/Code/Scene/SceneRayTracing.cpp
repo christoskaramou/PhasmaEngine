@@ -24,6 +24,12 @@ namespace pe
                    (api == PE_GRAPHICS_API_VULKAN || api == PE_GRAPHICS_API_DX12);
         }
 
+        // The opacity class a BLAS bakes in: opaque geometry never runs an any-hit shader.
+        bool RtTransparent(RenderType type)
+        {
+            return type == RenderType::AlphaCut || type == RenderType::AlphaBlend || type == RenderType::Transmission;
+        }
+
         // A MaterialX mesh's hit group is 1 + its module's slot in the hit list; everything else uses the legacy group 0.
         uint32_t RTHitGroup(const Mesh &mesh, const std::vector<uint32_t> &modules)
         {
@@ -241,9 +247,7 @@ namespace pe
             }
 
             const Mesh &mesh = m_meshes[record.meshIndex];
-            const bool isTransparent = (mesh.renderType == RenderType::AlphaBlend ||
-                                        mesh.renderType == RenderType::Transmission ||
-                                        mesh.renderType == RenderType::AlphaCut);
+            const bool isTransparent = RtTransparent(mesh.renderType);
             const mat4 &t = m_nodeRuntime[record.nodeIndex].gpuData.worldMatrix;
             // set_visible(false) keeps the instance (no rebuild); mask 0 makes every ray skip it.
             const bool hidden = m_nodeRuntime[record.nodeIndex].gpuData.renderVisible == 0u;
@@ -293,6 +297,7 @@ namespace pe
                                     { AccelerationStructure *b = blas; AccelerationStructure::Destroy(b); });
         m_blases.clear();
         m_blasByMesh.clear();
+        m_blasTransparent.clear();
 
         RHII.AddToDeletionQueue([b = m_blasMergedBuffer]()
                                 { Buffer *buf = b; Buffer::Destroy(buf); });
@@ -365,9 +370,7 @@ namespace pe
 
             BlasBuildReq req{};
             req.meshIndex = meshIndex;
-            const bool isTransparent = mesh.renderType == RenderType::AlphaCut ||
-                                       mesh.renderType == RenderType::AlphaBlend ||
-                                       mesh.renderType == RenderType::Transmission;
+            const bool isTransparent = RtTransparent(mesh.renderType);
             const auto geometryKey = std::make_tuple(mesh.vertexOffset, mesh.vertexCount, mesh.indexOffset, mesh.indexCount, isTransparent);
             if (auto [firstIt, inserted] = firstMeshByGeometry.emplace(geometryKey, meshIndex); !inserted)
             {
@@ -489,11 +492,28 @@ namespace pe
 #endif
             m_blases.push_back(req.createdBlas);
             m_blasByMesh[req.meshIndex] = req.createdBlas;
+            m_blasTransparent[req.meshIndex] = RtTransparent(m_meshes[req.meshIndex].renderType);
 
             currentOffset += req.resultSize;
         }
         for (const auto &[duplicate, first] : blasAliases)
+        {
             m_blasByMesh[duplicate] = m_blasByMesh[first];
+            m_blasTransparent[duplicate] = m_blasTransparent[first];
+        }
+    }
+
+    // A render-type change can move a mesh out of the opacity class its BLAS was built in (Lua set_render_type, the
+    // MaterialX transmission switch); its any-hit only runs, or stops running, once the BLASes are rebuilt.
+    bool Scene::BlasOpacityStale() const
+    {
+        for (const auto &[meshIndex, transparent] : m_blasTransparent)
+        {
+            if (IsValidMeshIndex(meshIndex) && RtTransparent(m_meshes[meshIndex].renderType) != transparent)
+                return true;
+        }
+
+        return false;
     }
 
     void Scene::AliasOrDirtyBlas(int meshIndex, int sourceMeshIndex)
@@ -502,12 +522,13 @@ namespace pe
             return;
         // A geometry-sharing copy traces through the source mesh's BLAS as long as both sit in the
         // same opacity class (the BLAS bakes opaque vs any-hit); otherwise fall back to a full rebuild.
-        auto rtTransparent = [](RenderType t)
-        { return t == RenderType::AlphaCut || t == RenderType::AlphaBlend || t == RenderType::Transmission; };
         auto blasIt = m_blasByMesh.find(sourceMeshIndex);
         if (blasIt != m_blasByMesh.end() && IsValidMeshIndex(sourceMeshIndex) &&
-            rtTransparent(m_meshes[sourceMeshIndex].renderType) == rtTransparent(m_meshes[meshIndex].renderType))
+            RtTransparent(m_meshes[sourceMeshIndex].renderType) == RtTransparent(m_meshes[meshIndex].renderType))
+        {
             m_blasByMesh[meshIndex] = blasIt->second;
+            m_blasTransparent[meshIndex] = m_blasTransparent[sourceMeshIndex];
+        }
         else
             m_blasDirty = true;
     }

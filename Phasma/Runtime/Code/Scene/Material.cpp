@@ -24,6 +24,18 @@ namespace pe
                 return;
             }
         }
+
+        // glTF transmission (KHR_materials_transmission): the uncovered share passes, and the covered share's
+        // non-metallic transmitted part is tinted by the base colour.
+        // ponytail: constant factors only, as authored (no base colour texture, no linear_color decode); sample the
+        // texture in the shadow passes if textured glass needs it.
+        vec4 LegacyShadowTransmittance(const vec4 &baseColor, float metallic, float transmission)
+        {
+            const float coverage = std::clamp(baseColor.a, 0.0f, 1.0f);
+            const float transmitted = std::clamp((1.0f - metallic) * transmission, 0.0f, 1.0f);
+            const vec3 tint = glm::clamp(vec3(baseColor), vec3(0.0f), vec3(1.0f));
+            return vec4(vec3(1.0f - coverage) + coverage * transmitted * tint, 0.0f);
+        }
     } // namespace
 
     Material::Material() = default;
@@ -254,6 +266,7 @@ namespace pe
         data.pbrParams = vec4(metallic, roughness, effectiveAlphaCutoff, occlusionStrength);
         data.transmissionVolume = vec4(thicknessFactor, attenuationDistance, ior, 0.f);
         data.attenuationColor = vec4(attenuationColor, nightEmissive);
+        data.shadowTransmittance = LegacyShadowTransmittance(baseColorFactor, metallic, transmissionFactor);
         return data;
     }
 
@@ -428,7 +441,7 @@ namespace pe
 
     void MaterialInstance::SetOpenPBRMaterialSource(std::shared_ptr<const OpenPBRMaterialSource> source)
     {
-        for (const OpenPBRInput &input : GetOpenPBRSource(*this).module->layout.inputs)
+        for (const OpenPBRInput &input : GetOpenPBRSource(*this).layout.inputs)
             m_paramOverrides.erase(input.identity);
 
         m_openpbrSource = std::move(source);
@@ -536,6 +549,11 @@ namespace pe
         data.pbrParams = vec4(GetMetallic(), GetRoughness(), effectiveAlphaCutoff, GetOcclusionStrength());
         data.transmissionVolume = vec4(GetThicknessFactor(), GetAttenuationDistance(), GetIor(), 0.f);
         data.attenuationColor = vec4(GetAttenuationColor(), m_parent->nightEmissive);
+        if (GetOpenPBR() && m_openpbrSource)
+            data.shadowTransmittance = vec4(OpenPBRShadowTransmittance(*this), 0.0f);
+        else
+            data.shadowTransmittance = LegacyShadowTransmittance(GetBaseColorFactor(), GetMetallic(), GetTransmissionFactor());
+
         return data;
     }
 

@@ -34,13 +34,26 @@ PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
     pe_ssao = 1.0;
     pe_occlusion = 1.0;
 
-    pe_load_material(pe_materialBytes, pe_constants[input.id].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    pe_fill_vertex_data(sp);
-    const PeSurfaceInputs inputs = pe_material_inputs(sp.nextUv, sp.spriteBlend);
-    float3 color = pe_shade_inputs(inputs).rgb;
+    pe_load_material(pc.shape, pe_materialBytes, pe_constants[input.id].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
+    pe_fill_vertex_data(pc.shape, sp);
+    const PeSurfaceInputs inputs = pe_material_inputs(pc.shape, sp.nextUv, sp.spriteBlend);
     const float alpha = saturate(inputs.geometry_opacity);
     if (alpha < 0.001) // MaterialX's transparent-surface threshold (HwShaderGenerator.cpp)
         discard;
+
+    // The depth draw blends nothing in (zero source alpha, max with 0); the shading draw keeps the nearest surface.
+    PeForwardOutput output;
+    output.color = float4(0.0, 0.0, 0.0, 0.0);
+#ifdef PE_FORWARD_VELOCITY
+    output.velocity = float4(0.0, 0.0, 0.0, 0.0);
+#endif
+#ifdef PE_FORWARD_DOF_DEPTH
+    output.dofDepth = 0.0;
+#endif
+    if (pc.depth_only != 0u)
+        return output;
+
+    float3 color = pe_shade_inputs(inputs).rgb;
 
     if (cb_fogDensity > 0.0f) // pass 2's distance haze on the opacity-weighted colour
     {
@@ -57,7 +70,6 @@ PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
     if (any(isnan(color)) || any(isinf(color)))
         color = float3(0.0, 0.0, 0.0);
 
-    PeForwardOutput output;
     output.color = float4(color, alpha);
 
 #ifdef PE_FORWARD_VELOCITY

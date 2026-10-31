@@ -591,7 +591,7 @@ namespace pe
                                        const char *fn,
                                        const std::string &name) -> const OpenPBRInput &
                 {
-                    const OpenPBRLayout &layout = GetOpenPBRSource(instance).module->layout;
+                    const OpenPBRLayout &layout = GetOpenPBRSource(instance).layout;
                     if (!layout.valid)
                         luaL_error(lua, "material.%s: the OpenPBR layout is unavailable (see the log)", fn);
 

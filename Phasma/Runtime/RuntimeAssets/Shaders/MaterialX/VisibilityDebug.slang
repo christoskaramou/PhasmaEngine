@@ -42,6 +42,7 @@ MaterialGpuData PeMaterial(uint id)
     m.pbrParams = asfloat(pe_materialBytes.Load4(byteOff + 32));
     m.transmissionVolume = asfloat(pe_materialBytes.Load4(byteOff + 48));
     m.attenuationColor = asfloat(pe_materialBytes.Load4(byteOff + 64));
+    m.shadowTransmittance = asfloat(pe_materialBytes.Load4(byteOff + 80));
     return m;
 }
 

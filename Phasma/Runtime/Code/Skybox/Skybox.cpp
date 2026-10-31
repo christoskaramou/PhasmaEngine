@@ -39,9 +39,10 @@ namespace pe
             uint32_t faceSize = 1;
             uint32_t sampleCount = 1;
             float roughness = 0.0f;
+            quat sourceRotation = quat(1.f, 0.f, 0.f, 0.f);
         };
 
-        static_assert(sizeof(PrefilterPushConstants) == 16);
+        static_assert(sizeof(PrefilterPushConstants) == 32);
 
         uint32_t PrefilterSampleCount(float roughness)
         {
@@ -58,7 +59,7 @@ namespace pe
             return 512;
         }
 
-        void PrefilterSkyboxMips(CommandBuffer *cmd, Image *cubeMap, Image *equiImage)
+        void PrefilterSkyboxMips(CommandBuffer *cmd, Image *cubeMap, Image *equiImage, const quat &sourceRotation)
         {
             const uint32_t mipLevels = cubeMap->GetMipLevels();
             if (mipLevels <= 1)
@@ -98,6 +99,7 @@ namespace pe
                 constants.faceSize = faceSize;
                 constants.sampleCount = PrefilterSampleCount(roughness);
                 constants.roughness = roughness;
+                constants.sourceRotation = sourceRotation;
 
                 cmd->SetConstants(constants);
                 cmd->PushConstants();
@@ -300,7 +302,7 @@ namespace pe
         return true;
     }
 
-    bool SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::string &path)
+    bool SkyBox::LoadSkyBox(CommandBuffer *cmd, const std::string &path, const quat &rotation)
     {
         // 1. Load Equirectangular Image
         Image *equiImage = Image::LoadRGBA32F(cmd, path);
@@ -364,13 +366,16 @@ namespace pe
         descriptor->SetSampler(2, equiImage->GetSampler());
         descriptor->Update();
 
-        // 6. Dispatch
+        // 6. Dispatch: each cube direction reads the equirect at the inverse of the sky's rotation
+        const quat sourceRotation(rotation.w, -rotation.x, -rotation.y, -rotation.z);
         cmd->BindPipeline(*passInfo);
+        cmd->SetConstants(sourceRotation);
+        cmd->PushConstants();
         uint32_t groups = (cubemapSize + 31) / 32;
         cmd->Dispatch(groups, groups, 6);
 
         // 7. Generate roughness-prefiltered mips for image-based lighting
-        PrefilterSkyboxMips(cmd, m_cubeMap, equiImage);
+        PrefilterSkyboxMips(cmd, m_cubeMap, equiImage, sourceRotation);
 
         // 8. Final Barrier
         TransitionSkyboxToShaderRead(cmd, m_cubeMap);
@@ -381,8 +386,12 @@ namespace pe
                                     Image *im = equiImage;
                                     Image::Destroy(im);
                                     delete passInfo; });
+
+        // ponytail: a rotated sky builds the OpenPBR pyramid from its rotated cube (the path six-face skies take, ~2%
+        // brighter and aliased near the poles); sample the equirect at rotated directions in OpenPBREnvPyramid.hlsl if
+        // that ever shows.
         if (SceneUsesOpenPBR())
-            BuildOpenPBREnvironment(cmd, equiImage);
+            BuildOpenPBREnvironment(cmd, rotation == quat(1.f, 0.f, 0.f, 0.f) ? equiImage : nullptr);
 
         return true;
     }
