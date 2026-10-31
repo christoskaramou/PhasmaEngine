@@ -182,7 +182,7 @@ On the Scene Settings node.
 | **Frustum Culling** | Skip objects outside the camera. | |
 | **Occlusion Culling** | Two-phase Hi-Z occlusion. | Bias. |
 | **Skinned Instancing** | Instance skinned draws. | |
-| **Cluster Geometry** | Draw mesh clusters. The `.pemesh` needs clusters from Cook. | Error in pixels. |
+| **Cluster Geometry** | Draw static opaque meshes as cluster LOD. Meshes cooked without clusters get them built when this turns on. | Error in pixels. |
 | **LOD** | Discrete mesh LOD. Also gated by the Render menu. | Count, bias, three distances. |
 | **Shadows** | Cascaded shadow maps. | Map size, cascade count, distance, cascade split, normal bias, fade, filter radius, LOD bias, debug mode, depth biases. |
 | **Disney PBR** | Disney/PBR lighting model. | |
