@@ -11,4 +11,8 @@ namespace pe
 
     // Writes the cache's data (through a temporary file, so a crash never leaves a torn file) and destroys the cache.
     void SaveAndDestroyVulkanPipelineCache(vk::Device device, vk::PipelineCache cache);
+
+    // Copies the cache's data now and writes the file on a worker thread: after a large build, so a killed or crashed
+    // process (the test harness stops editors that way) keeps what it compiled.
+    void SaveVulkanPipelineCacheAsync(vk::Device device, vk::PipelineCache cache);
 } // namespace pe

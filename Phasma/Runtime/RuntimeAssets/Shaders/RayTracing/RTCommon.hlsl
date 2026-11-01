@@ -294,27 +294,17 @@ float4 SampleArrayCone(float2 uv, uint index, float lodBase)
     return pe_textures[NonUniformResourceIndex(index)].SampleLevel(material_sampler, uv, max(lod, 0.0));
 }
 
-// The camera's angle per pixel along a column, from the inverse projection (0 for an orthographic camera, whose rays are
-// parallel: its footprint is RT_PixelFootprint).
-float RT_PixelSpread(float height)
+// One camera pixel's ray cone along a column of `height` pixels, from the inverse projection: a perspective camera's angle
+// per pixel (spread), or an orthographic camera's parallel rays' pixel height in world units (width).
+void RT_PixelCone(float height, out float width, out float spread)
 {
-    if (cb_orthographicCamera != 0)
-        return 0.0;
-
     const float4 a = mul(float4(0.0, 0.0, 1.0, 1.0), cb_invProj);
     const float4 b = mul(float4(0.0, 2.0 / height, 1.0, 1.0), cb_invProj);
-    return length(normalize(b.xyz / b.w) - normalize(a.xyz / a.w));
-}
-
-// An orthographic camera's pixel height in world units (0 for a perspective one).
-float RT_PixelFootprint(float height)
-{
-    if (cb_orthographicCamera == 0)
-        return 0.0;
-
-    const float4 a = mul(float4(0.0, 0.0, 1.0, 1.0), cb_invProj);
-    const float4 b = mul(float4(0.0, 2.0 / height, 1.0, 1.0), cb_invProj);
-    return length(b.xyz / b.w - a.xyz / a.w);
+    const float3 pa = a.xyz / a.w;
+    const float3 pb = b.xyz / b.w;
+    const bool orthographic = cb_orthographicCamera != 0;
+    width = orthographic ? length(pb - pa) : 0.0;
+    spread = orthographic ? 0.0 : length(normalize(pb) - normalize(pa));
 }
 
 // Matrices

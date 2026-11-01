@@ -449,6 +449,7 @@ namespace pe
             }
 
             PE_INFO("[OpenPBR] module pipelines adopted: module %u", build.module);
+            RHII.SavePipelineCache();
         }
         else
         {
@@ -509,17 +510,11 @@ namespace pe
             return common;
         }
 
-        // A build is due when a pass lacks the list, or the passes' sets disagree (one built while the shape list grew).
-        bool HitBuildDue(const std::vector<RayTracingPass *> &passes, const std::vector<uint32_t> &modules)
+        // Every pass holds the first one's set.
+        bool HitSetsAgree(const std::vector<RayTracingPass *> &passes)
         {
-            for (const RayTracingPass *pass : passes)
-            {
-                const bool lacks = pass->GetHitSet().modules != modules;
-                if (lacks || !(pass->GetHitSet() == passes.front()->GetHitSet()))
-                    return true;
-            }
-
-            return false;
+            return std::all_of(passes.begin(), passes.end(), [&](const RayTracingPass *pass)
+                               { return pass->GetHitSet() == passes.front()->GetHitSet(); });
         }
     } // namespace
 
@@ -583,18 +578,22 @@ namespace pe
         if (buildDone)
             FinishRTHitBuild();
 
-        if (!modules.empty() && !m_rtHitBuild.done.valid() && HitBuildDue(passes, modules))
+        // A build is due when a pass lacks the list, or the passes' sets disagree (one built while the shape list grew).
+        bool agree = HitSetsAgree(passes);
+        const bool due = !passes.empty() && (!agree || passes.front()->GetHitSet().modules != modules);
+        if (!modules.empty() && !m_rtHitBuild.done.valid() && due)
+        {
             StartRTHitBuild(passes, modules);
+            agree = HitSetsAgree(passes); // a retarget may have changed them
+        }
 
         if (!scene)
             return;
 
         // Passes that agree hand the scene their set as is, with no copy unless it changed.
-        const auto agrees = [&](const RayTracingPass *pass)
-        { return pass->GetHitSet() == passes.front()->GetHitSet(); };
         if (passes.empty())
             scene->SetRTHitModules(noHits);
-        else if (std::all_of(passes.begin(), passes.end(), agrees))
+        else if (agree)
             scene->SetRTHitModules(passes.front()->GetHitSet());
         else
             scene->SetRTHitModules(CommonHitSet(passes));
@@ -659,16 +658,25 @@ namespace pe
         const RTHitBuild &build = m_rtHitBuild;
         const std::vector<RayTracingPass::HitBuildResult> &results = build.done.get();
         size_t adopted = 0;
+        std::vector<size_t> failedGroups;
         for (size_t i = 0; i < results.size(); i++)
         {
             const RayTracingPass::HitBuildResult &result = results[i];
             if (result.info && build.passes[i]->AdoptHitBuild(result.info, build.set, build.generations[i]))
                 adopted++;
 
-            // Not adopted: this frame's sync builds the set anew, without what failed.
-            if (result.failedGroup != SIZE_MAX)
+            // Not adopted: this frame's sync builds the set anew, without what failed (once per group, not per pass).
+            const bool reported = std::find(failedGroups.begin(), failedGroups.end(), result.failedGroup) != failedGroups.end();
+            if (result.failedGroup != SIZE_MAX && !reported)
+            {
+                failedGroups.push_back(result.failedGroup);
                 RayTracingPass::HandleHitGroupFailure(build.set, result.failedGroup, result.error);
+            }
         }
+
+        // The driver compiled the groups just now: keep them for the next launch even if this one never exits cleanly.
+        if (adopted > 0)
+            RHII.SavePipelineCache();
 
         // Test harnesses read the group count: the legacy group plus one per shape group.
         PE_INFO("[RT] hit group build finished: %zu of %zu passes adopted, %zu hit groups",

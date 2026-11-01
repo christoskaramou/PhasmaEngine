@@ -73,8 +73,10 @@ void raygeneration()
     payload.opaqueTMax = ray.TMax;
     // The cone leaves the pixel's footprint on the surface and spreads by the camera's pixel angle (a mirror keeps it)
     // plus the GGX lobe's width (alpha = roughness^2).
-    const float pixelSpread = RT_PixelSpread(float(height));
-    payload.coneWidth = pixelSpread * length(cb_camPos.xyz - position) + RT_PixelFootprint(float(height));
+    float pixelWidth;
+    float pixelSpread;
+    RT_PixelCone(float(height), pixelWidth, pixelSpread);
+    payload.coneWidth = pixelWidth + pixelSpread * length(cb_camPos.xyz - position);
     payload.coneSpread = pixelSpread + roughness * roughness;
     payload.skipBlended = 1;
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
@@ -151,11 +153,10 @@ void raygeneration()
     float3 originWorld = mul(float4(originView, 1.0), invView).xyz;
     float3 dirWorld = normalize(mul(dirView, (float3x3)invView));
 
-    // The ray cone of one pixel: the angle to the next row's ray, or the orthographic camera's pixel height.
-    float4 pViewNext = mul(float4(ndc.x, ndc.y + 2.0 / float(launchDim.y), 1.0, 1.0), invProjection);
-    pViewNext.xyz /= pViewNext.w;
-    float coneWidth = cb_orthographicCamera != 0 ? length(pViewNext.xy - pView.xy) : 0.0;
-    float coneSpread = cb_orthographicCamera != 0 ? 0.0 : length(normalize(pViewNext.xyz) - dirView);
+    // The ray cone of one pixel.
+    float coneWidth;
+    float coneSpread;
+    RT_PixelCone(float(launchDim.y), coneWidth, coneSpread);
 
     // MODE-BASED CONFIGURATION
     // 0 = Raster
@@ -242,14 +243,13 @@ void raygeneration()
 [shader("anyhit")]
 void anyhit(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
-#ifdef GI_PROBES
+    // Probe passes' rays skip alpha-blend and Transmission surfaces (HitPayload::skipBlended, as MaterialX hits do).
     uint probeRenderType = meshInfos[InstanceID()].renderType;
-    if (payload.rayType == 0 && (probeRenderType == 3 || probeRenderType == 4))
+    if (payload.skipBlended != 0 && (probeRenderType == 3 || probeRenderType == 4))
     {
         IgnoreHit();
         return;
     }
-#endif
     uint instanceId = InstanceID();
     uint constantsId = meshInfos[instanceId].constantsIndex;
 

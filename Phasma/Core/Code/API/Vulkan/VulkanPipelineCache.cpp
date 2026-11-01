@@ -2,7 +2,13 @@
 #include "Base/Hash.h"
 #include "Base/Path.h"
 #include "Base/Process.h"
+#include "Base/ThreadPool.h"
 #include <fstream>
+#if defined(PE_WIN32)
+#include <windows.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace pe
 {
@@ -72,9 +78,16 @@ namespace pe
 
         void WriteCacheFile(const std::vector<char> &data)
         {
+            // Unique per process and save: two processes, or two saves of one, never write the same temporary file.
+            static std::atomic<uint32_t> nextSave{0};
+#if defined(PE_WIN32)
+            const unsigned long processId = GetCurrentProcessId();
+#else
+            const unsigned long processId = static_cast<unsigned long>(getpid());
+#endif
             const std::filesystem::path path = CachePath();
             std::filesystem::path temp = path;
-            temp += ".tmp";
+            temp += "." + std::to_string(processId) + "_" + std::to_string(nextSave.fetch_add(1)) + ".tmp";
 
             std::error_code ec;
             std::filesystem::create_directories(path.parent_path(), ec);
@@ -96,7 +109,25 @@ namespace pe
             // Replaces the old file in one step: another engine process saving at the same time leaves either file whole.
             std::filesystem::rename(temp, path, ec);
             if (ec)
+            {
                 PE_WARN("[Vulkan] pipeline cache: cannot replace %s (%s)", PathUtf8(path).c_str(), ec.message().c_str());
+                std::filesystem::remove(temp, ec);
+            }
+        }
+
+        // The driver's data, or empty when it has none or more than the cap.
+        std::vector<char> ReadCacheData(vk::Device device, vk::PipelineCache cache)
+        {
+            size_t size = 0;
+            if (device.getPipelineCacheData(cache, &size, nullptr) != vk::Result::eSuccess || size == 0 || size > kMaxBytes)
+                return {};
+
+            std::vector<char> data(size);
+            if (device.getPipelineCacheData(cache, &size, data.data()) != vk::Result::eSuccess)
+                return {};
+
+            data.resize(size);
+            return data;
         }
     } // namespace
 
@@ -127,16 +158,11 @@ namespace pe
 
         try
         {
-            size_t size = 0;
-            const vk::Result sized = device.getPipelineCacheData(cache, &size, nullptr);
-            std::vector<char> data(sized == vk::Result::eSuccess ? size : 0);
-            const bool read = !data.empty() &&
-                              device.getPipelineCacheData(cache, &size, data.data()) == vk::Result::eSuccess;
-            if (read && size <= kMaxBytes)
+            const std::vector<char> data = ReadCacheData(device, cache);
+            if (!data.empty())
             {
-                data.resize(size);
                 WriteCacheFile(data);
-                PE_INFO("[Vulkan] pipeline cache: %zu KB saved", size / 1024);
+                PE_INFO("[Vulkan] pipeline cache: %zu KB saved", data.size() / 1024);
             }
         }
         catch (const std::exception &e)
@@ -145,5 +171,27 @@ namespace pe
         }
 
         device.destroyPipelineCache(cache);
+    }
+
+    void SaveVulkanPipelineCacheAsync(vk::Device device, vk::PipelineCache cache)
+    {
+        if (!cache)
+            return;
+
+        // The copy reads the cache (internally synchronized, so worker builds may run); only the file write leaves.
+        std::vector<char> data = ReadCacheData(device, cache);
+        if (data.empty())
+            return;
+
+        ThreadPool::General.Enqueue([data = std::move(data)]
+                                    {
+            try
+            {
+                WriteCacheFile(data);
+            }
+            catch (const std::exception &e)
+            {
+                PE_WARN("[Vulkan] pipeline cache: not saved (%s)", e.what());
+            } });
     }
 } // namespace pe

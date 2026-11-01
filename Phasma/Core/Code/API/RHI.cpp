@@ -1299,6 +1299,25 @@ namespace pe
         m_impl = nullptr;
     }
 
+    void RHI::SavePipelineCache()
+    {
+        if (m_api != PE_GRAPHICS_API_VULKAN || !m_impl)
+            return;
+
+        // At most every 5 s: a cold open adopts dozens of module builds, and each save copies the whole cache.
+        static std::chrono::steady_clock::time_point lastSave{};
+        const auto now = std::chrono::steady_clock::now();
+        if (lastSave != std::chrono::steady_clock::time_point{} && now - lastSave < std::chrono::seconds(5))
+            return;
+
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+        if (!vk->m_device)
+            return;
+
+        lastSave = now;
+        SaveVulkanPipelineCacheAsync(vk->m_device, vk->m_pipelineCache);
+    }
+
     void RHI::CreateInstance(SDL_Window *window)
     {
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
