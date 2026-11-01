@@ -30,6 +30,7 @@ void raygeneration()
     payload.alpha = 1.0;
     payload.opaqueTMax = ray.TMax;
     payload.coneSpread = sqrt(2.0 * PI / 64.0); // each of the tile's 8x8 rays covers 1/64 of the hemisphere
+    payload.skipBlended = 1;
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
     float3 radiance;
     if (payload.t >= 0.0)
@@ -75,6 +76,7 @@ void raygeneration()
     const float pixelSpread = RT_PixelSpread(float(height));
     payload.coneWidth = pixelSpread * length(cb_camPos.xyz - position) + RT_PixelFootprint(float(height));
     payload.coneSpread = pixelSpread + roughness * roughness;
+    payload.skipBlended = 1;
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
     float3 radiance = payload.t >= 0.0 && payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE ? 0.0.xxx : payload.radiance;
     output[launch] = float4(max(radiance, 0.0), payload.t >= 0.0 ? payload.t : ray.TMax);
@@ -92,6 +94,7 @@ void raygeneration()
     payload.opaqueTMax = ray.TMax;
     const float probeConeSpread = sqrt(4.0 * PI / float(DispatchRaysDimensions().x)); // each ray's share of the sphere
     payload.coneSpread = probeConeSpread;
+    payload.skipBlended = 1;
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
     float distance = payload.t < 0.0 ? ray.TMax : payload.t;
     if (payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE && payload.t >= 0.0)
@@ -114,6 +117,7 @@ void raygeneration()
         farPayload.opaqueTMax = farRay.TMax;
         farPayload.coneWidth = probeConeSpread * footprint;
         farPayload.coneSpread = probeConeSpread;
+        farPayload.skipBlended = 1;
         TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, farRay, farPayload);
         bool inside = farPayload.t >= 0.0 && farPayload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE;
         far = float4(max(farPayload.radiance, 0.0), inside ? -1.0 : 1.0);
@@ -196,6 +200,7 @@ void raygeneration()
     payload.opaqueTMax = tMax;
     payload.coneWidth = coneWidth;
     payload.coneSpread = coneSpread;
+    payload.skipBlended = 0;
 
     TraceRay(
         tlas,
@@ -546,6 +551,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         transPayload.opaqueTMax = clampToHybridOpaqueDepth ? ray.TMax : 10000.0;
         transPayload.coneWidth = coneWidth; // the cone goes on through the surface (refraction's curvature ignored)
         transPayload.coneSpread = payload.coneSpread;
+        transPayload.skipBlended = payload.skipBlended;
 
         // In Full RT mode, alpha blended objects need to see opaque geometry behind them
         uint mask = (isTransmissive || cb_renderMode == 2) ? 0xFF : 0x80;

@@ -26,6 +26,8 @@ struct HitPayload
     float  opaqueTMax;
     float  coneWidth;  // ray cone (RT_RayConeLodBase): width at the ray's origin, world units
     float  coneSpread; // and its growth per unit of distance; both 0 sample mip 0
+    uint   skipBlended; // probe passes' rays: alpha-blend and Transmission surfaces are invisible to them, the legacy
+                        // any-hit's GI_PROBES rule, which MaterialX hit groups (one any-hit for every pass) read here
 };
 
 struct Vertex
@@ -134,6 +136,7 @@ float3 TraceTransmittance(float3 origin, float3 dir, float dist)
     shadowPayload.rayType  = 1; // Mark as Shadow Ray
     shadowPayload.coneWidth = 0.0; // any-hit alpha tests sample mip 0
     shadowPayload.coneSpread = 0.0;
+    shadowPayload.skipBlended = 0; // shadows keep glass's tint
 
     TraceRay(
         tlas,

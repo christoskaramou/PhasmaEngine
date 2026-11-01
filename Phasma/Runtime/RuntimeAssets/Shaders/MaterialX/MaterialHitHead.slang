@@ -29,6 +29,74 @@ static float pe_hit_curvature;   // the hit triangle's curvature: subsurface's f
 static float3 pe_shadow_offset;  // world offset of shadow ray origins onto the smooth surface (ShadowTerminatorOffset)
 static float pe_hit_lod_base;    // RT_RayConeLodBase of the hit, without a texture's own size; -1000 samples mip 0
 
+// Forward meshes (alpha-blend, Transmission) in the camera pass: the hit's continuation state (pe_hit_closest).
+static uint pe_hit_depth;            // the hit's payload depth: rays it traces go one deeper
+static float pe_hit_cone_width;      // the ray cone where it hit, carried on through the surface
+static float pe_hit_cone_spread;
+static bool pe_hit_refracts;         // pe_traced_refraction may trace (a forward mesh with budget left)
+static bool pe_refraction_traced;    // one refraction ray per hit, whatever calls the seam
+static float3 pe_refraction_radiance;
+
+// The sky along the ray, as the legacy hit falls back to once its bounce budget is spent.
+float3 PeSkyAlongRay()
+{
+    return skybox.SampleLevel(material_sampler, WorldRayDirection(), 0).rgb * cb_iblIntensity;
+}
+
+#ifndef GI_PROBES
+// A ray on from the hit through or off its surface, as the legacy closest hit continues one: its radiance in the hit
+// output's space (display-referred unless linear_color). As there, a refracted ray sees everything, a pass-through ray
+// only transparent geometry in Hybrid (where the raster frame stands behind it).
+float3 PeTraceContinuation(float3 dir, bool refractive)
+{
+    RayDesc ray;
+    ray.Origin = pe_P;
+    ray.Direction = dir;
+    ray.TMin = 0.01;
+    ray.TMax = 10000.0;
+
+    HitPayload next = (HitPayload)0;
+    next.t = -1.0;
+    next.alpha = 1.0;
+    next.depth = pe_hit_depth + 1u;
+    next.isRefractive = refractive ? 1u : 0u;
+    next.opaqueTMax = ray.TMax;
+    next.coneWidth = pe_hit_cone_width;
+    next.coneSpread = pe_hit_cone_spread;
+    TraceRay(tlas, RAY_FLAG_NONE, refractive || cb_renderMode == 2u ? 0xFF : 0x80, 0, 0, 0, ray, next);
+
+    return next.radiance;
+}
+#endif
+
+// The mx_environment_fis override's hit seam (module ABI 9): MaterialX's refraction lobe sees the scene through one ray
+// along the refracted mean direction instead of the environment, so transmission_color tints what lies behind. N faces V.
+// Linear radiance; false (the environment) where the hit may not trace.
+bool pe_traced_refraction(float3 N, float3 V, float ior, out float3 radiance)
+{
+    radiance = float3(0.0, 0.0, 0.0);
+#ifdef GI_PROBES
+    return false;
+#else
+    if (!pe_hit_refracts)
+        return false;
+
+    if (!pe_refraction_traced)
+    {
+        float3 dir = refract(-V, N, 1.0 / max(ior, 1e-3));
+        if (!(dot(dir, dir) > 0.0))
+            dir = reflect(-V, N); // total internal reflection
+
+        const float3 traced = PeTraceContinuation(normalize(dir), true);
+        pe_refraction_radiance = cb_linearColor == 0u ? SrgbToLinear(traced) : traced;
+        pe_refraction_traced = true;
+    }
+
+    radiance = pe_refraction_radiance;
+    return true;
+#endif
+}
+
 // The LOD a graph texture samples at this hit (the mx_texture override's PE_MATERIAL_HIT branch, module ABI 9).
 float pe_hit_texture_lod(uint textureIndex)
 {

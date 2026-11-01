@@ -108,6 +108,35 @@ float3 PeSurfaceCacheHit(uint shape, PeSurfacePoint sp)
            emission;
 }
 
+// A forward mesh's render types (MeshUsesOpenPBRForward): MeshInfoGPU::renderType 3 alpha-blend, 4 Transmission.
+bool PeBlendedRenderType(uint renderType)
+{
+    return renderType == 3u || renderType == 4u;
+}
+
+#ifndef GI_PROBES
+// Leaving a Transmission mesh (its entry hit already shaded and tinted the light): the ray only refracts out, as the legacy
+// hit's exit faces pass the escaped radiance through. N is the surface normal, out of the medium.
+float3 PeExitTransmission(float ior, float3 N)
+{
+    if (pe_hit_depth >= 2u)
+        return PeSkyAlongRay();
+
+    const float3 d = normalize(WorldRayDirection());
+    float3 dir = refract(d, -N, max(ior, 1e-3));
+    if (!(dot(dir, dir) > 0.0))
+        dir = reflect(d, -N); // total internal reflection
+
+    return PeTraceContinuation(normalize(dir), true);
+}
+
+// What an alpha-blend surface lets through, in the hit output's space.
+float3 PeBehindSurface()
+{
+    return pe_hit_depth < 2u ? PeTraceContinuation(normalize(WorldRayDirection()), false) : PeSkyAlongRay();
+}
+#endif
+
 [shader("closesthit")]
 void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
@@ -123,7 +152,12 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     pe_P = sp.P;
     pe_N = sp.N;
     pe_spec_N = sp.N;
-    pe_hit_lod_base = PeHitLodBase(tri, RT_ConeWidthAtHit(payload));
+    pe_hit_depth = payload.depth;
+    pe_hit_cone_width = RT_ConeWidthAtHit(payload);
+    pe_hit_cone_spread = payload.coneSpread;
+    pe_hit_refracts = false;
+    pe_refraction_traced = false;
+    pe_hit_lod_base = PeHitLodBase(tri, pe_hit_cone_width);
     pe_occlusion = PeHitOcclusion(constantsId, sp.uv0);
     pe_hit_curvature = PeHitCurvature(tri);
 
@@ -148,11 +182,36 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     if (dot(shadingN, shadingN) > 1e-8)
         pe_spec_N = normalize(shadingN);
 
+#ifndef GI_PROBES
+    // Forward meshes reach only the camera pass's hits (probe rays skip them in pe_hit_any).
+    const uint renderType = meshInfos[instanceId].renderType;
+    const bool blended = PeBlendedRenderType(renderType);
+    if (renderType == 4u && dot(WorldRayDirection(), sp.N) > 0.0)
+    {
+        const float3 escaped = PeExitTransmission(inputs.specular_ior, sp.N);
+        payload.radiance = any(isnan(escaped)) || any(isinf(escaped)) ? float3(0.0, 0.0, 0.0) : escaped;
+        payload.t = RayTCurrent();
+        payload.hitKind = HitKind();
+        payload.alpha = 1.0;
+        return;
+    }
+
+    pe_hit_refracts = blended && payload.depth < 2u;
+#endif
+
     float3 color = pe_shade_inputs(inputs).rgb;
 
     // As material pass 2: scene-linear under linear_color, display-referred otherwise (as legacy hits are then).
     if (cb_linearColor == 0)
         color = LinearToSrgb(color);
+
+#ifndef GI_PROBES
+    // The forward pass's blend (MaterialX's SRC_ALPHA over a colour that already carries the opacity), over what the
+    // surface lets through.
+    const float alpha = saturate(inputs.geometry_opacity);
+    if (blended && alpha < 1.0)
+        color = color * alpha + PeBehindSurface() * (1.0 - alpha);
+#endif
 #endif
 
     payload.radiance = any(isnan(color)) || any(isinf(color)) ? float3(0.0, 0.0, 0.0) : color;
@@ -163,11 +222,28 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 
 // Alpha-cut MaterialX meshes: the graph's own opacity decides what rays see, with material pass coverage's rule
 // (MaterialMaskMain.slang). Shadow rays through a covered but partly transparent texel keep the legacy hit's tint.
+// Forward meshes follow the legacy any-hit's rules for blended surfaces, with the graph's opacity: probe rays skip them,
+// Transmission meshes tint shadows, alpha-blend ones let 1 - opacity through.
 [shader("anyhit")]
 void pe_hit_any(inout HitPayload payload, in BuiltInTriangleIntersectionAttributes attr)
 {
     const uint instanceId = InstanceID();
     const uint constantsId = meshInfos[instanceId].constantsIndex;
+    const uint renderType = meshInfos[instanceId].renderType;
+    const bool blended = PeBlendedRenderType(renderType);
+    if (blended && payload.skipBlended != 0u)
+    {
+        IgnoreHit();
+        return;
+    }
+
+    if (renderType == 4u && payload.rayType == 1u)
+    {
+        payload.radiance *= LoadMaterial(constantsId).shadowTransmittance.rgb; // the raster tint maps' value
+        IgnoreHit();
+        return;
+    }
+
     const uint shape = PeHitShape(constantsId);
     const PeTriangle tri = PeHitTriangle(instanceId);
     const float3 b = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
@@ -178,6 +254,23 @@ void pe_hit_any(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     pe_hit_lod_base = -1000.0; // coverage at mip 0, as the legacy any-hit tests alpha
     pe_load_material(shape, pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
     const float opacity = pe_material_mask(shape, sp, sp.nextUv, sp.spriteBlend);
+    if (blended)
+    {
+        if (!(opacity >= 0.001)) // MaterialX's transparent-surface threshold, as the forward pass discards
+        {
+            IgnoreHit();
+            return;
+        }
+
+        if (renderType == 3u && payload.rayType == 1u && opacity < 1.0)
+        {
+            payload.radiance *= 1.0 - opacity;
+            IgnoreHit();
+        }
+
+        return;
+    }
+
     if (!(opacity > 0.0 && opacity >= constants[constantsId].alphaCut))
     {
         IgnoreHit();

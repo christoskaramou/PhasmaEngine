@@ -1301,7 +1301,8 @@ namespace pe
                             m_openpbrMaskModules.push_back(module);
                         }
 
-                        // The material passes and RT hit groups take visibility modules only; the forward pass its own.
+                        // The material passes take visibility modules, the forward pass its own; RT hit groups take
+                        // both (SceneRendererCore::SyncRTHitModules).
                         std::vector<uint32_t> &modules = visibility ? m_openpbrModules : m_openpbrForwardModules;
                         if (std::find(modules.begin(), modules.end(), module) == modules.end())
                             modules.push_back(module);

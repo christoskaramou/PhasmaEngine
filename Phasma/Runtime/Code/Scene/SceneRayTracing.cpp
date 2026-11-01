@@ -30,11 +30,11 @@ namespace pe
             return type == RenderType::AlphaCut || type == RenderType::AlphaBlend || type == RenderType::Transmission;
         }
 
-        // A MaterialX mesh's hit group is 1 + its module's shape group in the hit set; everything else uses the legacy
-        // group 0.
+        // A MaterialX mesh's hit group, visibility or forward, is 1 + its module's shape group in the hit set; everything
+        // else uses the legacy group 0.
         uint32_t RTHitGroup(const Mesh &mesh, const OpenPBRHitSet &set)
         {
-            if (set.modules.empty() || !MeshUsesOpenPBR(mesh))
+            if (set.modules.empty() || !(MeshUsesOpenPBR(mesh) || MeshUsesOpenPBRForward(mesh)))
                 return 0;
 
             return set.HitGroup(mesh.materialInstance->gpuOpenPBRModule);

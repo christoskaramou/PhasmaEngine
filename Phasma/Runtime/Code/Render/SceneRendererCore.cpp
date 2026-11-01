@@ -536,15 +536,21 @@ namespace pe
         static const OpenPBRHitSet noHits;
         Scene *scene = GetActiveScene();
         const bool openpbrSky = m_skyBox.GetOpenPBRRadiance() && m_skyBox.GetOpenPBRIrradiance();
-        const std::vector<uint32_t> &sceneModules = SceneUsesOpenPBR() && openpbrSky && scene ? scene->GetOpenPBRModules()
-                                                                                              : noModules;
+        const bool hits = SceneUsesOpenPBR() && openpbrSky && scene;
+        const std::vector<uint32_t> &visibility = hits ? scene->GetOpenPBRModules() : noModules;
+        const std::vector<uint32_t> &forward = hits ? scene->GetOpenPBRForwardModules() : noModules;
 
+        // Visibility and forward meshes' modules (alpha-blend and Transmission meshes run their graph at camera hits too).
         // A module rejected since the scene's last repack leaves its list at the next one: build nothing for it meanwhile.
         std::vector<uint32_t> modules;
-        for (uint32_t module : sceneModules)
+        for (const std::vector<uint32_t> *list : {&visibility, &forward})
         {
-            if (!GetOpenPBRModule(module).rejected)
-                modules.push_back(module);
+            for (uint32_t module : *list)
+            {
+                const bool listed = std::find(modules.begin(), modules.end(), module) != modules.end();
+                if (!listed && !GetOpenPBRModule(module).rejected)
+                    modules.push_back(module);
+            }
         }
 
         const std::pair<SceneRenderGraphPassId, IRenderPassComponent *> rayTracers[] = {
