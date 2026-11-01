@@ -55,14 +55,18 @@ float3 PeTraceContinuation(float3 dir, bool refractive)
     ray.TMin = 0.01;
     ray.TMax = 10000.0;
 
-    HitPayload next = (HitPayload)0;
+    HitPayload next;
+    next.radiance = float3(0.0, 0.0, 0.0);
     next.t = -1.0;
-    next.alpha = 1.0;
+    next.hitKind = 0u;
+    next.rayType = 0u;
     next.depth = pe_hit_depth + 1u;
     next.isRefractive = refractive ? 1u : 0u;
+    next.alpha = 1.0;
     next.opaqueTMax = ray.TMax;
     next.coneWidth = pe_hit_cone_width;
     next.coneSpread = pe_hit_cone_spread;
+    next.skipBlended = 0u;
     TraceRay(tlas, RAY_FLAG_NONE, refractive || cb_renderMode == 2u ? 0xFF : 0x80, 0, 0, 0, ray, next);
 
     return next.radiance;
