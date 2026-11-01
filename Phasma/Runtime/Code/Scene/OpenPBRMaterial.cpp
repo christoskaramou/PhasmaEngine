@@ -866,16 +866,27 @@ namespace pe
 
     OpenPBRHitSet MakeOpenPBRHitSet(const std::vector<uint32_t> &modules)
     {
-        OpenPBRHitSet set;
+        std::vector<OpenPBRPassSources> sources;
         for (uint32_t module : modules)
+            sources.push_back(GetOpenPBRPassSources(GetOpenPBRModule(module)));
+
+        // Groups in shape-list order, not the scene's: the same modules in another order keep their hit groups
+        // (RayTracingPass::RetargetHitSet), so reordered nodes rebuild nothing.
+        std::vector<size_t> order(modules.size());
+        std::iota(order.begin(), order.end(), size_t(0));
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b)
+                         { return GetOpenPBRModule(modules[a]).shapeIndex < GetOpenPBRModule(modules[b]).shapeIndex; });
+
+        OpenPBRHitSet set;
+        set.modules = modules;
+        set.moduleGroups.resize(modules.size());
+        for (size_t i : order)
         {
-            const OpenPBRPassSources sources = GetOpenPBRPassSources(GetOpenPBRModule(module));
             const auto group = std::find_if(set.groups.begin(), set.groups.end(), [&](const OpenPBRHitGroup &g)
-                                            { return g.key == sources.key; });
-            set.modules.push_back(module);
-            set.moduleGroups.push_back(static_cast<uint32_t>(group - set.groups.begin()));
+                                            { return g.key == sources[i].key; });
+            set.moduleGroups[i] = static_cast<uint32_t>(group - set.groups.begin());
             if (group == set.groups.end())
-                set.groups.push_back({sources.key, sources.hit, sources.members});
+                set.groups.push_back({sources[i].key, sources[i].hit, sources[i].members});
         }
 
         return set;

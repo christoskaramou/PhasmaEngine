@@ -487,9 +487,6 @@ namespace pe
         // in the same group, compiled from the same text.
         OpenPBRHitSet CommonHitSet(const std::vector<RayTracingPass *> &passes)
         {
-            if (passes.empty())
-                return {};
-
             const OpenPBRHitSet &first = passes.front()->GetHitSet();
             OpenPBRHitSet common;
             common.groups = first.groups;
@@ -583,7 +580,17 @@ namespace pe
         if (!modules.empty() && !m_rtHitBuild.done.valid() && HitBuildDue(passes, modules))
             StartRTHitBuild(passes, modules);
 
-        if (scene)
+        if (!scene)
+            return;
+
+        // Passes that agree hand the scene their set as is, with no copy unless it changed.
+        const auto agrees = [&](const RayTracingPass *pass)
+        { return pass->GetHitSet() == passes.front()->GetHitSet(); };
+        if (passes.empty())
+            scene->SetRTHitModules(noHits);
+        else if (std::all_of(passes.begin(), passes.end(), agrees))
+            scene->SetRTHitModules(passes.front()->GetHitSet());
+        else
             scene->SetRTHitModules(CommonHitSet(passes));
     }
 
