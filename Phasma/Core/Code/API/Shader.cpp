@@ -183,7 +183,7 @@ namespace pe
                     desc.sourcePath.c_str(), path.c_str(),
                     static_cast<unsigned long long>(shader->m_pathID),
                     static_cast<unsigned long long>(shader->m_cache.GetHash()),
-                    s_compiler == ShaderCompiler::Slang ? "slang" : "dxc");
+                    UsesSlang(path) ? "slang" : "dxc"); // .slang sources compile with slangc under either option
         }
 
         shader->m_impl = CreateShaderImpl(shader, desc, needsCompile);
