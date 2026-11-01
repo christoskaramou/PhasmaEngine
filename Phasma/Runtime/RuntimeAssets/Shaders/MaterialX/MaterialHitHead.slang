@@ -23,6 +23,7 @@
 
 static float3 pe_P;              // world position of the hit
 static float3 pe_N;              // interpolated geometric normal
+static float3 pe_spec_N;         // the graph's shading normal (geometry_normal): area lights' specular representative point
 static float pe_occlusion;       // material AO, outside the graph (the legacy hit's occlusion texture)
 static float pe_hit_curvature;   // the hit triangle's curvature: subsurface's fwidth ratio has no derivatives here
 static float3 pe_shadow_offset;  // world offset of shadow ray origins onto the smooth surface (ShadowTerminatorOffset)
@@ -142,7 +143,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         return;
 
     float3 target = closest;
-    const float3 R = reflect(normalize(WorldRayDirection()), pe_N);
+    const float3 R = reflect(normalize(WorldRayDirection()), pe_spec_N);
     const float denom = dot(R, forward);
     if (abs(denom) > 0.001)
     {

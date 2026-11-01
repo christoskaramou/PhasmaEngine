@@ -109,6 +109,7 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 
     pe_P = sp.P;
     pe_N = sp.N;
+    pe_spec_N = sp.N;
     pe_occlusion = PeHitOcclusion(constantsId, sp.uv0);
     pe_hit_curvature = PeHitCurvature(tri);
 
@@ -126,7 +127,14 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 #if defined(GI_PROBES) && !defined(REFLECTIONS)
     const float3 color = PeSurfaceCacheHit(shape, sp);
 #else
-    float3 color = pe_material_shade(shape, sp.nextUv, sp.spriteBlend).rgb;
+    // pe_material_shade's two steps, so the area-light seam sees the graph's normal and the BSDF is inlined once, not in
+    // every shape's case (DX12 inlines the dispatchers).
+    const PeSurfaceInputs inputs = pe_material_inputs(shape, sp.nextUv, sp.spriteBlend);
+    const float3 shadingN = inputs.geometry_normal;
+    if (dot(shadingN, shadingN) > 1e-8)
+        pe_spec_N = normalize(shadingN);
+
+    float3 color = pe_shade_inputs(inputs).rgb;
 
     // As material pass 2: scene-linear under linear_color, display-referred otherwise (as legacy hits are then).
     if (cb_linearColor == 0)
