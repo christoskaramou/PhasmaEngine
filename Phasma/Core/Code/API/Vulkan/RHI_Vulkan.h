@@ -31,6 +31,7 @@ namespace pe
         static vk::Instance Instance() { return Impl()->m_instance; }
         static vk::PhysicalDevice Gpu() { return Impl()->m_gpu; }
         static vk::Device Device() { return Impl()->m_device; }
+        static vk::PipelineCache PipelineCache() { return Impl()->m_pipelineCache; }
         static VmaAllocator Allocator() { return Impl()->m_allocator; }
         static vk::Format DepthFormat() { return GetVulkanDepthFormat(); }
 #ifdef PE_TRACY

@@ -34,6 +34,7 @@ namespace pe
         vk::Instance m_instance{};
         vk::PhysicalDevice m_gpu{};
         vk::Device m_device{};
+        vk::PipelineCache m_pipelineCache{}; // every pipeline's, saved to disk at shutdown (VulkanPipelineCache.h)
         VmaAllocator m_allocator = nullptr;
         bool m_presentWait = false;
         bool m_presentWait2 = false;
