@@ -5,6 +5,7 @@
 #include "Render/SceneRenderGraph.h"
 #include "Render/SceneRenderTargets.h"
 #include "Render/SceneRendererHost.h"
+#include "RenderPasses/RayTracingPass.h"
 #include "Skybox/Skybox.h"
 
 namespace pe
@@ -14,7 +15,6 @@ namespace pe
     class Image;
     class ModulePipelines;
     class PassInfo;
-    class RayTracingPass;
     class Scene;
     class Semaphore;
 
@@ -103,11 +103,12 @@ namespace pe
         void DestroyScreenshotBuffer();
 
     private:
-        // RT pipelines with hit groups for a new module list, built on a worker thread (SyncRTHitModules).
+        // RT pipelines with the shape groups' hit groups for a new module list, built on a worker thread
+        // (SyncRTHitModules).
         struct RTHitBuild
         {
-            std::shared_future<std::vector<std::shared_ptr<PassInfo>>> done;
-            std::vector<uint32_t> modules;
+            std::shared_future<std::vector<RayTracingPass::HitBuildResult>> done;
+            OpenPBRHitSet set;
             std::vector<RayTracingPass *> passes;
             std::vector<uint64_t> generations;
             std::shared_ptr<std::atomic<bool>> cancel;

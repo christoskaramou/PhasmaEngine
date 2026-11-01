@@ -1,5 +1,5 @@
 // The hit side of MaterialHitHead.slang: rebuild the surface with the visibility path's reconstruction, then run the
-// module. Skinned meshes and sprites are not in the TLAS, so every hit triangle is rigid.
+// hit's shape. Skinned meshes and sprites are not in the TLAS, so every hit triangle is rigid.
 
 // The instance's world transform comes from the TLAS (row-vector form), so the surface stays on the traced ray.
 PeTriangle PeHitTriangle(uint instanceId)
@@ -59,9 +59,9 @@ float3 PeLinearToSrgbHdr(float3 c)
 // GI and screen-probe rays light their hits as the legacy surface cache does (RT_FoldSurfaceCache): the graph's own inputs,
 // diffuse only, so a glossy MaterialX surface never reaches the probes as fireflies. In the legacy hit's colour space:
 // linear under linear_color, authored (sRGB) values otherwise.
-float3 PeSurfaceCacheHit(PeSurfacePoint sp)
+float3 PeSurfaceCacheHit(uint shape, PeSurfacePoint sp)
 {
-    const PeSurfaceInputs p = pe_material_inputs(sp.nextUv, sp.spriteBlend);
+    const PeSurfaceInputs p = pe_material_inputs(shape, sp.nextUv, sp.spriteBlend);
     float3 albedo = saturate(p.base_color * p.base_weight);
     float metallic = saturate(p.base_metalness);
     float roughness = saturate(p.specular_roughness);
@@ -100,6 +100,7 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
 {
     const uint instanceId = InstanceID();
     const uint constantsId = meshInfos[instanceId].constantsIndex;
+    const uint shape = PeHitShape(constantsId);
     const PeTriangle tri = PeHitTriangle(instanceId);
     const float3 b = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
 
@@ -120,12 +121,12 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
                                                            b);
     pe_shadow_offset = mul(float4(terminatorOffset, 0.0), tri.world).xyz;
 
-    pe_load_material(pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    pe_fill_vertex_data(sp);
+    pe_load_material(shape, pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
+    pe_fill_vertex_data(shape, sp);
 #if defined(GI_PROBES) && !defined(REFLECTIONS)
-    const float3 color = PeSurfaceCacheHit(sp);
+    const float3 color = PeSurfaceCacheHit(shape, sp);
 #else
-    float3 color = pe_material_shade(sp.nextUv, sp.spriteBlend).rgb;
+    float3 color = pe_material_shade(shape, sp.nextUv, sp.spriteBlend).rgb;
 
     // As material pass 2: scene-linear under linear_color, display-referred otherwise (as legacy hits are then).
     if (cb_linearColor == 0)
@@ -145,14 +146,15 @@ void pe_hit_any(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 {
     const uint instanceId = InstanceID();
     const uint constantsId = meshInfos[instanceId].constantsIndex;
+    const uint shape = PeHitShape(constantsId);
     const PeTriangle tri = PeHitTriangle(instanceId);
     const float3 b = float3(1.0 - attr.barycentrics.x - attr.barycentrics.y, attr.barycentrics.x, attr.barycentrics.y);
     const PeSurfacePoint sp = PeSurfaceAtBarycentrics(tri, b);
 
     pe_P = sp.P;
     pe_N = sp.N;
-    pe_load_material(pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    const float opacity = pe_material_mask(sp, sp.nextUv, sp.spriteBlend);
+    pe_load_material(shape, pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
+    const float opacity = pe_material_mask(shape, sp, sp.nextUv, sp.spriteBlend);
     if (!(opacity > 0.0 && opacity >= constants[constantsId].alphaCut))
     {
         IgnoreHit();

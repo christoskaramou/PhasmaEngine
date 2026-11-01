@@ -1,6 +1,7 @@
 #pragma once
 
 #include "Scene/Material.h"
+#include "Scene/OpenPBRShapes.h"
 
 namespace pe
 {
@@ -37,8 +38,7 @@ namespace pe
         std::string hash;
         uint32_t index = 0;    // runtime only: stamped into each record, never saved
         OpenPBRLayout layout;  // the first source's names: read only for valid, byteSize and types/offsets
-        std::string code;      // the generated module file (raster passes compile it in its shape group)
-        std::string hitSource; // RT closest-hit wrapper (MaterialHit*.slang)
+        std::string code;      // the generated module file (every pass compiles it in its shape group)
         std::string document;  // the first document with this code, named by its compile warning
         // Runtime only: see RejectOpenPBRModule.
         mutable std::atomic<bool> rejected = false;
@@ -74,22 +74,26 @@ namespace pe
     const OpenPBRMaterialSource &GetOpenPBRSource(const MaterialInstance &instance); // the default when none is assigned
     const OpenPBRModule &GetOpenPBRModule(uint32_t index);
 
-    // Raster passes compile shape groups, not modules: one combined module (OpenPBRShapes.h) per group of the project's
+    // Passes compile shape groups, not modules: one combined module (OpenPBRShapes.h) per group of the project's
     // append-only shape list (Assets/MaterialX/Cooked/shapes_abi<N>.txt), every shape on Vulkan, 8 on DX12, which inlines
     // each shape into the entry function. A module's slot in its group is fixed for the session, so pipelines built
     // from any version of its group still match it.
     struct OpenPBRPassSources
     {
-        std::string thin, shade, mask, forward; // ShaderCache/MaterialX/group_<key>.<pass>.slang
-        std::string key;                        // FNV-1a 64 of the combined text
+        std::string thin, shade, mask, forward, hit; // ShaderCache/MaterialX/group_<key>.<pass>.slang
+        std::string key;                             // FNV-1a 64 of the combined text
         uint32_t members = 0;
     };
 
     // Main thread. The group's current members: registered or cooked in the project, not rejected. A group marked broken
     // compiles the module's shape alone.
     OpenPBRPassSources GetOpenPBRPassSources(const OpenPBRModule &module);
-    uint32_t GetOpenPBRShapeSlot(const OpenPBRModule &module); // pushed by thin, shade, forward and masks
+    uint32_t GetOpenPBRShapeSlot(const OpenPBRModule &module); // pushed by thin, shade, forward and masks; RT's table
     void MarkOpenPBRGroupBroken(const std::string &key);
+
+    // Main thread. The RT hit groups of a module list: each module's current shape group (GetOpenPBRPassSources), one
+    // hit group per distinct group, in the list's order. Every RT pass builds from the same set so their SBTs agree.
+    OpenPBRHitSet MakeOpenPBRHitSet(const std::vector<uint32_t> &modules);
 
     // Loads a cooked source from Assets/MaterialX/Cooked, or generates it with PhasmaCook --mtlx when missing.
     // A relative path resolves like any asset. Null with `error` set (and logged once) when it cannot be used.

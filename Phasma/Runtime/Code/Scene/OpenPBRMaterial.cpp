@@ -330,7 +330,6 @@ namespace pe
                     source->layout = module->layout;
                     module->hash = std::to_string(Fnv1a64(code));
                     module->code = dir + "Generated/PeOpenPBRDefault.slang";
-                    module->hitSource = dir + "MaterialHit.slang";
                 }
                 catch (const std::exception &error)
                 {
@@ -377,18 +376,12 @@ namespace pe
                 return module;
             }
 
-            const std::string dir = Path::RootPath() + "ShaderCache/MaterialX/";
-            const std::string cached = dir + hash;
-            std::filesystem::create_directories(PathFromUtf8(dir));
-
             auto module = std::make_shared<OpenPBRModule>();
             module->hash = hash;
             module->index = static_cast<uint32_t>(registry.modules.size());
             module->document = document;
             module->layout = std::move(layout);
             module->code = modulePath;
-            module->hitSource = cached + ".hit.slang";
-            WriteWrapper(module->hitSource, modulePath, "MaterialHit");
 
             registry.modules.push_back(module);
             return module;
@@ -530,7 +523,9 @@ namespace pe
             sources.shade = stem + ".shade.slang";
             sources.mask = stem + ".mask.slang";
             sources.forward = stem + ".forward.slang";
-            if (std::filesystem::exists(PathFromUtf8(sources.forward)))
+            sources.hit = stem + ".hit.slang";
+            // The hit wrapper is written last: a group written before RT used groups gains it here.
+            if (std::filesystem::exists(PathFromUtf8(sources.hit)))
                 return sources;
 
             std::filesystem::create_directories(PathFromUtf8(dir));
@@ -539,6 +534,7 @@ namespace pe
             WriteWrapper(sources.shade, stem + ".slang", "MaterialShade");
             WriteWrapper(sources.mask, stem + ".slang", "MaterialMask");
             WriteWrapper(sources.forward, stem + ".slang", "MaterialForward");
+            WriteWrapper(sources.hit, stem + ".slang", "MaterialHit");
             return sources;
         }
 
@@ -866,6 +862,23 @@ namespace pe
     void MarkOpenPBRGroupBroken(const std::string &key)
     {
         Shapes().broken.insert(key);
+    }
+
+    OpenPBRHitSet MakeOpenPBRHitSet(const std::vector<uint32_t> &modules)
+    {
+        OpenPBRHitSet set;
+        for (uint32_t module : modules)
+        {
+            const OpenPBRPassSources sources = GetOpenPBRPassSources(GetOpenPBRModule(module));
+            const auto group = std::find_if(set.groups.begin(), set.groups.end(), [&](const OpenPBRHitGroup &g)
+                                            { return g.key == sources.key; });
+            set.modules.push_back(module);
+            set.moduleGroups.push_back(static_cast<uint32_t>(group - set.groups.begin()));
+            if (group == set.groups.end())
+                set.groups.push_back({sources.key, sources.hit, sources.members});
+        }
+
+        return set;
     }
 
     std::shared_ptr<const OpenPBRMaterialSource> LoadOpenPBRMaterial(

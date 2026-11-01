@@ -483,38 +483,72 @@ namespace pe
 
     namespace
     {
-        // TLAS hit-group offsets are 1 + an index into the scene's list: only a prefix of every pass's list selects the
-        // same group in all of them.
-        std::vector<uint32_t> ReadyHitPrefix(const std::vector<RayTracingPass *> &passes)
+        // TLAS hit-group offsets index every pass's SBT: a module selects its MaterialX group only where every pass runs it
+        // in the same group, compiled from the same text.
+        OpenPBRHitSet CommonHitSet(const std::vector<RayTracingPass *> &passes)
         {
             if (passes.empty())
                 return {};
 
-            std::vector<uint32_t> prefix = passes.front()->GetHitModules();
-            for (const RayTracingPass *pass : passes)
+            const OpenPBRHitSet &first = passes.front()->GetHitSet();
+            OpenPBRHitSet common;
+            common.groups = first.groups;
+            for (size_t i = 0; i < first.modules.size(); i++)
             {
-                const std::vector<uint32_t> &ready = pass->GetHitModules();
-                const auto diverged = std::mismatch(prefix.begin(), prefix.end(), ready.begin(), ready.end()).first;
-                prefix.erase(diverged, prefix.end());
+                const uint32_t group = first.moduleGroups[i];
+                const auto agrees = [&](const RayTracingPass *pass)
+                {
+                    const OpenPBRHitSet &set = pass->GetHitSet();
+                    return set.HitGroup(first.modules[i]) == 1u + group && set.groups[group] == first.groups[group];
+                };
+
+                if (!std::all_of(passes.begin(), passes.end(), agrees))
+                    continue;
+
+                common.modules.push_back(first.modules[i]);
+                common.moduleGroups.push_back(group);
             }
 
-            return prefix;
+            return common;
+        }
+
+        // A build is due when a pass lacks the list, or the passes' sets disagree (one built while the shape list grew).
+        bool HitBuildDue(const std::vector<RayTracingPass *> &passes, const std::vector<uint32_t> &modules)
+        {
+            for (const RayTracingPass *pass : passes)
+            {
+                const bool lacks = pass->GetHitSet().modules != modules;
+                if (lacks || !(pass->GetHitSet() == passes.front()->GetHitSet()))
+                    return true;
+            }
+
+            return false;
         }
     } // namespace
 
-    // RT hit groups follow the scene's modules while OpenPBR is effective and its sky (bound by module hits) exists.
-    // A new list builds the RT passes' pipelines on a worker: cold slangc and driver compiles took 90 s for four modules
-    // on DX12 and 410 s on Vulkan (2026-10-21), all of it on the main thread before. Instances select module groups only
-    // within the list prefix every pass has ready, so they keep the legacy hit until then. Without modules the groups go
-    // at once (legacy-only pipelines are cheap, and module groups bind the sky). The first RT pass to trace refits the
-    // instances before any ray reads them.
+    // RT hit groups follow the scene's modules while OpenPBR is effective and its sky (bound by module hits) exists: one
+    // hit group per shape group the modules are in (OpenPBRHitSet). A new list builds the RT passes' pipelines on a
+    // worker: cold slangc and driver compiles of per-module groups took 90 s for four modules on DX12 and 410 s on Vulkan
+    // (2026-10-21), all of it on the main thread before. Instances select a MaterialX group only where every pass runs
+    // their module in the same group, so they keep the legacy hit until then. Without modules the groups go at once
+    // (legacy-only pipelines are cheap, and module groups bind the sky). The first RT pass to trace refits the instances
+    // before any ray reads them.
     void SceneRendererCore::SyncRTHitModules()
     {
         static const std::vector<uint32_t> noModules;
+        static const OpenPBRHitSet noHits;
         Scene *scene = GetActiveScene();
         const bool openpbrSky = m_skyBox.GetOpenPBRRadiance() && m_skyBox.GetOpenPBRIrradiance();
-        const std::vector<uint32_t> &modules = SceneUsesOpenPBR() && openpbrSky && scene ? scene->GetOpenPBRModules()
-                                                                                         : noModules;
+        const std::vector<uint32_t> &sceneModules = SceneUsesOpenPBR() && openpbrSky && scene ? scene->GetOpenPBRModules()
+                                                                                              : noModules;
+
+        // A module rejected since the scene's last repack leaves its list at the next one: build nothing for it meanwhile.
+        std::vector<uint32_t> modules;
+        for (uint32_t module : sceneModules)
+        {
+            if (!GetOpenPBRModule(module).rejected)
+                modules.push_back(module);
+        }
 
         const std::pair<SceneRenderGraphPassId, IRenderPassComponent *> rayTracers[] = {
             {SceneRenderGraphPassId::RayTracing, m_scenePasses.rayTracing},
@@ -538,7 +572,7 @@ namespace pe
                 m_rtHitBuild.cancel->store(true);
 
             for (RayTracingPass *pass : passes)
-                pass->SyncHitModules(noModules);
+                pass->SyncHitModules(noHits);
         }
 
         const bool buildDone = m_rtHitBuild.done.valid() &&
@@ -546,45 +580,63 @@ namespace pe
         if (buildDone)
             FinishRTHitBuild();
 
-        if (!modules.empty() && !m_rtHitBuild.done.valid())
+        if (!modules.empty() && !m_rtHitBuild.done.valid() && HitBuildDue(passes, modules))
             StartRTHitBuild(passes, modules);
 
         if (scene)
-            scene->SetRTHitModules(ReadyHitPrefix(passes));
+            scene->SetRTHitModules(CommonHitSet(passes));
     }
 
     void SceneRendererCore::StartRTHitBuild(const std::vector<RayTracingPass *> &passes,
                                             const std::vector<uint32_t> &modules)
     {
+        // Every pass builds from one set, so their SBTs agree once all adopt it. A pass whose groups already hold every
+        // shape (a module of a known shape) only takes the new list, with no compile.
         RTHitBuild build;
-        std::vector<std::function<std::shared_ptr<PassInfo>()>> prepared;
+        build.set = MakeOpenPBRHitSet(modules);
+        std::vector<std::function<RayTracingPass::HitBuildResult()>> prepared;
+        size_t retargeted = 0;
         for (RayTracingPass *pass : passes)
         {
-            if (pass->GetHitModules() == modules)
+            if (pass->GetHitSet() == build.set)
                 continue;
+
+            if (pass->RetargetHitSet(build.set))
+            {
+                retargeted++;
+                continue;
+            }
 
             build.passes.push_back(pass);
             build.generations.push_back(pass->GetHitGeneration());
-            prepared.push_back(pass->PrepareHitBuild(modules));
+            prepared.push_back(pass->PrepareHitBuild(build.set));
+        }
+
+        if (retargeted > 0)
+        {
+            PE_INFO("[RT] hit groups kept: %zu MaterialX modules in %zu shape groups, %zu passes",
+                    modules.size(),
+                    build.set.groups.size(),
+                    retargeted);
         }
 
         if (prepared.empty())
             return;
 
-        // One worker builds the passes in turn, so the any-hit they share compiles once.
-        build.modules = modules;
+        // One worker builds the passes in turn, so the any-hits they share compile once.
         build.cancel = std::make_shared<std::atomic<bool>>(false);
         auto buildAll = [prepared = std::move(prepared), cancel = build.cancel]
         {
-            std::vector<std::shared_ptr<PassInfo>> infos;
+            std::vector<RayTracingPass::HitBuildResult> results;
             for (const auto &buildPass : prepared)
-                infos.push_back(cancel->load() ? nullptr : buildPass());
+                results.push_back(cancel->load() ? RayTracingPass::HitBuildResult{} : buildPass());
 
-            return infos;
+            return results;
         };
         build.done = ThreadPool::General.Enqueue(std::move(buildAll));
-        PE_INFO("[RT] hit group build started: %zu MaterialX modules, %zu passes",
+        PE_INFO("[RT] hit group build started: %zu MaterialX modules in %zu shape groups, %zu passes",
                 modules.size(),
+                build.set.groups.size(),
                 build.passes.size());
         m_rtHitBuild = std::move(build);
     }
@@ -592,15 +644,24 @@ namespace pe
     void SceneRendererCore::FinishRTHitBuild()
     {
         const RTHitBuild &build = m_rtHitBuild;
-        const std::vector<std::shared_ptr<PassInfo>> &infos = build.done.get();
+        const std::vector<RayTracingPass::HitBuildResult> &results = build.done.get();
         size_t adopted = 0;
-        for (size_t i = 0; i < infos.size(); i++)
+        for (size_t i = 0; i < results.size(); i++)
         {
-            if (infos[i] && build.passes[i]->AdoptHitBuild(infos[i], build.modules, build.generations[i]))
+            const RayTracingPass::HitBuildResult &result = results[i];
+            if (result.info && build.passes[i]->AdoptHitBuild(result.info, build.set, build.generations[i]))
                 adopted++;
+
+            // Not adopted: this frame's sync builds the set anew, without what failed.
+            if (result.failedGroup != SIZE_MAX)
+                RayTracingPass::HandleHitGroupFailure(build.set, result.failedGroup, result.error);
         }
 
-        PE_INFO("[RT] hit group build finished: %zu of %zu passes adopted", adopted, infos.size());
+        // Test harnesses read the group count: the legacy group plus one per shape group.
+        PE_INFO("[RT] hit group build finished: %zu of %zu passes adopted, %zu hit groups",
+                adopted,
+                results.size(),
+                1 + build.set.groups.size());
         m_rtHitBuild = {};
     }
 

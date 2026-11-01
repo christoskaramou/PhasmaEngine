@@ -1413,7 +1413,7 @@ namespace pe
 
         // A mesh can change module (or two can swap) with the hit-module list unchanged, or become a forward mesh while
         // that list is empty: rewrite the TLAS hit-group offsets and masks.
-        if (!m_rtHitModules.empty() || m_openpbrForwardRaster)
+        if (!m_rtHitModules.modules.empty() || m_openpbrForwardRaster)
             m_tlasMasksDirty = true;
 
         PE_PROFILE_SCOPE("Scene Material Byte Upload");

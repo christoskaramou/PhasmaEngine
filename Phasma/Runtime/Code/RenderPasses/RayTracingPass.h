@@ -1,5 +1,7 @@
 #pragma once
 
+#include "Scene/OpenPBRShapes.h"
+
 namespace pe
 {
     class Scene;
@@ -42,19 +44,32 @@ namespace pe
 
         void SetScene(Scene *scene) { m_scene = scene; }
 
-        // One hit group per MaterialX module after the legacy group, in m_hitModules order (OpenPBR). SyncHitModules
-        // rebuilds at once; PrepareHitBuild returns a build that touches no pass state, for a worker thread, and
-        // AdoptHitBuild swaps its result in unless the pass was rebuilt or released since it was prepared.
-        void SyncHitModules(const std::vector<uint32_t> &modules);
-        std::function<std::shared_ptr<PassInfo>()> PrepareHitBuild(const std::vector<uint32_t> &modules) const;
-        bool AdoptHitBuild(const std::shared_ptr<PassInfo> &info,
-                           const std::vector<uint32_t> &modules,
-                           uint64_t generation);
-        const std::vector<uint32_t> &GetHitModules() const { return m_hitModules; }
+        // A hit build's outcome: the pipeline, or the hit group (index into OpenPBRHitSet::groups) that failed.
+        struct HitBuildResult
+        {
+            std::shared_ptr<PassInfo> info;
+            size_t failedGroup = SIZE_MAX;
+            std::string error;
+        };
+
+        // One hit group per MaterialX shape group after the legacy group (OpenPBRHitSet). SyncHitModules rebuilds at
+        // once; PrepareHitBuild returns a build that touches no pass state, for a worker thread, and AdoptHitBuild swaps
+        // its result in unless the pass was rebuilt or released since it was prepared.
+        void SyncHitModules(const OpenPBRHitSet &set);
+        std::function<HitBuildResult()> PrepareHitBuild(const OpenPBRHitSet &set) const;
+        bool AdoptHitBuild(const std::shared_ptr<PassInfo> &info, const OpenPBRHitSet &set, uint64_t generation);
+        // The same hit groups for another module list (a module whose shape they already hold, or one gone): only the
+        // slot table changes. False when the groups differ, which needs a build.
+        bool RetargetHitSet(const OpenPBRHitSet &set);
+        const OpenPBRHitSet &GetHitSet() const { return m_hitSet; }
         uint64_t GetHitGeneration() const { return m_hitGeneration; }
+
+        // Main thread. A failed group with several shapes builds them alone next time; a lone shape's modules are rejected.
+        static void HandleHitGroupFailure(const OpenPBRHitSet &set, size_t group, const std::string &error);
 
     protected:
         void BuildTracePipeline();
+        void UpdateShapeSlots();
 
         bool m_probeTracing = false;
         bool m_screenProbes = false; // probe tracing for ScreenProbePass
@@ -68,7 +83,8 @@ namespace pe
         std::vector<Buffer *> m_boundLightStorage; // per frame: a grown light buffer replaces the old one
         std::vector<Buffer *> m_uniforms;
         uint64_t m_lastGeometryVersion = 0;
-        std::vector<uint32_t> m_hitModules;     // MaterialX modules with a hit group, in SBT order after the legacy group
+        OpenPBRHitSet m_hitSet;                 // the MaterialX hit groups after the legacy group, in SBT order
+        Buffer *m_shapeSlots = nullptr;         // MaterialHitHead's pe_shapeSlots for m_hitSet
         uint64_t m_hitGeneration = 0;           // bumped by every rebuild and release: older prepared builds are stale
         Buffer *m_boundMaterialBytes = nullptr; // the hit groups' bindings follow a repacked buffer or a rebuilt sky
         Image *m_boundEnvRadiance = nullptr;

@@ -1,6 +1,7 @@
-// RT hits on MaterialX materials: the module's generated graph at a ray hit, under the lights, shadow rays, probes and
+// RT hits on MaterialX materials: a shape group's generated graphs at a ray hit, under the lights, shadow rays, probes and
 // sky the legacy hit shader uses (RTCommon.hlsl), through the pe_* hooks PePrelude.slang implements for material pass 2.
-// Order: this head, the generated module, MaterialHitMain.slang; compiled per RT pass with its defines and PE_MATERIAL_HIT.
+// Order: this head, the group's combined module, MaterialHitMain.slang; compiled per RT pass with its defines and
+// PE_MATERIAL_HIT.
 #include "../RayTracing/RTCommon.hlsl"
 #include "VisibilityCommon.slang"
 
@@ -14,6 +15,10 @@
 [[vk::binding(7, 1)]] Texture2D<float4> pe_envRadiance;
 [[vk::binding(8, 1)]] Texture2D<float4> pe_envIrradiance;
 
+// Each module's slot in its shape group, by registry index (RayTracingPass's slot table): a wave of hits can mix shapes,
+// so the slot comes from the hit's record, not from a push constant.
+[[vk::binding(9, 1)]] StructuredBuffer<uint> pe_shapeSlots;
+
 #define PE_REFRACTION_TWO_SIDED false
 
 static float3 pe_P;              // world position of the hit
@@ -21,6 +26,17 @@ static float3 pe_N;              // interpolated geometric normal
 static float pe_occlusion;       // material AO, outside the graph (the legacy hit's occlusion texture)
 static float pe_hit_curvature;   // the hit triangle's curvature: subsurface's fwidth ratio has no derivatives here
 static float3 pe_shadow_offset;  // world offset of shadow ray origins onto the smooth surface (ShadowTerminatorOffset)
+
+// The hit's shape slot, or 0xffffffff (the dispatchers' zero value) for a record outside the table.
+uint PeHitShape(uint constantsId)
+{
+    const uint module = PeModuleOf(pe_materialBytes, constants[constantsId]);
+    uint count;
+    uint stride;
+    pe_shapeSlots.GetDimensions(count, stride);
+
+    return module < count ? pe_shapeSlots[module] : 0xffffffffu;
+}
 
 // The viewer of a hit is the ray's origin, so the generated V is the reversed ray direction.
 float3 pe_view_position()
