@@ -46,7 +46,20 @@ float PeHitOcclusion(uint constantsId, float2 uv)
     if (!HasTexture(constants[constantsId].textureMask, TEX_OCCLUSION_BIT))
         return 1.0;
 
-    return lerp(1.0, GetOcclusion(constantsId, uv).r, LoadMaterial(constantsId).pbrParams.w);
+    return lerp(1.0, GetOcclusion(constantsId, uv, pe_hit_lod_base).r, LoadMaterial(constantsId).pbrParams.w);
+}
+
+// The ray cone's LOD at this hit (RT_RayConeLodBase) on the hit triangle's own UVs.
+float PeHitLodBase(PeTriangle t, float coneWidth)
+{
+    return RT_RayConeLodBase(mul(float4(t.v0.position, 1.0), t.world).xyz,
+                             mul(float4(t.v1.position, 1.0), t.world).xyz,
+                             mul(float4(t.v2.position, 1.0), t.world).xyz,
+                             t.v0.uv,
+                             t.v1.uv,
+                             t.v2.uv,
+                             WorldRayDirection(),
+                             coneWidth);
 }
 
 // The inverse of SrgbToLinearHdr: how the legacy emissive mirror stores a linear emission (brightness above 1 kept).
@@ -110,6 +123,7 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     pe_P = sp.P;
     pe_N = sp.N;
     pe_spec_N = sp.N;
+    pe_hit_lod_base = PeHitLodBase(tri, RT_ConeWidthAtHit(payload));
     pe_occlusion = PeHitOcclusion(constantsId, sp.uv0);
     pe_hit_curvature = PeHitCurvature(tri);
 
@@ -161,6 +175,7 @@ void pe_hit_any(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
 
     pe_P = sp.P;
     pe_N = sp.N;
+    pe_hit_lod_base = -1000.0; // coverage at mip 0, as the legacy any-hit tests alpha
     pe_load_material(shape, pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
     const float opacity = pe_material_mask(shape, sp, sp.nextUv, sp.spriteBlend);
     if (!(opacity > 0.0 && opacity >= constants[constantsId].alphaCut))

@@ -27,6 +27,16 @@ static float3 pe_spec_N;         // the graph's shading normal (geometry_normal)
 static float pe_occlusion;       // material AO, outside the graph (the legacy hit's occlusion texture)
 static float pe_hit_curvature;   // the hit triangle's curvature: subsurface's fwidth ratio has no derivatives here
 static float3 pe_shadow_offset;  // world offset of shadow ray origins onto the smooth surface (ShadowTerminatorOffset)
+static float pe_hit_lod_base;    // RT_RayConeLodBase of the hit, without a texture's own size; -1000 samples mip 0
+
+// The LOD a graph texture samples at this hit (the mx_texture override's PE_MATERIAL_HIT branch, module ABI 9).
+float pe_hit_texture_lod(uint textureIndex)
+{
+    uint width;
+    uint height;
+    pe_textures[NonUniformResourceIndex(textureIndex)].GetDimensions(width, height);
+    return max(pe_hit_lod_base + 0.5 * log2(float(width) * float(height)), 0.0);
+}
 
 // The hit's shape slot, or 0xffffffff (the dispatchers' zero value) for a record outside the table.
 uint PeHitShape(uint constantsId)

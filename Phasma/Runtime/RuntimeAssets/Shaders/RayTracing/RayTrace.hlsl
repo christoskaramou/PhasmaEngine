@@ -29,6 +29,7 @@ void raygeneration()
     payload.t = -1.0;
     payload.alpha = 1.0;
     payload.opaqueTMax = ray.TMax;
+    payload.coneSpread = sqrt(2.0 * PI / 64.0); // each of the tile's 8x8 rays covers 1/64 of the hemisphere
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
     float3 radiance;
     if (payload.t >= 0.0)
@@ -69,6 +70,11 @@ void raygeneration()
     payload.t = -1.0;
     payload.alpha = 1.0;
     payload.opaqueTMax = ray.TMax;
+    // The cone leaves the pixel's footprint on the surface and spreads by the camera's pixel angle (a mirror keeps it)
+    // plus the GGX lobe's width (alpha = roughness^2).
+    const float pixelSpread = RT_PixelSpread(float(height));
+    payload.coneWidth = pixelSpread * length(cb_camPos.xyz - position) + RT_PixelFootprint(float(height));
+    payload.coneSpread = pixelSpread + roughness * roughness;
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
     float3 radiance = payload.t >= 0.0 && payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE ? 0.0.xxx : payload.radiance;
     output[launch] = float4(max(radiance, 0.0), payload.t >= 0.0 ? payload.t : ray.TMax);
@@ -84,6 +90,8 @@ void raygeneration()
     payload.t = -1.0;
     payload.alpha = 1.0;
     payload.opaqueTMax = ray.TMax;
+    const float probeConeSpread = sqrt(4.0 * PI / float(DispatchRaysDimensions().x)); // each ray's share of the sphere
+    payload.coneSpread = probeConeSpread;
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
     float distance = payload.t < 0.0 ? ray.TMax : payload.t;
     if (payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE && payload.t >= 0.0)
@@ -104,6 +112,8 @@ void raygeneration()
         farPayload.t = -1.0;
         farPayload.alpha = 1.0;
         farPayload.opaqueTMax = farRay.TMax;
+        farPayload.coneWidth = probeConeSpread * footprint;
+        farPayload.coneSpread = probeConeSpread;
         TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, farRay, farPayload);
         bool inside = farPayload.t >= 0.0 && farPayload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE;
         far = float4(max(farPayload.radiance, 0.0), inside ? -1.0 : 1.0);
@@ -136,6 +146,12 @@ void raygeneration()
     // Transform ray to world space.
     float3 originWorld = mul(float4(originView, 1.0), invView).xyz;
     float3 dirWorld = normalize(mul(dirView, (float3x3)invView));
+
+    // The ray cone of one pixel: the angle to the next row's ray, or the orthographic camera's pixel height.
+    float4 pViewNext = mul(float4(ndc.x, ndc.y + 2.0 / float(launchDim.y), 1.0, 1.0), invProjection);
+    pViewNext.xyz /= pViewNext.w;
+    float coneWidth = cb_orthographicCamera != 0 ? length(pViewNext.xy - pView.xy) : 0.0;
+    float coneSpread = cb_orthographicCamera != 0 ? 0.0 : length(normalize(pViewNext.xyz) - dirView);
 
     // MODE-BASED CONFIGURATION
     // 0 = Raster
@@ -178,6 +194,8 @@ void raygeneration()
     payload.isRefractive = 0;
     payload.alpha    = 1.0;
     payload.opaqueTMax = tMax;
+    payload.coneWidth = coneWidth;
+    payload.coneSpread = coneSpread;
 
     TraceRay(
         tlas,
@@ -304,6 +322,17 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
                                                      barycentricCoords);
     float3 shadowOrigin = positionWorld + mul(objToWorld, float4(terminatorOffset, 0.0));
 
+    // Texture LOD from the ray cone at this hit, instead of mip 0.
+    const float coneWidth = RT_ConeWidthAtHit(payload);
+    const float lod = RT_RayConeLodBase(mul(objToWorld, float4(v0.position, 1.0)),
+                                        mul(objToWorld, float4(v1.position, 1.0)),
+                                        mul(objToWorld, float4(v2.position, 1.0)),
+                                        v0.uv,
+                                        v1.uv,
+                                        v2.uv,
+                                        WorldRayDirection(),
+                                        coneWidth);
+
     // Tangent Space
     float3 tangentWorld = normalize(mul(tangentObj.xyz, worldRotation3x3));
 
@@ -321,7 +350,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         combinedColor.rgb = SrgbToLinear(color.rgb) * SrgbToLinear(mat.baseColorFactor.rgb);
     if (HasTexture(textureMask, TEX_BASE_COLOR_BIT))
     {
-        combinedColor *= GetBaseColor(constantsId, uv);
+        combinedColor *= GetBaseColor(constantsId, uv, lod);
     }
     combinedColor = saturate(combinedColor);
 
@@ -331,7 +360,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float roughness = metRoughAlphacutOcl.y;
     if (HasTexture(textureMask, TEX_METAL_ROUGH_BIT))
     {
-        float3 mrSample = GetMetallicRoughness(constantsId, uv).xyz;
+        float3 mrSample = GetMetallicRoughness(constantsId, uv, lod).xyz;
         metallic *= mrSample.z;
         roughness *= mrSample.y;
     }
@@ -341,14 +370,14 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float occlusion = 1.0f;
     if (HasTexture(textureMask, TEX_OCCLUSION_BIT))
     {
-        float occlusionSample = GetOcclusion(constantsId, uv).r;
+        float occlusionSample = GetOcclusion(constantsId, uv, lod).r;
         occlusion = lerp(1.0f, occlusionSample, metRoughAlphacutOcl.w);
     }
 
     float3 emissive = cb_linearColor != 0 ? SrgbToLinearHdr(mat.emissiveTransmission.xyz) : mat.emissiveTransmission.xyz;
     if (HasTexture(textureMask, TEX_EMISSIVE_BIT))
     {
-        emissive *= GetEmissive(constantsId, uv).xyz;
+        emissive *= GetEmissive(constantsId, uv, lod).xyz;
     }
     emissive = max(emissive, 0.0);
     // Self-lit is an authoring signal for alpha cards (emissive mirrors albedo to mean "unlit").
@@ -361,7 +390,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     float3 N = normalWorld;
     if (HasTexture(textureMask, TEX_NORMAL_BIT))
     {
-        float3 tangentNormalSample = GetNormal(constantsId, uv).xyz;
+        float3 tangentNormalSample = GetNormal(constantsId, uv, lod).xyz;
         tangentWorld = normalize(tangentWorld - dot(tangentWorld, normalWorld) * normalWorld);
         float3 bitangentWorld = cross(normalWorld, tangentWorld) * tangentObj.w;
         float3x3 TBN = float3x3(tangentWorld, bitangentWorld, normalWorld);
@@ -515,6 +544,8 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         transPayload.depth    = payload.depth + 1;
         transPayload.isRefractive = isTransmissive ? 1 : 0;
         transPayload.opaqueTMax = clampToHybridOpaqueDepth ? ray.TMax : 10000.0;
+        transPayload.coneWidth = coneWidth; // the cone goes on through the surface (refraction's curvature ignored)
+        transPayload.coneSpread = payload.coneSpread;
 
         // In Full RT mode, alpha blended objects need to see opaque geometry behind them
         uint mask = (isTransmissive || cb_renderMode == 2) ? 0xFF : 0x80;
