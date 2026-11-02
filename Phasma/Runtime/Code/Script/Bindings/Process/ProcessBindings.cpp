@@ -79,13 +79,41 @@ namespace pe
                 DWORD pipeMode = PIPE_NOWAIT;
                 SetNamedPipeHandleState(m_stdin, &pipeMode, nullptr, nullptr);
 
-                STARTUPINFOW si{};
-                si.cb = sizeof(si);
-                si.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
-                si.hStdInput = childIn;
-                si.hStdOutput = childOut;
-                si.hStdError = childOut; // one pipe for both: a second one is a classic deadlock
-                si.wShowWindow = SW_HIDE;
+                // The child inherits its two pipe ends alone: without the list it inherited every inheritable handle in
+                // the process (CRT files, another spawn's pipes), as RunProcess's children did (Base/Process.cpp).
+                HANDLE inherited[] = {childIn, childOut};
+                SIZE_T attributeBytes = 0;
+                InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeBytes);
+                std::vector<char> attributeBuffer(attributeBytes);
+                auto *attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeBuffer.data());
+                const bool initialized = InitializeProcThreadAttributeList(attributes, 1, 0, &attributeBytes);
+                const bool listed = initialized && UpdateProcThreadAttribute(attributes,
+                                                                             0,
+                                                                             PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                                                             inherited,
+                                                                             sizeof(inherited),
+                                                                             nullptr,
+                                                                             nullptr);
+                if (!listed)
+                {
+                    if (initialized)
+                        DeleteProcThreadAttributeList(attributes);
+
+                    CloseHandle(childIn);
+                    CloseHandle(childOut);
+                    error = "UpdateProcThreadAttribute failed (" + std::to_string(GetLastError()) + ")";
+                    Stop();
+                    return false;
+                }
+
+                STARTUPINFOEXW si{};
+                si.StartupInfo.cb = sizeof(si);
+                si.StartupInfo.dwFlags = STARTF_USESTDHANDLES | STARTF_USESHOWWINDOW;
+                si.StartupInfo.hStdInput = childIn;
+                si.StartupInfo.hStdOutput = childOut;
+                si.StartupInfo.hStdError = childOut; // one pipe for both: a second one is a classic deadlock
+                si.StartupInfo.wShowWindow = SW_HIDE;
+                si.lpAttributeList = attributes;
 
                 std::wstring cmd = QuoteWindowsArg(exe.wstring());
                 for (const std::string &a : args)
@@ -97,7 +125,10 @@ namespace pe
                 // Explicit application path under Assets/, CRT-quoted argv, no shell.
                 // nosec
                 BOOL ok = CreateProcessW(exe.wstring().c_str(), cmdBuf.data(), nullptr, nullptr, TRUE,
-                                         CREATE_NO_WINDOW, nullptr, exe.parent_path().wstring().c_str(), &si, &pi);
+                                         CREATE_NO_WINDOW | EXTENDED_STARTUPINFO_PRESENT, nullptr,
+                                         exe.parent_path().wstring().c_str(), &si.StartupInfo, &pi);
+                DeleteProcThreadAttributeList(attributes);
+
                 // The child owns these now; the parent must let go or reads never terminate.
                 CloseHandle(childIn);
                 CloseHandle(childOut);
