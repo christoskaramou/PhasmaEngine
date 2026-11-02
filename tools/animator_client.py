@@ -4,7 +4,7 @@ import json
 import os
 import time
 
-EXE_DIR = r"C:\Users\Christos\repos\PhasmaEngine\build-ninja-physics\Release"
+EXE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "build-ninja-physics", "Release")
 
 
 class AnimatorClient:

@@ -15,7 +15,7 @@ in PhasmaProjects) so they keep working independent of the engine tree. Re-run w
 
 Usage:
   python tools/new_game.py --name MyGame [--template topdown]
-                           [--dir C:\\Users\\Christos\\repos\\PhasmaProjects]
+                           [--dir DIR]  (default: PhasmaProjects beside this engine checkout)
                            [--api vulkan] [--update-gamekit]
 """
 
@@ -27,7 +27,7 @@ import shutil
 
 import minigamekit as mgk
 
-DEFAULT_DIR = r"C:\Users\Christos\repos\PhasmaProjects"
+DEFAULT_DIR = os.path.join(os.path.dirname(mgk.ENGINE_ROOT), "PhasmaProjects")
 DEFAULT_PLAYER_EXE = os.path.join(mgk.ENGINE_ROOT, "build-ninja-full", "Release", "PhasmaPlayer.exe")
 
 
@@ -238,7 +238,7 @@ SMOKE_TEMPLATE = r'''# run_smoke.ps1 — launch {Name} in PhasmaPlayer and asser
 $ErrorActionPreference = "Stop"
 
 $exe       = "{exe}"
-$project   = "{project}"
+$project   = $PSScriptRoot
 $api       = "{api}"
 $startup   = "Assets/Scenes/main.pescene"
 
@@ -369,10 +369,14 @@ def main():
     copy_gamekit(project_dir)
     copy_prefabs(project_dir)
 
-    # 6. smoke runner
+    # 6. smoke runner, which finds the player relative to itself so it holds no machine-specific path
+    try:
+        player_exe = "$PSScriptRoot\\" + os.path.relpath(args.player_exe, project_dir)
+    except ValueError:  # the player is on another drive
+        player_exe = args.player_exe
+
     write_text(os.path.join(project_dir, "run_smoke.ps1"),
-               SMOKE_TEMPLATE.format(Name=name, exe=args.player_exe,
-                                     project=project_dir, api=args.api))
+               SMOKE_TEMPLATE.format(Name=name, exe=player_exe, api=args.api))
 
     print("created project:", project_dir)
     print("  startup scene: Assets/Scenes/main.pescene")
