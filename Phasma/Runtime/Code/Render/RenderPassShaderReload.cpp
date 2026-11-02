@@ -1,4 +1,5 @@
 #include "Render/RenderPassShaderReload.h"
+#include "API/Command.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
@@ -147,6 +148,49 @@ namespace pe
             for (size_t i = 0; i < passInfos.size() && i < states.size(); ++i)
                 states[i].Restore(*passInfos[i]);
         }
+
+        std::vector<size_t> CaptureHashes(const std::vector<PassInfo *> &passInfos)
+        {
+            std::vector<size_t> hashes;
+            hashes.reserve(passInfos.size());
+            for (const PassInfo *info : passInfos)
+                hashes.push_back(info->GetHash());
+            return hashes;
+        }
+
+        // The pipeline cache is keyed by PassInfo::GetHash (shader contents, cached descriptor layouts, fixed-function
+        // state), so a pass whose hash survived the reload keeps its pipelines. Rebuilding them all took 18 s per
+        // reload on Vulkan with a MaterialX RT hit group: the driver never caches RT pipelines with descriptor heaps.
+        void RetireChangedPipelines(const std::vector<PassInfo *> &passInfos, const std::vector<size_t> &oldHashes)
+        {
+            for (size_t i = 0; i < passInfos.size(); ++i)
+            {
+                if (static_cast<size_t>(passInfos[i]->GetHash()) != oldHashes[i])
+                    CommandBuffer::RetirePipelines(*passInfos[i]);
+            }
+        }
+
+        // A pass info updated before the failure still hashes the shaders it gave back: reflect the restored ones, or
+        // a later reload of the same sources would find the old shaders' pipeline under the new hash.
+        void ResyncRestoredPassInfos(IRenderPassComponent &renderPass,
+                                     const std::vector<PassInfo *> &passInfos,
+                                     const std::vector<size_t> &oldHashes)
+        {
+            bool resynced = false;
+            for (size_t i = 0; i < passInfos.size(); ++i)
+            {
+                if (static_cast<size_t>(passInfos[i]->GetHash()) == oldHashes[i])
+                    continue;
+
+                passInfos[i]->Update();
+                resynced = true;
+            }
+
+            if (resynced)
+                renderPass.UpdateDescriptorSets();
+
+            RetireChangedPipelines(passInfos, oldHashes);
+        }
     } // namespace
 
     bool ReloadRenderPassShaders(IRenderPassComponent &renderPass, std::optional<size_t> changedShaderHash)
@@ -163,6 +207,7 @@ namespace pe
         if (!MatchesShaderHash(oldStates, changedShaderHash))
             return false;
 
+        const std::vector<size_t> oldHashes = CaptureHashes(passInfos);
         try
         {
             renderPass.UpdatePassInfo();
@@ -170,6 +215,7 @@ namespace pe
 
             const std::vector<PassInfoShaderState> newStates = CaptureShaderStates(passInfos);
             DestroyShadersNotIn(CollectShaders(oldStates), CollectShaders(newStates));
+            RetireChangedPipelines(passInfos, oldHashes);
             return true;
         }
         catch (const std::exception &)
@@ -177,6 +223,7 @@ namespace pe
             const std::vector<PassInfoShaderState> currentStates = CaptureShaderStates(passInfos);
             DestroyShadersNotIn(CollectShaders(currentStates), CollectShaders(oldStates));
             RestoreShaderStates(passInfos, oldStates);
+            ResyncRestoredPassInfos(renderPass, passInfos, oldHashes);
         }
 
         return false;

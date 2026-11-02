@@ -634,7 +634,6 @@ namespace pe
                 if (queued.payload.has_value() && queued.payload.type() == typeid(size_t))
                     hash = std::any_cast<size_t>(queued.payload);
                 m_renderer.PollShaders(hash);
-                CommandBuffer::ClearCache();
             }
         }
         return true;
