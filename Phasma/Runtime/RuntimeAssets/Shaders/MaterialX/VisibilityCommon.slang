@@ -272,20 +272,16 @@ static const float PE_MIN_N_DOT_V = 0.01;
 // MaterialX's BSDFs then flip it toward the eye (mx_forward_facing_normal), which leaves a top-lit limb normal facing away
 // from its light: a black pixel. MaterialX's own renderer shows the same dots on a low-poly sphere; a renderer that wants
 // the limb lit bends the normal just enough to face the eye instead, as done here. Only a facet that faces the eye is
-// bent: the back face of a double-sided mesh keeps MaterialX's flip. The tangent frame follows the normal.
-void PeBendLimbNormal(PeTriangle t, float3 V, inout PeSurfacePoint sp)
+// bent: the back face of a double-sided mesh keeps MaterialX's flip. The tangent frame follows the normal. facetNormal is
+// the facet's plane normal, of any length and either orientation.
+void PeBendLimbNormalFacet(float3 facetNormal, float3 V, inout PeSurfacePoint sp)
 {
     const float nDotV = dot(sp.N, V);
     if (nDotV >= PE_MIN_N_DOT_V)
         return;
 
-    const float3 e1 = mul(t.v1.position - t.v0.position, (float3x3)t.world);
-    const float3 e2 = mul(t.v2.position - t.v0.position, (float3x3)t.world);
-    float3 facetNormal = cross(e1, e2);
-    if (dot(facetNormal, sp.N) < 0.0)
-        facetNormal = -facetNormal;
-
-    if (dot(facetNormal, V) <= 0.0)
+    const float3 facet = dot(facetNormal, sp.N) < 0.0 ? -facetNormal : facetNormal;
+    if (dot(facet, V) <= 0.0)
         return;
 
     const float handedness = dot(cross(sp.N, sp.T), sp.B) < 0.0 ? -1.0 : 1.0;
@@ -297,6 +293,17 @@ void PeBendLimbNormal(PeTriangle t, float3 V, inout PeSurfacePoint sp)
 
     sp.T = normalize(tangent);
     sp.B = cross(sp.N, sp.T) * handedness;
+}
+
+// PeBendLimbNormalFacet with the facet of tri in world space.
+void PeBendLimbNormal(PeTriangle t, float3 V, inout PeSurfacePoint sp)
+{
+    if (dot(sp.N, V) >= PE_MIN_N_DOT_V)
+        return;
+
+    const float3 e1 = mul(t.v1.position - t.v0.position, (float3x3)t.world);
+    const float3 e2 = mul(t.v2.position - t.v0.position, (float3x3)t.world);
+    PeBendLimbNormalFacet(cross(e1, e2), V, sp);
 }
 
 // The bitangent sign of a triangle's source UV winding (PeSurfaceAt's convention).

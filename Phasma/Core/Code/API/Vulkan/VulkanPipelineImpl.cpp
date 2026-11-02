@@ -200,12 +200,6 @@ namespace pe
             m_pipeline = vk::Pipeline{};
         }
 
-        if (m_cache)
-        {
-            VulkanRhi::Device().destroyPipelineCache(m_cache);
-            m_cache = vk::PipelineCache{};
-        }
-
         if (m_sbtBuffer)
         {
             Buffer::Destroy(m_sbtBuffer);
@@ -266,7 +260,7 @@ namespace pe
         if (m_usesDescriptorHeap)
             compinfo.pNext = &m_heapPipelineFlags;
 
-        auto result = VulkanRhi::Device().createComputePipeline(m_cache, compinfo);
+        auto result = VulkanRhi::Device().createComputePipeline(VulkanRhi::PipelineCache(), compinfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create compute pipeline!");
         m_pipeline = result.value;
 
@@ -558,11 +552,6 @@ namespace pe
         // Base Pipeline Index
         pipeinfo.basePipelineIndex = -1;
 
-        vk::PipelineCacheCreateInfo cacheInfo{};
-        cacheInfo.pInitialData = nullptr;
-        cacheInfo.initialDataSize = 0;
-        m_cache = VulkanRhi::Device().createPipelineCache(cacheInfo);
-
         if (m_usesDescriptorHeap)
         {
             m_heapPipelineFlags.pNext = pipeinfo.pNext;
@@ -570,7 +559,7 @@ namespace pe
             pipeinfo.pNext = &m_heapPipelineFlags;
         }
 
-        auto result = VulkanRhi::Device().createGraphicsPipeline(m_cache, pipeinfo);
+        auto result = VulkanRhi::Device().createGraphicsPipeline(VulkanRhi::PipelineCache(), pipeinfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create graphics pipeline!");
         m_pipeline = result.value;
 
@@ -736,7 +725,7 @@ namespace pe
         if (m_usesDescriptorHeap)
             pipelineInfo.pNext = &m_heapPipelineFlags;
 
-        auto result = VulkanRhi::Device().createRayTracingPipelineKHR(nullptr, nullptr, pipelineInfo);
+        auto result = VulkanRhi::Device().createRayTracingPipelineKHR(nullptr, VulkanRhi::PipelineCache(), pipelineInfo);
         PE_ERROR_IF(result.result != vk::Result::eSuccess, "Failed to create Ray Tracing pipeline!");
         m_pipeline = result.value;
 

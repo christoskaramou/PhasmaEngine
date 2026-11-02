@@ -1,6 +1,7 @@
-// RT hits on MaterialX materials: the module's generated graph at a ray hit, under the lights, shadow rays, probes and
+// RT hits on MaterialX materials: a shape group's generated graphs at a ray hit, under the lights, shadow rays, probes and
 // sky the legacy hit shader uses (RTCommon.hlsl), through the pe_* hooks PePrelude.slang implements for material pass 2.
-// Order: this head, the generated module, MaterialHitMain.slang; compiled per RT pass with its defines and PE_MATERIAL_HIT.
+// Order: this head, the group's combined module, MaterialHitMain.slang; compiled per RT pass with its defines and
+// PE_MATERIAL_HIT.
 #include "../RayTracing/RTCommon.hlsl"
 #include "VisibilityCommon.slang"
 
@@ -14,13 +15,119 @@
 [[vk::binding(7, 1)]] Texture2D<float4> pe_envRadiance;
 [[vk::binding(8, 1)]] Texture2D<float4> pe_envIrradiance;
 
+// Each module's slot in its shape group, by registry index (RayTracingPass's slot table): a wave of hits can mix shapes,
+// so the slot comes from the hit's record, not from a push constant.
+[[vk::binding(9, 1)]] StructuredBuffer<uint> pe_shapeSlots;
+
 #define PE_REFRACTION_TWO_SIDED false
 
 static float3 pe_P;              // world position of the hit
 static float3 pe_N;              // interpolated geometric normal
+static float3 pe_spec_N;         // the graph's shading normal (geometry_normal): area lights' specular representative point
 static float pe_occlusion;       // material AO, outside the graph (the legacy hit's occlusion texture)
 static float pe_hit_curvature;   // the hit triangle's curvature: subsurface's fwidth ratio has no derivatives here
 static float3 pe_shadow_offset;  // world offset of shadow ray origins onto the smooth surface (ShadowTerminatorOffset)
+static float pe_hit_lod_base;    // RT_RayConeLodBase of the hit, without a texture's own size; -1000 samples mip 0
+
+// Forward meshes (alpha-blend, Transmission) in the camera pass: the hit's continuation state (pe_hit_closest).
+static uint pe_hit_depth;            // the hit's payload depth: rays it traces go one deeper
+static float pe_hit_cone_width;      // the ray cone where it hit, carried on through the surface
+static float pe_hit_cone_spread;
+static bool pe_hit_refracts;         // pe_traced_refraction may trace (a forward mesh with budget left)
+static bool pe_refraction_traced;    // one refraction ray per hit, whatever calls the seam
+static float3 pe_refraction_radiance;
+
+// What lies along the ray once the bounce budget is spent, as the legacy hit's fallback (RayTrace.hlsl): the probes'
+// light where they cover it (an enclosed room hides the sky), else the environment.
+float3 PeSkyAlongRay()
+{
+    float3 sky = skybox.SampleLevel(material_sampler, WorldRayDirection(), 0).rgb * cb_iblIntensity;
+#ifdef GI_SHADING
+    const float4 behind = ProbeLighting(pe_P, WorldRayDirection());
+    if (behind.a > 0.0 && gi_intensity > 0.0)
+        sky = lerp(sky, behind.rgb * (gi_intensity / PI), behind.a);
+#endif
+
+    return sky;
+}
+
+#ifndef GI_PROBES
+// A ray on from the hit through or off its surface, as the legacy closest hit continues one: its radiance in the hit
+// output's space (display-referred unless linear_color). As there, a refracted ray sees everything, a pass-through ray
+// only transparent geometry in Hybrid (where the raster frame stands behind it).
+float3 PeTraceContinuation(float3 dir, bool refractive)
+{
+    RayDesc ray;
+    ray.Origin = pe_P;
+    ray.Direction = dir;
+    ray.TMin = 0.01;
+    ray.TMax = 10000.0;
+
+    HitPayload next;
+    next.radiance = float3(0.0, 0.0, 0.0);
+    next.t = -1.0;
+    next.hitKind = 0u;
+    next.rayType = 0u;
+    next.depth = pe_hit_depth + 1u;
+    next.isRefractive = refractive ? 1u : 0u;
+    next.alpha = 1.0;
+    next.opaqueTMax = ray.TMax;
+    next.coneWidth = pe_hit_cone_width;
+    next.coneSpread = pe_hit_cone_spread;
+    next.skipBlended = 0u;
+    TraceRay(tlas, RAY_FLAG_NONE, refractive || cb_renderMode == 2u ? 0xFF : 0x80, 0, 0, 0, ray, next);
+
+    return next.radiance;
+}
+#endif
+
+// The mx_environment_fis override's hit seam (module ABI 9): MaterialX's refraction lobe sees the scene through one ray
+// along the refracted mean direction instead of the environment, so transmission_color tints what lies behind. N faces V.
+// Linear radiance; false (the environment) where the hit may not trace.
+bool pe_traced_refraction(float3 N, float3 V, float ior, out float3 radiance)
+{
+    radiance = float3(0.0, 0.0, 0.0);
+#ifdef GI_PROBES
+    return false;
+#else
+    if (!pe_hit_refracts)
+        return false;
+
+    if (!pe_refraction_traced)
+    {
+        float3 dir = refract(-V, N, 1.0 / max(ior, 1e-3));
+        if (!(dot(dir, dir) > 0.0))
+            dir = reflect(-V, N); // total internal reflection
+
+        const float3 traced = PeTraceContinuation(normalize(dir), true);
+        pe_refraction_radiance = cb_linearColor == 0u ? SrgbToLinear(traced) : traced;
+        pe_refraction_traced = true;
+    }
+
+    radiance = pe_refraction_radiance;
+    return true;
+#endif
+}
+
+// The LOD a graph texture samples at this hit (the mx_texture override's PE_MATERIAL_HIT branch, module ABI 9).
+float pe_hit_texture_lod(uint textureIndex)
+{
+    uint width;
+    uint height;
+    pe_textures[NonUniformResourceIndex(textureIndex)].GetDimensions(width, height);
+    return max(pe_hit_lod_base + 0.5 * log2(float(width) * float(height)), 0.0);
+}
+
+// The hit's shape slot, or 0xffffffff (the dispatchers' zero value) for a record outside the table.
+uint PeHitShape(uint constantsId)
+{
+    const uint module = PeModuleOf(pe_materialBytes, constants[constantsId]);
+    uint count;
+    uint stride;
+    pe_shapeSlots.GetDimensions(count, stride);
+
+    return module < count ? pe_shapeSlots[module] : 0xffffffffu;
+}
 
 // The viewer of a hit is the ray's origin, so the generated V is the reversed ray direction.
 float3 pe_view_position()
@@ -126,7 +233,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         return;
 
     float3 target = closest;
-    const float3 R = reflect(normalize(WorldRayDirection()), pe_N);
+    const float3 R = reflect(normalize(WorldRayDirection()), pe_spec_N);
     const float denom = dot(R, forward);
     if (abs(denom) > 0.001)
     {

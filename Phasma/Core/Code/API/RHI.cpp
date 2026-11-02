@@ -6,6 +6,7 @@
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorHeap.h"
 #include "API/Vulkan/VulkanImageImpl.h"
+#include "API/Vulkan/VulkanPipelineCache.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRhiImpl.h"
 #include "API/Vulkan/VulkanSurfaceImpl.h"
@@ -1281,6 +1282,10 @@ namespace pe
 
         if (vk)
         {
+            if (vk->m_device)
+                SaveAndDestroyVulkanPipelineCache(vk->m_device, vk->m_pipelineCache);
+
+            vk->m_pipelineCache = vk::PipelineCache{};
             vmaDestroyAllocator(vk->m_allocator);
             if (vk->m_device)
                 vk->m_device.destroy();
@@ -1292,6 +1297,18 @@ namespace pe
 
         delete m_impl;
         m_impl = nullptr;
+    }
+
+    void RHI::SavePipelineCache()
+    {
+        if (m_api != PE_GRAPHICS_API_VULKAN || !m_impl)
+            return;
+
+        auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
+        if (!vk->m_device)
+            return;
+
+        SaveVulkanPipelineCacheAsync(vk->m_device, vk->m_pipelineCache);
     }
 
     void RHI::CreateInstance(SDL_Window *window)
@@ -2116,6 +2133,7 @@ namespace pe
         PE_INFO("[OpenPBR] caps barycentrics=%d derivatives=%d", barycentricEnabled ? 1 : 0, derivativeQuadsEnabled ? 1 : 0);
 
         VULKAN_HPP_DEFAULT_DISPATCHER.init(vk->m_device);
+        vk->m_pipelineCache = LoadVulkanPipelineCache(vk->m_device, vk->m_gpu);
 
         // Debug naming
         Debug::SetObjectName(pe::GetVulkanSurface(m_surface), "RHI_surface");

@@ -5,6 +5,7 @@
 #include "API/Vertex.h"
 #include "Scene/LightTypes.h"
 #include "Scene/NodeComponents.h"
+#include "Scene/OpenPBRShapes.h"
 #include "Scene/SceneNode.h"
 #include "Scene/SceneNodeHandle.h"
 #include "Scene/SceneScriptManifest.h"
@@ -612,10 +613,10 @@ namespace pe
         Buffer *GetMaterialByteBuffer() { return m_materialByteBuffer; }
         const std::vector<uint32_t> &GetOpenPBRModules() const { return m_openpbrModules; }
         const std::vector<uint32_t> &GetOpenPBRMaskModules() const { return m_openpbrMaskModules; }
-        // MaterialX modules every RT pass has a hit group for, after the legacy one, in SBT order; empty while OpenPBR is
-        // off (SceneRendererCore::SyncRTHitModules).
-        void SetRTHitModules(const std::vector<uint32_t> &modules);
-        const std::vector<uint32_t> &GetRTHitModules() const { return m_rtHitModules; }
+        // The MaterialX modules every RT pass runs in the same shape group's hit group (OpenPBRHitSet: SBT offset 1 +
+        // the module's group); empty while OpenPBR is off (SceneRendererCore::SyncRTHitModules).
+        void SetRTHitModules(const OpenPBRHitSet &set);
+        const OpenPBRHitSet &GetRTHitModules() const { return m_rtHitModules; }
         Sampler *GetDefaultSampler() const;
         static const std::vector<uint32_t> &GetAabbIndices() { return s_aabbIndices; }
 
@@ -1104,7 +1105,7 @@ namespace pe
         bool m_blasDirty = false;      // BLAS rebuild needed (geometry buffer was recreated)
         bool m_tlasDirty = false;      // TLAS rebuild needed (instance set changed)
         bool m_tlasMasksDirty = false; // render visibility or hit groups changed: refit the TLAS instance records
-        std::vector<uint32_t> m_rtHitModules;
+        OpenPBRHitSet m_rtHitModules;
 
         // --- Light data ---
         LightsUBO m_lightsUBO{};

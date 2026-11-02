@@ -29,7 +29,6 @@ namespace pe
         PassInfo &m_info;
         vk::Pipeline m_pipeline{};
         vk::PipelineLayout m_layout{};
-        vk::PipelineCache m_cache{};
         Buffer *m_sbtBuffer = nullptr;
         vk::StridedDeviceAddressRegionKHR m_rgenRegion{};
         vk::StridedDeviceAddressRegionKHR m_missRegion{};

@@ -30,14 +30,14 @@ namespace pe
             return type == RenderType::AlphaCut || type == RenderType::AlphaBlend || type == RenderType::Transmission;
         }
 
-        // A MaterialX mesh's hit group is 1 + its module's slot in the hit list; everything else uses the legacy group 0.
-        uint32_t RTHitGroup(const Mesh &mesh, const std::vector<uint32_t> &modules)
+        // A MaterialX mesh's hit group, visibility or forward, is 1 + its module's shape group in the hit set; everything
+        // else uses the legacy group 0.
+        uint32_t RTHitGroup(const Mesh &mesh, const OpenPBRHitSet &set)
         {
-            if (modules.empty() || !MeshUsesOpenPBR(mesh))
+            if (set.modules.empty() || !(MeshUsesOpenPBR(mesh) || MeshUsesOpenPBRForward(mesh)))
                 return 0;
 
-            const auto slot = std::find(modules.begin(), modules.end(), mesh.materialInstance->gpuOpenPBRModule);
-            return slot == modules.end() ? 0u : 1u + static_cast<uint32_t>(slot - modules.begin());
+            return set.HitGroup(mesh.materialInstance->gpuOpenPBRModule);
         }
 
         bool IsVulkanSceneRayTracing()
@@ -169,12 +169,12 @@ namespace pe
         m_tlasUpdateInstanceBuffers.clear();
     }
 
-    void Scene::SetRTHitModules(const std::vector<uint32_t> &modules)
+    void Scene::SetRTHitModules(const OpenPBRHitSet &set)
     {
-        if (modules == m_rtHitModules)
+        if (set == m_rtHitModules)
             return;
 
-        m_rtHitModules = modules;
+        m_rtHitModules = set;
         m_tlasMasksDirty = true;
     }
 

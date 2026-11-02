@@ -8,9 +8,11 @@ namespace pe
         constexpr std::string_view kEnd = "// PE_SHAPE_END";
         constexpr std::string_view kSpace = " \t\r\n\v\f";
 
-        // DX12 inlines every call into the entry function; SPIR-V keeps each shape's functions apart, so the optimizer
-        // never sees all shapes in one function (54 shapes, shade: 35.4 s inlined, 7.0 s apart; 2026-10-29).
-        constexpr const char *kShapeFnMacro = "#ifdef PE_DX12\n"
+        // DX12 inlines every call into the entry function; SPIR-V raster passes keep each shape's functions apart, so the
+        // optimizer never sees all shapes in one function (54 shapes, shade: 35.4 s inlined, 7.0 s apart; 2026-10-29).
+        // RT hits (PE_MATERIAL_HIT) inline on Vulkan too: [noinline] shape calls in hit stages returned wrong values and
+        // lost the device on an RTX 4080 SUPER (driver 617.14, 2026-11-01), with spirv-val passing.
+        constexpr const char *kShapeFnMacro = "#if defined(PE_DX12) || defined(PE_MATERIAL_HIT)\n"
                                               "#define PE_SHAPE_FN\n"
                                               "#else\n"
                                               "#define PE_SHAPE_FN [noinline]\n"

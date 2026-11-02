@@ -173,7 +173,19 @@ namespace pe
 
     RuntimeRhiSession::~RuntimeRhiSession()
     {
-        if (m_initialized)
+        if (!m_initialized)
+            return;
+
+        // A destructor must not throw: after a lost device (the usual reason a host unwinds through here) the teardown's
+        // device wait fails too, and a second exception during unwinding terminates the process before the host logs
+        // the first.
+        try
+        {
             RHII.Destroy();
+        }
+        catch (const std::exception &e)
+        {
+            PE_WARN("[RHI] teardown stopped: %s", e.what());
+        }
     }
 } // namespace pe

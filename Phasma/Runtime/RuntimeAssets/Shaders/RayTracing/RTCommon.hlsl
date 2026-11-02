@@ -24,6 +24,10 @@ struct HitPayload
     uint   isRefractive;
     float  alpha;   // Alpha channel for blending
     float  opaqueTMax;
+    float  coneWidth;  // ray cone (RT_RayConeLodBase): width at the ray's origin, world units
+    float  coneSpread; // and its growth per unit of distance; both 0 sample mip 0
+    uint   skipBlended; // probe passes' rays: alpha-blend and Transmission surfaces are invisible to them, the legacy
+                        // any-hit's GI_PROBES rule, which MaterialX hit groups (one any-hit for every pass) read here
 };
 
 struct Vertex
@@ -130,6 +134,9 @@ float3 TraceTransmittance(float3 origin, float3 dir, float dist)
     shadowPayload.t        = 0.0; // Init as Hit -> Miss will set to -1.0
     shadowPayload.hitKind  = 0;
     shadowPayload.rayType  = 1; // Mark as Shadow Ray
+    shadowPayload.coneWidth = 0.0; // any-hit alpha tests sample mip 0
+    shadowPayload.coneSpread = 0.0;
+    shadowPayload.skipBlended = 0; // shadows keep glass's tint
 
     TraceRay(
         tlas,
@@ -251,6 +258,55 @@ float4 SampleArray(float2 uv, uint index)
     return pe_textures[NonUniformResourceIndex(index)].SampleLevel(material_sampler, uv, 0);
 }
 
+// Ray cones (Akenine-Moller et al., "Improved Shader and Texture Level of Detail Using Ray Cones", JCGT 2021): the LOD of a
+// texture lookup at a hit, without the texture's own 0.5 * log2(width * height). The triangle's texel density, the cone's
+// width at the hit and the hit's obliquity. World positions and the ray direction; -1000 (mip 0) for a degenerate triangle.
+float RT_RayConeLodBase(float3 p0, float3 p1, float3 p2, float2 uv0, float2 uv1, float2 uv2, float3 dir, float coneWidth)
+{
+    const float3 facet = cross(p1 - p0, p2 - p0);
+    const float worldArea = length(facet);
+    const float2 e1 = uv1 - uv0;
+    const float2 e2 = uv2 - uv0;
+    const float uvArea = abs(e1.x * e2.y - e2.x * e1.y);
+    if (!(worldArea > 1e-12) || !(uvArea > 1e-12))
+        return -1000.0;
+
+    const float cosine = abs(dot(facet / worldArea, normalize(dir)));
+    return 0.5 * log2(uvArea / worldArea) + log2(max(coneWidth, 1e-8)) - log2(max(cosine, 1e-3));
+}
+
+// The cone's width where the ray hit (closest-hit and any-hit stages).
+float RT_ConeWidthAtHit(HitPayload payload)
+{
+    return payload.coneWidth + payload.coneSpread * RayTCurrent();
+}
+
+// SampleArray at a ray-cone LOD (RT_RayConeLodBase).
+float4 SampleArrayCone(float2 uv, uint index, float lodBase)
+{
+    if (index == 0xFFFFFFFF)
+        return float4(1.0, 1.0, 1.0, 1.0);
+
+    uint width;
+    uint height;
+    pe_textures[NonUniformResourceIndex(index)].GetDimensions(width, height);
+    const float lod = lodBase + 0.5 * log2(float(width) * float(height));
+    return pe_textures[NonUniformResourceIndex(index)].SampleLevel(material_sampler, uv, max(lod, 0.0));
+}
+
+// One camera pixel's ray cone along a column of `height` pixels, from the inverse projection: a perspective camera's angle
+// per pixel (spread), or an orthographic camera's parallel rays' pixel height in world units (width).
+void RT_PixelCone(float height, out float width, out float spread)
+{
+    const float4 a = mul(float4(0.0, 0.0, 1.0, 1.0), cb_invProj);
+    const float4 b = mul(float4(0.0, 2.0 / height, 1.0, 1.0), cb_invProj);
+    const float3 pa = a.xyz / a.w;
+    const float3 pb = b.xyz / b.w;
+    const bool orthographic = cb_orthographicCamera != 0;
+    width = orthographic ? length(pb - pa) : 0.0;
+    spread = orthographic ? 0.0 : length(normalize(pb) - normalize(pa));
+}
+
 // Matrices
 float4x4 GetViewProjection()                  { return LoadMatrix(0); }
 float4x4 GetPreviousViewProjection()          { return LoadMatrix(64); }
@@ -264,6 +320,13 @@ float4 GetMetallicRoughness(uint id, float2 uv)  { return SampleArray(uv, consta
 float4 GetNormal(uint id, float2 uv)             { return SampleArray(uv, constants[id].meshImageIndex[2]); }
 float4 GetOcclusion(uint id, float2 uv)          { return SampleArray(uv, constants[id].meshImageIndex[3]); }
 float4 GetEmissive(uint id, float2 uv)           { return SampleArray(uv, constants[id].meshImageIndex[4]); }
+
+// The same at a closest hit's ray-cone LOD.
+float4 GetBaseColor(uint id, float2 uv, float lod)          { return SampleArrayCone(uv, constants[id].meshImageIndex[0], lod); }
+float4 GetMetallicRoughness(uint id, float2 uv, float lod)  { return SampleArrayCone(uv, constants[id].meshImageIndex[1], lod); }
+float4 GetNormal(uint id, float2 uv, float lod)             { return SampleArrayCone(uv, constants[id].meshImageIndex[2], lod); }
+float4 GetOcclusion(uint id, float2 uv, float lod)          { return SampleArrayCone(uv, constants[id].meshImageIndex[3], lod); }
+float4 GetEmissive(uint id, float2 uv, float lod)           { return SampleArrayCone(uv, constants[id].meshImageIndex[4], lod); }
 
 
 

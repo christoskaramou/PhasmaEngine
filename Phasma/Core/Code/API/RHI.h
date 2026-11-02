@@ -223,6 +223,8 @@ namespace pe
         void CreateGlobalDescriptors();
         void CreateSemaphores(uint32_t semaphoresCount);
         void WaitDeviceIdle();
+        // Vulkan: writes the shared pipeline cache to disk on a worker (VulkanPipelineCache.h); DX12 keeps none.
+        void SavePipelineCache();
         void NextFrame() { m_frameCounter++; }
         uint32_t GetFrameCounter() { return m_frameCounter; }
         uint32_t GetFrameIndex() { return m_frameCounter % GetSwapchainImageCount(); }

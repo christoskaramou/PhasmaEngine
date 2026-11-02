@@ -69,8 +69,10 @@ namespace pe
 
         HANDLE readPipe = nullptr;
         HANDLE writePipe = nullptr;
-        STARTUPINFOW startup{};
-        startup.cb = sizeof(startup);
+        STARTUPINFOEXW startup{};
+        startup.StartupInfo.cb = sizeof(STARTUPINFOW);
+        std::vector<char> attributeBuffer;
+        DWORD creationFlags = options.detach ? 0 : CREATE_NO_WINDOW;
         // The inheritable write end exists from CreatePipe until it is closed below; a child another thread created
         // in that window would inherit it and keep this pipe open after our child exits.
         static std::mutex spawnMutex;
@@ -83,10 +85,38 @@ namespace pe
             if (!CreatePipe(&readPipe, &writePipe, &inheritable, 0))
                 return result;
             SetHandleInformation(readPipe, HANDLE_FLAG_INHERIT, 0);
-            startup.dwFlags = STARTF_USESTDHANDLES;
-            startup.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
-            startup.hStdOutput = writePipe;
-            startup.hStdError = writePipe;
+
+            // The child inherits the output pipe alone (no stdin). Without the list it inherited every inheritable
+            // handle, CRT files included: slangc held a pipeline cache save's temporary file open for its whole
+            // compile, so the save's rename and cleanup failed.
+            SIZE_T attributeBytes = 0;
+            InitializeProcThreadAttributeList(nullptr, 1, 0, &attributeBytes);
+            attributeBuffer.resize(attributeBytes);
+            auto *attributes = reinterpret_cast<LPPROC_THREAD_ATTRIBUTE_LIST>(attributeBuffer.data());
+            const bool initialized = InitializeProcThreadAttributeList(attributes, 1, 0, &attributeBytes);
+            const bool listed = initialized && UpdateProcThreadAttribute(attributes,
+                                                                         0,
+                                                                         PROC_THREAD_ATTRIBUTE_HANDLE_LIST,
+                                                                         &writePipe,
+                                                                         sizeof(writePipe),
+                                                                         nullptr,
+                                                                         nullptr);
+            if (!listed)
+            {
+                if (initialized)
+                    DeleteProcThreadAttributeList(attributes);
+
+                CloseHandle(readPipe);
+                CloseHandle(writePipe);
+                return result;
+            }
+
+            startup.lpAttributeList = attributes;
+            startup.StartupInfo.cb = sizeof(startup);
+            startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+            startup.StartupInfo.hStdOutput = writePipe;
+            startup.StartupInfo.hStdError = writePipe;
+            creationFlags |= EXTENDED_STARTUPINFO_PRESENT;
         }
 
         const std::wstring workingDirectory = options.workingDirectory.wstring();
@@ -98,11 +128,14 @@ namespace pe
                                             nullptr,
                                             nullptr,
                                             options.captureOutput ? TRUE : FALSE,
-                                            options.detach ? 0 : CREATE_NO_WINDOW,
+                                            creationFlags,
                                             nullptr,
                                             workingDirectory.empty() ? nullptr : workingDirectory.c_str(),
-                                            &startup,
+                                            &startup.StartupInfo,
                                             &process);
+        if (startup.lpAttributeList)
+            DeleteProcThreadAttributeList(startup.lpAttributeList);
+
         if (writePipe)
             CloseHandle(writePipe);
         spawnLock.unlock();

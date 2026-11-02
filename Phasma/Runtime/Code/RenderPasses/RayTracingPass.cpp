@@ -27,14 +27,14 @@ namespace pe
             std::string name;
             std::vector<Define> defines;
             std::vector<Define> hitDefines;
-            std::vector<const OpenPBRModule *> hitModules; // the registry never frees a module
+            std::vector<std::string> hitSources; // OpenPBRHitGroup::source, in SBT order after the legacy group
         };
 
         TraceDesc MakeTraceDesc(bool hdr,
                                 bool probeTracing,
                                 bool screenProbes,
                                 bool reflections,
-                                const std::vector<uint32_t> &modules)
+                                const OpenPBRHitSet &set)
         {
             TraceDesc desc;
             if (hdr)
@@ -55,11 +55,12 @@ namespace pe
             else
                 desc.name = probeTracing ? "GI_ProbeTracing" : "RayTracingPipeline";
 
-            // Each MaterialX module runs its graph at the hit; instances select a group by their SBT offset
-            // (WriteRTInstances). Module hits read only these defines, so passes that agree on them share one compiled
-            // shader (a closest-hit compiles cold in about 4 s to DXIL and 22 s to SPIR-V, 2026-10-21); every pass shares
-            // the any-hit. SCREEN_PROBES and REFLECTIONS also select this frame's probe atlas (ProbeVolume.hlsl
-            // GI_AFTER_UPDATE), as their legacy hits do.
+            // Each MaterialX shape group runs its shapes' graphs at the hit: instances select a group by their SBT offset
+            // (WriteRTInstances), and the hit selects its shape through the slot table (UpdateShapeSlots). Group hits read
+            // only these defines, so passes that agree on them share one compiled shader (one module's closest-hit
+            // compiled cold in about 4 s to DXIL and 22 s to SPIR-V, 2026-10-21); every pass shares the any-hit.
+            // SCREEN_PROBES and REFLECTIONS also select this frame's probe atlas (ProbeVolume.hlsl GI_AFTER_UPDATE), as
+            // their legacy hits do.
             desc.hitDefines = {{"PE_MATERIAL_HIT", "1"}, {probeTracing ? "GI_PROBES" : "GI_SHADING", "1"}};
             if (screenProbes)
                 desc.hitDefines.push_back({"SCREEN_PROBES", "1"});
@@ -67,14 +68,14 @@ namespace pe
             if (reflections)
                 desc.hitDefines.push_back({"REFLECTIONS", "1"});
 
-            for (uint32_t module : modules)
-                desc.hitModules.push_back(&GetOpenPBRModule(module));
+            for (const OpenPBRHitGroup &group : set.groups)
+                desc.hitSources.push_back(group.source);
 
             return desc;
         }
 
-        // False, with `info` left unbuilt, when a module's hits do not compile: the module is rejected.
-        bool BuildTracePassInfo(PassInfo &info, const TraceDesc &desc)
+        // SIZE_MAX, or the hit group whose shaders do not compile (with `error`), leaving `info` unbuilt.
+        size_t BuildTracePassInfo(PassInfo &info, const TraceDesc &desc, std::string &error)
         {
             const std::string rayTrace = Path::RuntimeAssets + "Shaders/RayTracing/RayTrace.hlsl";
             auto legacy = [&](const char *entry, PeShaderStageFlags stage)
@@ -95,32 +96,32 @@ namespace pe
             info.acceleration.hitGroups = {{.closestHit = closestHit, .anyHit = anyHit}};
 
             const std::vector<Define> maskDefines = {{"PE_MATERIAL_HIT", "1"}, {"GI_PROBES", "1"}};
-            // Not skipped when another pass rejected the module: an adopted module's hits still compile (from the cache)
-            // when a resize rebuilds this pipeline in place, before the scene's next list drops it.
-            for (const OpenPBRModule *module : desc.hitModules)
+            // Not skipped when another pass rejected a module: an adopted group's hits still compile (from the cache)
+            // when a resize rebuilds this pipeline in place, before the scene's next list drops the module.
+            for (size_t g = 0; g < desc.hitSources.size(); g++)
             {
                 HitGroup &group = info.acceleration.hitGroups.emplace_back(); // info frees what compiled
                 try
                 {
-                    group.closestHit = Shader::Create({.sourcePath = module->hitSource,
+                    group.closestHit = Shader::Create({.sourcePath = desc.hitSources[g],
                                                        .entryPoint = "pe_hit_closest",
                                                        .stage = PE_SHADER_STAGE_CLOSEST_HIT_KHR,
                                                        .defines = desc.hitDefines});
-                    group.anyHit = Shader::Create({.sourcePath = module->hitSource,
+                    group.anyHit = Shader::Create({.sourcePath = desc.hitSources[g],
                                                    .entryPoint = "pe_hit_any",
                                                    .stage = PE_SHADER_STAGE_ANY_HIT_KHR,
                                                    .defines = maskDefines});
                 }
                 catch (const std::exception &failure)
                 {
-                    RejectOpenPBRModule(*module, failure.what());
-                    return false;
+                    error = failure.what();
+                    return g;
                 }
             }
 
             info.acceleration.maxRecursionDepth = 4;
             info.Update();
-            return true;
+            return SIZE_MAX;
         }
 
         // In-flight frames still use the old pipeline and its descriptor sets: retire both with the frame, as module
@@ -153,43 +154,104 @@ namespace pe
     {
         m_hitGeneration++;
         const bool hdr = m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT;
-        const TraceDesc desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, m_hitModules);
+        const TraceDesc desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, m_hitSet);
+        std::string error;
+        const size_t failed = BuildTracePassInfo(*m_passInfo, desc, error);
+        if (failed != SIZE_MAX)
+        {
+            // The scene's next sync builds the set anew on a worker, without what failed.
+            HandleHitGroupFailure(m_hitSet, failed, error);
+            m_hitSet = {};
+        }
+
         // Throws so shader hot reload restores the previous pipeline.
-        PE_ERROR_IF(!BuildTracePassInfo(*m_passInfo, desc), "[RT] %s: a MaterialX module was rejected", desc.name.c_str());
+        PE_ERROR_IF(failed != SIZE_MAX, "[RT] %s: a MaterialX shape group failed to compile", desc.name.c_str());
     }
 
-    void RayTracingPass::SyncHitModules(const std::vector<uint32_t> &modules)
+    // The slot table MaterialHitHead reads by the hit record's module index; the old one outlives frames in flight.
+    void RayTracingPass::UpdateShapeSlots()
     {
-        m_hitGeneration++; // a build prepared for another list is stale now
-        if (modules == m_hitModules)
+        if (m_shapeSlots)
+            RHII.AddToDeletionQueue([retired = m_shapeSlots]()
+                                    { Buffer *buffer = retired; Buffer::Destroy(buffer); });
+
+        m_shapeSlots = nullptr;
+        if (m_hitSet.modules.empty())
             return;
 
-        m_hitModules = modules;
+        const uint32_t last = *std::max_element(m_hitSet.modules.begin(), m_hitSet.modules.end());
+        std::vector<uint32_t> slots(last + 1u, UINT32_MAX);
+        for (uint32_t module : m_hitSet.modules)
+            slots[module] = GetOpenPBRShapeSlot(GetOpenPBRModule(module));
+
+        m_shapeSlots = Buffer::Create({
+            .size = slots.size() * sizeof(uint32_t),
+            .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
+            .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU,
+            .name = "RT_shape_slots",
+        });
+
+        BufferRange range{};
+        range.data = slots.data();
+        range.size = slots.size() * sizeof(uint32_t);
+        range.offset = 0;
+        m_shapeSlots->Copy(1, &range, false);
+    }
+
+    void RayTracingPass::HandleHitGroupFailure(const OpenPBRHitSet &set, size_t group, const std::string &error)
+    {
+        const OpenPBRHitGroup &failed = set.groups[group];
+        if (failed.members > 1)
+        {
+            // Any member can break a combined group, as in the raster passes (SceneRendererCore::FinishModuleBuild).
+            MarkOpenPBRGroupBroken(failed.key);
+            PE_WARN("[RT] shape group %s: hit shaders failed to compile; its shapes build alone", failed.key.c_str());
+            return;
+        }
+
+        // Warns once per module and sends its meshes to legacy shading; the scene's next repack drops it.
+        for (size_t i = 0; i < set.modules.size(); i++)
+        {
+            if (set.moduleGroups[i] == group)
+                RejectOpenPBRModule(GetOpenPBRModule(set.modules[i]), error);
+        }
+    }
+
+    void RayTracingPass::SyncHitModules(const OpenPBRHitSet &set)
+    {
+        m_hitGeneration++; // a build prepared for another set is stale now
+        if (set == m_hitSet)
+            return;
+
+        m_hitSet = set;
+        UpdateShapeSlots();
         RetirePassInfo(m_passInfo);
         m_passInfo = std::make_shared<PassInfo>();
         BuildTracePipeline();
         UpdateDescriptorSets();
     }
 
-    std::function<std::shared_ptr<PassInfo>()>
-    RayTracingPass::PrepareHitBuild(const std::vector<uint32_t> &modules) const
+    std::function<RayTracingPass::HitBuildResult()> RayTracingPass::PrepareHitBuild(const OpenPBRHitSet &set) const
     {
         const bool hdr = m_display->GetFormat() == PE_FORMAT_R16G16B16A16_SFLOAT;
-        return [desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, modules)]
+        return [desc = MakeTraceDesc(hdr, m_probeTracing, m_screenProbes, m_reflections, set)]
         {
-            // Not adopted: the scene drops a rejected module at its next material repack, and that list builds anew.
+            // Not adopted: the main thread handles the failed group (HandleHitGroupFailure), and the next set builds anew.
+            HitBuildResult result;
             auto info = std::make_shared<PassInfo>();
-            if (!BuildTracePassInfo(*info, desc))
-                return std::shared_ptr<PassInfo>();
+            result.failedGroup = BuildTracePassInfo(*info, desc, result.error);
+            if (result.failedGroup != SIZE_MAX)
+                return result;
 
             // Ray tracing binds outside render passes: the frame's bind finds this pipeline in the cache.
             CommandBuffer::GetPipeline(nullptr, *info);
-            return info;
+            result.info = info;
+            return result;
         };
     }
 
     bool RayTracingPass::AdoptHitBuild(const std::shared_ptr<PassInfo> &info,
-                                       const std::vector<uint32_t> &modules,
+                                       const OpenPBRHitSet &set,
                                        uint64_t generation)
     {
         if (generation != m_hitGeneration)
@@ -200,7 +262,20 @@ namespace pe
 
         RetirePassInfo(m_passInfo);
         m_passInfo = info;
-        m_hitModules = modules;
+        m_hitSet = set;
+        UpdateShapeSlots();
+        m_hitGeneration++;
+        UpdateDescriptorSets();
+        return true;
+    }
+
+    bool RayTracingPass::RetargetHitSet(const OpenPBRHitSet &set)
+    {
+        if (set.groups != m_hitSet.groups)
+            return false;
+
+        m_hitSet = set;
+        UpdateShapeSlots();
         m_hitGeneration++;
         UpdateDescriptorSets();
         return true;
@@ -289,6 +364,9 @@ namespace pe
                 if (desc->HasBinding(6))
                     desc->SetSamplers(6, scene.GetOpenPBRSamplers());
 
+                if (desc->HasBinding(9) && m_shapeSlots)
+                    desc->SetBuffer(9, m_shapeSlots);
+
                 // A rebuild before the frame's sync can still carry module groups after openpbr destroyed the sky; the
                 // sync drops them before any ray is traced.
                 Image *irradiance = sky.GetOpenPBRIrradiance();
@@ -375,7 +453,7 @@ namespace pe
             m_lastGeometryVersion = geoVersion;
         }
 
-        const bool hitBindingsMoved = !m_hitModules.empty() &&
+        const bool hitBindingsMoved = !m_hitSet.modules.empty() &&
                                       (m_boundMaterialBytes != scene.GetMaterialByteBuffer() ||
                                        m_boundEnvRadiance != RequireActiveSceneRendererHost().GetSkyBox().GetOpenPBRRadiance());
         if (hitBindingsMoved)
@@ -507,8 +585,10 @@ namespace pe
 
         m_rtDepth = nullptr;
 
-        // A released pass re-initializes legacy-only; SceneRendererCore::SyncRTHitModules builds the modules back.
-        m_hitModules.clear();
+        // A released pass re-initializes legacy-only; SceneRendererCore::SyncRTHitModules builds the groups back.
+        m_hitSet = {};
+        Buffer::Destroy(m_shapeSlots);
+        m_shapeSlots = nullptr;
         m_hitGeneration++;
         m_boundMaterialBytes = nullptr;
         m_boundEnvRadiance = nullptr;

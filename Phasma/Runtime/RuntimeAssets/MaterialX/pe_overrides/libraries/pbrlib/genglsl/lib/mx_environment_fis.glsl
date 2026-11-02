@@ -12,6 +12,16 @@ vec3 mx_environment_radiance(vec3 N, vec3 V, vec3 X, vec2 alpha, int distributio
         return traced * FG;
     }
 
+#ifdef PE_MATERIAL_HIT
+    // RT hits refract the scene, not only the environment (MaterialHitHead.slang's seam; module ABI 9).
+    if (fd.refraction && pe_traced_refraction(mx_forward_facing_normal(N, V), V, fd.ior.x, traced))
+    {
+        N = mx_forward_facing_normal(N, V);
+        float NdotV = clamp(dot(N, V), M_FLOAT_EPS, 1.0);
+        return traced * (vec3(1.0) - mx_ggx_dir_albedo(NdotV, mx_average_alpha(alpha), fd));
+    }
+#endif
+
     // Generate tangent frame.
     X = normalize(X - dot(X, N) * N);
     vec3 Y = cross(N, X);

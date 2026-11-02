@@ -84,7 +84,9 @@ namespace pe
              &SceneRenderGraphPassComponents::lightTransparent},
             {SceneRenderGraphPassId::OpenPBRForward, 805, "OpenPBRForward",
              &SceneRenderGraphPassComponents::openpbrForward},
-            {SceneRenderGraphPassId::Lines, 720, "Lines", &SceneRenderGraphPassComponents::lines},
+            // After Hybrid's transparent trace and the MaterialX forward pass, which both write glass over the viewport:
+            // a line in front of any glass draws over it, one behind it fails its depth (as behind legacy glass).
+            {SceneRenderGraphPassId::Lines, 806, "Lines", &SceneRenderGraphPassComponents::lines},
             {SceneRenderGraphPassId::RayTracing, 800, "RayTracing", &SceneRenderGraphPassComponents::rayTracing},
             {SceneRenderGraphPassId::RTDepthResolve, 810, "RTDepthResolve", &SceneRenderGraphPassComponents::rtDepthResolve},
             {SceneRenderGraphPassId::ParticleCompute, 900, "ParticleCompute",

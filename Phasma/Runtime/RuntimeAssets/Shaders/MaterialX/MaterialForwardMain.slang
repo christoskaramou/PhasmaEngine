@@ -18,15 +18,19 @@ PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
     const float fallbackSign = PeUvWindingSign(GetAttributeAtVertex(input.uvVertex, 0),
                                                GetAttributeAtVertex(input.uvVertex, 1),
                                                GetAttributeAtVertex(input.uvVertex, 2));
-    const PeSurfacePoint sp = PeRasterSurface(input.position,
-                                              input.positionWS.xyz,
-                                              input.normal,
-                                              input.tangent,
-                                              input.uv,
-                                              input.nextUv,
-                                              input.spriteBlend,
-                                              input.color,
-                                              fallbackSign);
+    PeSurfacePoint sp = PeRasterSurface(input.position,
+                                        input.positionWS.xyz,
+                                        input.normal,
+                                        input.tangent,
+                                        input.uv,
+                                        input.nextUv,
+                                        input.spriteBlend,
+                                        input.color,
+                                        fallbackSign);
+
+    // As material pass 2, with the facet from the position's screen derivatives (taken in uniform control flow).
+    const float3 facetNormal = cross(ddx(sp.P), ddy(sp.P));
+    PeBendLimbNormalFacet(facetNormal, normalize(cb_camPos.xyz - sp.P), sp);
 
     pe_P = sp.P;
     pe_N = sp.N;
