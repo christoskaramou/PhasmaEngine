@@ -4,6 +4,8 @@
 
 namespace pe
 {
+    struct NodeId;
+
     class SceneView : public Widget
     {
     public:
@@ -12,7 +14,12 @@ namespace pe
         void Update() override;
 
     private:
-        void PerformObjectPicking(float normalizedX, float normalizedY);
+        // cycle: a repeated click on the selection steps to the next hit behind it; right-click keeps it.
+        NodeId *PerformObjectPicking(float normalizedX, float normalizedY, bool cycle = true);
+        void OpenAgentContextMenu(float normalizedX, float normalizedY);
+        void DrawAgentContextMenu();
+
+        NodeId *m_contextNode = nullptr;
         void DrawGizmos(const ImVec2 &imageMin, const ImVec2 &imageSize);
         bool DrawRuntimeUiTransformGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);
         void DrawSkinnedStrip2DIkGizmo(const ImVec2 &imageMin, const ImVec2 &imageSize);

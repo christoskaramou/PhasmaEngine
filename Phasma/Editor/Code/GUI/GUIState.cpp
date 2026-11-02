@@ -47,6 +47,7 @@ namespace pe
     float GUIState::s_sceneViewImageAbsMinY = 0.0f;
     float GUIState::s_sceneViewImageWidth = 0.0f;
     float GUIState::s_sceneViewImageHeight = 0.0f;
+    float GUIState::s_sceneViewPanelAspect = 0.0f;
     bool GUIState::s_useTransformGizmo = true;
     bool GUIState::s_useLightGizmos = true;
     bool GUIState::s_useCameraGizmos = true;
@@ -107,6 +108,10 @@ namespace pe
 
     float GUIState::GetSceneViewAspectRatio(float fallbackAspect)
     {
+        // Free aspect fills the viewport panel, so the camera renders at the panel's shape.
+        if (s_sceneViewPanelAspect > 0.0f)
+            fallbackAspect = s_sceneViewPanelAspect;
+
         if (!std::isfinite(fallbackAspect) || fallbackAspect <= 0.0f)
             fallbackAspect = 16.0f / 9.0f;
 

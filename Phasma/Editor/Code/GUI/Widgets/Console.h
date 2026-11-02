@@ -44,6 +44,35 @@ namespace pe
     private:
         void TrimLogs();
         void MeasureLogs(float wrapWidth);
+        void DrawLogs(bool copy, float reservedHeight);
+        void DrawInput();
+        void ExecuteInput(std::string code);
+        void ListCommands(const std::string &filter);
+        void DrawCommandsWindow();
+        void UpdateMatches();
+        float SuggestionsHeight() const;
+        void DrawSuggestions(float height);
+        static int InputCallback(ImGuiInputTextCallbackData *data);
+
+        // Lua prompt: runs on the main thread through ScriptSystem::ExecuteLua, the same path as the MCP lua tool.
+        char m_input[1024] = {};
+        std::vector<std::string> m_history;
+        int m_historyPos = -1; // -1 = editing a new line
+        bool m_refocusInput = false;
+
+        // Suggestions for the word being typed; m_functions is refreshed each time the input gains focus.
+        std::vector<std::string> m_functions;
+        std::vector<int> m_matches; // indices into m_functions, prefix matches first
+        std::string m_matchedText;
+        int m_matchSel = -1;
+        bool m_scrollToMatch = false;
+        bool m_inputActive = false;
+        bool m_suggestHovered = false;
+
+        // "/commands" window: its own window so MCP log traffic can't scroll the list away
+        bool m_commandsOpen = false;
+        char m_commandsFilter[128] = {};
+        std::vector<std::string> m_commandList;
 
         std::vector<LogEntry> m_logs;
         std::vector<float> m_offsets; // m_offsets[i] = top of m_logs[i] in the wrapped layout, back() = total height

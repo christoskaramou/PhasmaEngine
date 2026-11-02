@@ -27,6 +27,8 @@ namespace pe
         Image *GetResolvedImage() const { return m_taaResolved; }
 
     private:
+        Image *OutputImage();
+
         Image *m_viewportRT = nullptr;
         Image *m_displayRT = nullptr;
         Image *m_depthStencil = nullptr;

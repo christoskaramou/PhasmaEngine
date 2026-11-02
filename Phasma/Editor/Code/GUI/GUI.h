@@ -56,6 +56,8 @@ namespace pe
         std::string SetEditorWindowOpen(const std::string &windowName, const std::string &argsJson);
         std::string InvokeEditorAction(const std::string &actionId, const std::string &argsJson);
         std::string InvokeEditorActionChecked(const std::string &actionId, const std::string &argsJson);
+        // Normal <-> Agent layout; applied at the start of the next Update so no window is mid-Begin.
+        void SetEditorMode(bool agent);
 
         // Called after the window is shown to apply the correct layout
         void ApplyStartupLayout(bool restoreLastScene, const RuntimeStartupSceneSelection &startupScene);
@@ -123,7 +125,13 @@ namespace pe
         void SaveEditorConfig();
         void SaveWindowState();
         void LoadWindowState();
+        void ApplyAgentWindowDefaults();
+        void ApplyPendingEditorMode();
+        void PlaceAgentConsole();
         void LoadAgentConfig();
+
+        int m_pendingAgentMode = -1; // -1 none, 0 normal, 1 agent
+        bool m_placeAgentConsole = false;
 
         bool m_showExitConfirmation = false;
         bool m_showSaveBeforeLoad = false;
@@ -144,6 +152,9 @@ namespace pe
         void RequestSaveScene();
 
         void Menu();
+        void AgentMenu();
+        void AgentMenuPlayButton();
+        void AgentMenuStatus();
         void StatusBar();
         void BuildDockspace();
         void ResetDockspaceLayout(uint32_t dockspaceId);

@@ -7,7 +7,7 @@ namespace pe
     class RuntimeUiPalette : public Widget
     {
     public:
-        RuntimeUiPalette() : Widget("UI Editor") {}
+        RuntimeUiPalette() : Widget("UI Editor") { m_open = false; }
         void Update() override;
     };
 } // namespace pe

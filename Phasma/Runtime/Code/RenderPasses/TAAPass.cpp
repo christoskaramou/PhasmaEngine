@@ -115,17 +115,25 @@ namespace pe
 
     void TAAPass::Update()
     {
-        auto &gSettings = ActivePostProcessProfile();
-        if (gSettings.cas_sharpening != m_casSharpeningEnabled)
+    }
+
+    Image *TAAPass::OutputImage()
+    {
+        // The Sharpen pass is enabled from the live profile, so follow it here too: a flag synced only in Update()
+        // lags a graph rebuilt in the frame the setting flips, and Sharpen then reads a TAA_Resolved nothing wrote.
+        const bool sharpen = ActivePostProcessProfile().cas_sharpening;
+        if (sharpen != m_casSharpeningEnabled)
         {
-            m_casSharpeningEnabled = gSettings.cas_sharpening;
+            m_casSharpeningEnabled = sharpen;
             UpdateDescriptorSets();
         }
+
+        return !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
     }
 
     void TAAPass::DeclareInputs(RGBuilder &builder)
     {
-        Image *taaOutput = !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+        Image *taaOutput = OutputImage();
         builder.ReadCompute(m_viewportRT);
         if (!m_resetHistory)
             builder.ReadCompute(m_historyImage);
@@ -135,7 +143,7 @@ namespace pe
 
     void TAAPass::DeclareOutputs(RGBuilder &builder)
     {
-        Image *taaOutput = !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+        Image *taaOutput = OutputImage();
 
         // ExecutePass transitions taaOutput/history for the copy operation and leaves
         // them in transfer layouts, so declare those as the final tracked states.
@@ -151,7 +159,7 @@ namespace pe
 
     void TAAPass::ExecutePass(CommandBuffer *cmd)
     {
-        Image *taaOutput = !SceneUsesHDR() && m_casSharpeningEnabled ? m_taaResolved : m_displayRT;
+        Image *taaOutput = OutputImage();
 
         struct TAAConstants
         {

@@ -38,6 +38,7 @@
 #include "Widgets/Particles.h"
 #include "Widgets/Properties.h"
 #include "Widgets/PrefabViewer.h"
+#include "Widgets/CommandPalette.h"
 #include "Widgets/RuntimeUiPalette.h"
 #include "Widgets/SceneScripts.h"
 #include "Widgets/SceneView.h"
@@ -187,8 +188,28 @@ namespace pe
         constexpr float kToolbarHeight = 35.0f;
         constexpr const char *kEditorGuiStyleKey = "gui_style";
         constexpr const char *kEditorFontScaleKey = "font_scale";
+        constexpr const char *kEditorModeKey = "editor_mode";
         constexpr float kMinEditorFontScale = 0.5f;
         constexpr float kMaxEditorFontScale = 2.5f;
+
+        // Agent mode: viewport + console only, a three-menu bar, no toolbar or status bar.
+        // Each mode keeps its own dock layout (.ini) and open-panel set (.json).
+        bool s_agentMode = false;
+
+        float ToolbarHeight()
+        {
+            return s_agentMode ? 0.0f : kToolbarHeight;
+        }
+
+        std::string LayoutIniPath()
+        {
+            return Path::Assets + (s_agentMode ? "imgui_agent.ini" : "imgui.ini");
+        }
+
+        std::string WindowStatePath()
+        {
+            return Path::Assets + (s_agentMode ? "editor_windows_agent.json" : "editor_windows.json");
+        }
 
         bool IsScriptTestFailureLine(const std::string &line)
         {
@@ -538,6 +559,7 @@ namespace pe
             nlohmann::ordered_json j = LoadEditorConfigObject(path);
             j[kEditorGuiStyleKey] = StyleId(GUIState::s_guiStyle);
             j[kEditorFontScaleKey] = ImGui::GetIO().FontGlobalScale;
+            j[kEditorModeKey] = s_agentMode ? "agent" : "normal";
 
             std::error_code ec;
             std::filesystem::create_directories(path.parent_path(), ec);
@@ -560,6 +582,8 @@ namespace pe
             }
             if (j.contains(kEditorFontScaleKey) && j[kEditorFontScaleKey].is_number())
                 SetEditorFontScale(j[kEditorFontScaleKey].get<float>(), false);
+            if (j.contains(kEditorModeKey) && j[kEditorModeKey].is_string())
+                s_agentMode = j[kEditorModeKey].get<std::string>() == "agent";
             ui::ApplyTheme(GUIState::s_guiStyle);
         }
 
@@ -919,7 +943,20 @@ namespace pe
             {"style", StyleId(GUIState::s_guiStyle)},
             {"font_scale", ImGui::GetIO().FontGlobalScale},
             {"render_enabled", m_render},
+            {"editor_mode", s_agentMode ? "agent" : "normal"},
         };
+
+        // Lets an agent resolve "this object" / "the selected one" without screenshots.
+        auto &selection = SelectionManager::Instance();
+        RendererSystem *selectionRenderer = GetGlobalSystem<RendererSystem>();
+        NodeId *selectedNode = selection.HasSelection() ? selection.GetSelectedNode() : nullptr;
+        if (selectedNode && selectionRenderer)
+        {
+            result["state"]["selected_node"] = {
+                {"id", "node:" + std::to_string(selectedNode->index) + ":" + std::to_string(selectedNode->revision)},
+                {"name", selectionRenderer->GetScene().GetNodeName(selectedNode)},
+            };
+        }
 
         auto addAction = [&](const std::string &id, const std::string &label, const std::string &category,
                              const std::string &kind, bool enabled, bool checked, bool hasChecked)
@@ -1017,6 +1054,11 @@ namespace pe
                   ImGui::GetIO().FontGlobalScale >= 1.15f && ImGui::GetIO().FontGlobalScale < 1.35f, true);
         addAction("layout.font.extra_large", "Extra Large Font", "Layout", "choice", true, ImGui::GetIO().FontGlobalScale >= 1.35f, true);
         addAction("layout.reset", "Reset to Default Layout", "Layout", "command", true, false, false);
+        addAction("layout.mode.normal", "Normal Mode", "Layout", "choice", true, !s_agentMode, true);
+        addAction("layout.mode.agent", "Agent Mode", "Layout", "choice", true, s_agentMode, true);
+        addAction("layout.mode.toggle", "Toggle Agent Mode", "Layout", "command", true, false, false);
+        const bool hasPalette = GetWidget<CommandPalette>() != nullptr;
+        addAction("edit.command_palette", "Command Palette", "Edit", "command", hasPalette, false, false);
 
         addAction("play.start", "Play", "Toolbar", "command", !GUIState::s_playMode, false, false);
         addAction("play.stop", "Stop", "Toolbar", "command", GUIState::s_playMode, false, false);
@@ -1492,6 +1534,27 @@ namespace pe
         if (action == "layout.reset")
         {
             m_requestDockReset = true;
+            return ok();
+        }
+
+        if (action.rfind("layout.mode.", 0) == 0)
+        {
+            const std::string mode = action.substr(12);
+            if (mode != "normal" && mode != "agent" && mode != "toggle")
+                return nlohmann::json{{"error", "unknown editor mode: " + mode}}.dump();
+
+            const bool agent = mode == "toggle" ? !s_agentMode : mode == "agent";
+            SetEditorMode(agent);
+            return ok({{"editor_mode", agent ? "agent" : "normal"}, {"status", "applies next frame"}});
+        }
+
+        if (action == "edit.command_palette")
+        {
+            auto *palette = GetWidget<CommandPalette>();
+            if (!palette)
+                return R"({"error":"Command Palette not available"})";
+
+            palette->Open();
             return ok();
         }
 
@@ -2444,22 +2507,66 @@ namespace pe
 
     void GUI::SaveWindowState()
     {
-        const std::string path = Path::Assets + "editor_windows.json";
         nlohmann::json j;
         for (const auto &w : m_menuWindowWidgets)
             j[w->GetName()] = *w->GetOpen();
 
-        std::ofstream f(path);
+        std::ofstream f(WindowStatePath());
         if (f)
             f << j.dump(2);
     }
 
+    void GUI::SetEditorMode(bool agent)
+    {
+        m_pendingAgentMode = agent ? 1 : 0;
+    }
+
+    // Runs at the top of Update, before any editor window begins this frame. Loading .ini data
+    // mid-session is supported: the dock handler clears its nodes on read and every live window
+    // gets its saved DockId re-applied (imgui.cpp, DockSettingsHandler_ClearAll / ApplyWindowSettings).
+    void GUI::ApplyPendingEditorMode()
+    {
+        if (m_pendingAgentMode < 0)
+            return;
+
+        const bool agent = m_pendingAgentMode == 1;
+        m_pendingAgentMode = -1;
+        if (agent == s_agentMode)
+            return;
+
+        SaveWindowState();
+        ImGui::SaveIniSettingsToDisk(m_iniFilePath.c_str());
+
+        s_agentMode = agent;
+        m_iniFilePath = LayoutIniPath();
+        ImGui::GetIO().IniFilename = m_iniFilePath.c_str();
+
+        ImGui::ClearIniSettings();
+        if (std::filesystem::exists(m_iniFilePath))
+            ImGui::LoadIniSettingsFromDisk(m_iniFilePath.c_str());
+        else
+            m_requestDockReset = true;
+
+        LoadWindowState();
+        PersistEditorLayoutSettings();
+        PE_INFO("[Editor] %s mode", agent ? "Agent" : "Normal");
+    }
+
+    void GUI::ApplyAgentWindowDefaults()
+    {
+        for (auto &w : m_menuWindowWidgets)
+            *w->GetOpen() = w->GetName() == "Console";
+    }
+
     void GUI::LoadWindowState()
     {
-        const std::string path = Path::Assets + "editor_windows.json";
-        std::ifstream f(path);
+        std::ifstream f(WindowStatePath());
         if (!f)
+        {
+            if (s_agentMode)
+                ApplyAgentWindowDefaults();
             return;
+        }
 
         nlohmann::json j = nlohmann::json::parse(f, nullptr, false);
         if (j.is_discarded())
@@ -2674,8 +2781,8 @@ namespace pe
             return;
 
         ImGuiViewport *viewport = ImGui::GetMainViewport();
-        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + kToolbarHeight));
-        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - kToolbarHeight));
+        ImGui::SetNextWindowPos(ImVec2(viewport->WorkPos.x, viewport->WorkPos.y + ToolbarHeight()));
+        ImGui::SetNextWindowSize(ImVec2(viewport->WorkSize.x, viewport->WorkSize.y - ToolbarHeight()));
         ImGui::SetNextWindowViewport(viewport->ID);
 
         ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
@@ -2696,7 +2803,10 @@ namespace pe
         ImGui::Begin("EditorDockSpaceHost", &open, windowFlags);
         ImGui::PopStyleVar(3);
 
-        const ImGuiDockNodeFlags dockspaceFlags = ImGuiDockNodeFlags_None;
+        // Agent mode drops the tab strip of any dock node holding a single window.
+        const ImGuiDockNodeFlags dockspaceFlags = s_agentMode
+                                                      ? ImGuiDockNodeFlags_AutoHideTabBar
+                                                      : ImGuiDockNodeFlags_None;
 
         ImGuiID dockspaceId = ImGui::GetID("EditorDockSpace");
         m_dockspaceId = static_cast<uint32_t>(dockspaceId);
@@ -2712,6 +2822,9 @@ namespace pe
             }
         }
 
+        if (m_placeAgentConsole)
+            PlaceAgentConsole();
+
         ImGui::End();
     }
 
@@ -2722,13 +2835,24 @@ namespace pe
 
         ImGuiID dockspace = static_cast<ImGuiID>(dockspaceId);
         ImGuiViewport *viewport = ImGui::GetMainViewport();
-        ImVec2 dockPos(viewport->WorkPos.x, viewport->WorkPos.y + kToolbarHeight);
-        ImVec2 dockSize(viewport->WorkSize.x, viewport->WorkSize.y - kToolbarHeight);
+        ImVec2 dockPos(viewport->WorkPos.x, viewport->WorkPos.y + ToolbarHeight());
+        ImVec2 dockSize(viewport->WorkSize.x, viewport->WorkSize.y - ToolbarHeight());
 
         ImGui::DockBuilderRemoveNode(dockspace);
         ImGui::DockBuilderAddNode(dockspace, ImGuiDockNodeFlags_DockSpace);
         ImGui::DockBuilderSetNodePos(dockspace, dockPos);
         ImGui::DockBuilderSetNodeSize(dockspace, dockSize);
+
+        if (s_agentMode)
+        {
+            ApplyAgentWindowDefaults();
+
+            // The viewport fills the window; the Console floats over it (placed once it exists).
+            ImGui::DockBuilderDockWindow("Viewport", dockspace);
+            ImGui::DockBuilderFinish(dockspace);
+            m_placeAgentConsole = true;
+            return;
+        }
 
         constexpr float dockRightFrac = 1.0f / 7.0f;
         constexpr float dockLeftFrac = 1.0f / 6.0f;
@@ -2758,6 +2882,25 @@ namespace pe
 
         // Make Console the active tab
         ImGui::SetWindowFocus("Console");
+    }
+
+    // Floating Console in the bottom-right corner of the main window, undocked.
+    void GUI::PlaceAgentConsole()
+    {
+        ImGuiWindow *console = ImGui::FindWindowByName("Console");
+        if (!console)
+            return;
+
+        const ImGuiViewport *vp = ImGui::GetMainViewport();
+        const ImVec2 size(vp->WorkSize.x * 0.45f, vp->WorkSize.y * 0.35f);
+        const float margin = 16.0f;
+        const ImVec2 pos(vp->WorkPos.x + vp->WorkSize.x - size.x - margin,
+                         vp->WorkPos.y + vp->WorkSize.y - size.y - margin);
+
+        ImGui::SetWindowDock(console, 0, ImGuiCond_Always);
+        ImGui::SetWindowPos(console, pos, ImGuiCond_Always);
+        ImGui::SetWindowSize(console, size, ImGuiCond_Always);
+        m_placeAgentConsole = false;
     }
 
     void GUI::StatusBar()
@@ -2871,8 +3014,169 @@ namespace pe
         ImGui::End();
     }
 
+    void GUI::AgentMenu()
+    {
+        if (!ImGui::BeginMainMenuBar())
+            return;
+
+        if (ImGui::BeginMenu("File"))
+        {
+            if (ImGui::MenuItem("New Scene"))
+                NewScene();
+            ShowLoadSceneMenuItem();
+            ShowSaveSceneMenuItem();
+            if (ImGui::MenuItem("Save Scene As..."))
+                ShowSaveSceneMenuItem_Action();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Reload Module"))
+                EventSystem::PushEvent(EventType::ReloadModule);
+            ImGui::Separator();
+            ShowExitMenuItem();
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Mode"))
+        {
+            if (ImGui::MenuItem("Normal", "Ctrl+Shift+M", false))
+                SetEditorMode(false);
+            ui::ItemTooltip("Back to the full editor layout (all panels, toolbar and status bar).");
+            ImGui::MenuItem("Agent", nullptr, true);
+            ImGui::Separator();
+            if (auto *console = GetWidget<Console>())
+                ImGui::MenuItem("Console", nullptr, console->GetOpen());
+            if (ImGui::MenuItem("Reset Layout"))
+                m_requestDockReset = true;
+            ui::ItemTooltip("Viewport fills the window, Console floats in the bottom-right corner.");
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu("Agent"))
+        {
+            const bool mcpRunning = IsMcpServerRunning();
+            if (ImGui::MenuItem("MCP Server", nullptr, mcpRunning))
+                SetMcpServerEnabled(!mcpRunning);
+            if (ImGui::MenuItem("Index Codebase", nullptr, false, !m_isIndexing.load()))
+                StartCodebaseIndexing();
+            ImGui::Separator();
+            if (ImGui::MenuItem("Command Palette", "Ctrl+P"))
+            {
+                if (auto *palette = GetWidget<CommandPalette>())
+                    palette->Open();
+            }
+            ui::ItemTooltip("Search and run any editor action, including opening hidden panels.");
+            ImGui::EndMenu();
+        }
+
+        AgentMenuPlayButton();
+        AgentMenuStatus();
+        ImGui::EndMainMenuBar();
+    }
+
+    void GUI::AgentMenuPlayButton()
+    {
+        const char *icon = GUIState::s_playMode ? ICON_FA_STOP : ICON_FA_PLAY;
+        const float width = ImGui::GetFrameHeight();
+        ImGui::SetCursorPosX((ImGui::GetWindowWidth() - width) * 0.5f);
+
+        const ImVec4 stopColor(0.9f, 0.3f, 0.3f, 1.0f);
+        const ImVec4 playColor(0.3f, 0.8f, 0.4f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        ImGui::PushStyleColor(ImGuiCol_Text, GUIState::s_playMode ? stopColor : playColor);
+        if (ImGui::Button(icon, ImVec2(width, 0.0f)))
+        {
+            if (GUIState::s_playMode)
+                Stop();
+            else
+                Play();
+        }
+        ImGui::PopStyleColor(2);
+        ui::ItemTooltip(GUIState::s_playMode
+                            ? "Stop play mode (Esc)."
+                            : "Enter play mode. Press Esc to return to the editor.");
+    }
+
+    // Right end of the agent menu bar: what the hidden status bar would say, only when it says something.
+    void GUI::AgentMenuStatus()
+    {
+        RefreshModuleBuild(ImGui::GetTime());
+        RefreshModelClips(ImGui::GetTime());
+
+        auto *console = GetWidget<Console>();
+        const int errors = console ? console->GetErrorCount() : 0;
+        const int warns = console ? console->GetWarnCount() : 0;
+        const bool mcpRunning = IsMcpServerRunning();
+
+        char errText[24];
+        char warnText[24];
+        snprintf(errText, sizeof(errText), "x %d##agent_err", errors);
+        snprintf(warnText, sizeof(warnText), "! %d##agent_warn", warns);
+
+        // Right-align the shown buttons: each one is its label plus frame padding plus the gap before the next.
+        const ImGuiStyle &style = ImGui::GetStyle();
+        const char *mcpText = ICON_FA_CIRCLE " MCP";
+        const char *staleText = "New build";
+        auto buttonWidth = [&](const char *text, bool shown)
+        {
+            if (!shown)
+                return 0.0f;
+
+            return ImGui::CalcTextSize(text, nullptr, true).x + style.FramePadding.x * 2.0f + style.ItemSpacing.x;
+        };
+
+        const float totalW = buttonWidth(staleText, s_moduleBuild.stale) +
+                             buttonWidth(errText, errors > 0) +
+                             buttonWidth(warnText, warns > 0) +
+                             buttonWidth(mcpText, true) -
+                             style.ItemSpacing.x;
+        ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalW - style.WindowPadding.x);
+
+        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+        if (s_moduleBuild.stale)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.55f, 0.15f, 1.0f));
+            if (ImGui::SmallButton(staleText))
+                EventSystem::PushEvent(EventType::ReloadModule);
+            ImGui::PopStyleColor();
+            ui::ItemTooltip("A newer editor module is on disk. Click to reload it (scene and layout are kept).");
+        }
+
+        if (errors > 0)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+            if (ImGui::SmallButton(errText) && console)
+                console->FocusWithFilter("[ERROR]");
+            ImGui::PopStyleColor();
+            ui::ItemTooltip("Filter the console to error messages.");
+        }
+
+        if (warns > 0)
+        {
+            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.1f, 1.0f));
+            if (ImGui::SmallButton(warnText) && console)
+                console->FocusWithFilter("[WARN]");
+            ImGui::PopStyleColor();
+            ui::ItemTooltip("Filter the console to warning messages.");
+        }
+
+        const ImVec4 onColor(0.3f, 0.8f, 0.4f, 1.0f);
+        const ImVec4 offColor(0.45f, 0.45f, 0.45f, 1.0f);
+        ImGui::PushStyleColor(ImGuiCol_Text, mcpRunning ? onColor : offColor);
+        if (ImGui::SmallButton(mcpText))
+            SetMcpServerEnabled(!mcpRunning);
+        ImGui::PopStyleColor(2);
+        ui::ItemTooltip(mcpRunning
+                            ? "MCP server running on 127.0.0.1:8765. Click to stop it."
+                            : "MCP server stopped. Click to start it.");
+    }
+
     void GUI::Menu()
     {
+        if (s_agentMode)
+        {
+            AgentMenu();
+            return;
+        }
+
         if (ImGui::BeginMainMenuBar())
         {
             const bool fileMenuOpen = ImGui::BeginMenu("File");
@@ -2919,6 +3223,13 @@ namespace pe
                         undoRedo.Redo(rs->GetScene());
                 }
                 ui::ItemTooltip("Redo the most recently undone scene edit.", ImGuiHoveredFlags_DelayShort | ImGuiHoveredFlags_AllowWhenDisabled);
+                ImGui::Separator();
+                if (ImGui::MenuItem("Command Palette", "Ctrl+P"))
+                {
+                    if (auto *palette = GetWidget<CommandPalette>())
+                        palette->Open();
+                }
+                ui::ItemTooltip("Search and run any editor action.");
                 ImGui::EndMenu();
             }
 
@@ -3113,6 +3424,17 @@ namespace pe
                     ui::ItemTooltip("Use the largest editor font scale.");
                     ImGui::EndMenu();
                 }
+                const bool modeMenuOpen = ImGui::BeginMenu("Mode");
+                ui::ItemTooltip("Switch between the full editor and the agent layout.");
+                if (modeMenuOpen)
+                {
+                    ImGui::MenuItem("Normal", nullptr, true);
+                    if (ImGui::MenuItem("Agent", "Ctrl+Shift+M", false))
+                        SetEditorMode(true);
+                    ui::ItemTooltip("Viewport and console only, with a three-menu bar. "
+                                    "Each mode keeps its own layout.");
+                    ImGui::EndMenu();
+                }
                 ImGui::Separator();
                 if (ImGui::MenuItem("Reset to Default Layout", "Ctrl+Shift+L"))
                     m_requestDockReset = true;
@@ -3248,8 +3570,6 @@ namespace pe
             return;
 
         Path::Init();
-        m_iniFilePath = Path::Assets + "imgui.ini";
-        m_hasIniFile = std::filesystem::exists(m_iniFilePath);
 
         // A fresh context per module load: a context handed across a reload keeps ImGui-internal function
         // pointers (settings handlers, platform callbacks) into the unloaded DLL. imgui.ini + the UI snapshot
@@ -3358,6 +3678,8 @@ namespace pe
         GUIBackend::CreateFontsTexture();
 
         ApplyPersistedEditorLayoutSettings();
+        m_iniFilePath = LayoutIniPath();
+        m_hasIniFile = std::filesystem::exists(m_iniFilePath);
 
         auto AddGpuTimerInfo = [this](const std::any &data)
         {
@@ -3402,6 +3724,7 @@ namespace pe
         auto terrainBrush = std::make_shared<TerrainBrush>();
         auto runtimeUiPalette = std::make_shared<RuntimeUiPalette>();
         auto sceneScripts = std::make_shared<SceneScripts>();
+        auto commandPalette = std::make_shared<CommandPalette>();
 #ifdef PE_PHYSICS
         auto physicsWidget = std::make_shared<PhysicsWidget>();
 #endif
@@ -3434,6 +3757,7 @@ namespace pe
             terrainBrush,
             runtimeUiPalette,
             sceneScripts,
+            commandPalette,
 #ifdef PE_PHYSICS
             physicsWidget,
 #endif
@@ -3616,6 +3940,8 @@ namespace pe
         if (!m_render)
             return;
 
+        ApplyPendingEditorMode();
+
         // Push the font for the current style
         ImFont *currentFont = GUIState::s_fontClassic;
 
@@ -3664,6 +3990,15 @@ namespace pe
                 }
                 if (!io.WantTextInput && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_L, false))
                     m_requestDockReset = true;
+
+                if (!io.WantTextInput && io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_M, false))
+                    SetEditorMode(!s_agentMode);
+
+                if (!io.WantTextInput && !io.KeyShift && ImGui::IsKeyPressed(ImGuiKey_P, false))
+                {
+                    if (auto *palette = GetWidget<CommandPalette>())
+                        palette->Open();
+                }
 
                 // Ctrl+S - save scene (asks for confirmation before overwriting)
                 if (ImGui::IsKeyPressed(ImGuiKey_S, false))
@@ -3737,13 +4072,15 @@ namespace pe
         {
             PE_PROFILE_SCOPE("Menu & Dockspace");
             Menu();
-            StatusBar();
+            if (!s_agentMode)
+                StatusBar();
             DrawExitPopup();
             DrawSaveBeforeLoadPopup();
             DrawSaveBeforeNewPopup();
             DrawOverwriteConfirmationPopup();
             DrawConfirmSavePopup();
-            Toolbar();
+            if (!s_agentMode)
+                Toolbar();
             BuildDockspace();
         }
 

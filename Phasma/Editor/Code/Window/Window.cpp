@@ -203,10 +203,13 @@ namespace pe
         }
 
         if (runtimeUi)
-        {
             InputState::SetMouseCapturedByUi(runtimeUi->WantsMouseCapture());
-            InputState::SetKeyboardCapturedByUi(runtimeUi->WantsKeyboardCapture());
-        }
+
+        // Typing in an editor text field (Console Lua line, filters, palette) must not reach
+        // game keys or the runtime UI debug binds.
+        const bool editorTyping = ImGui::GetCurrentContext() && ImGui::GetIO().WantTextInput;
+        const bool runtimeTyping = runtimeUi && runtimeUi->WantsKeyboardCapture();
+        InputState::SetKeyboardCapturedByUi(editorTyping || runtimeTyping);
 
         EventSystem::QueuedEvent event;
         while (EventSystem::PollEvent(event))
@@ -233,8 +236,7 @@ namespace pe
                     if (event.payload.has_value() && event.payload.type() == typeid(size_t))
                         hash = std::any_cast<size_t>(event.payload);
 
-                    rendererSystem->PollShaders(hash);
-                    CommandBuffer::ClearCache(); // force fresh pipeline rebuild with new shaders
+                    rendererSystem->PollShaders(hash); // retires the pipelines of passes whose shaders changed
                     break;
                 }
                 case EventType::CompileScripts:

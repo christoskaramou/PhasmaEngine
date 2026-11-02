@@ -52,6 +52,7 @@ namespace pe
         static float s_sceneViewImageAbsMinY;
         static float s_sceneViewImageWidth;
         static float s_sceneViewImageHeight;
+        static float s_sceneViewPanelAspect; // viewport panel width / height, 0 until drawn
         static bool s_useTransformGizmo;
         static bool s_useLightGizmos;
         static bool s_useCameraGizmos;

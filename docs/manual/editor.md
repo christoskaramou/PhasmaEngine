@@ -13,7 +13,23 @@ The default dock, restored with **Layout → Reset to Default Layout** (`Ctrl+Sh
 | Right | **Properties**, then **Camera** |
 | Bottom | **Console**, **File Browser** |
 
-**Window** shows or hides every other panel. Drag the tabs to redock them. **Window → Viewport → Floating** pulls the view into its own window; **Redock** puts it back. **Aspect Ratio** letterboxes the view: Free, 16:9, 9:16, 19.5:9, 9:19.5, or 1:1.
+**Window** shows or hides every other panel. Drag the tabs to redock them. **Window → Viewport → Floating** pulls the view into its own window; **Redock** puts it back. **Aspect Ratio** letterboxes the view: Free (fills the panel, whatever its shape), 16:9, 9:16, 19.5:9, 9:19.5, or 1:1.
+
+## Agent mode
+
+For working with an AI agent through the [MCP server](#connection). **Layout → Mode → Agent** (or `Ctrl+Shift+M`) leaves only the **Viewport**, filling the window, and the **Console**, floating in the bottom-right corner (drag it anywhere; **Mode → Console** shows or hides it). The toolbar and status bar go away and the menu bar shrinks to **File**, **Mode** and **Agent**, with Play in the middle and, on the right, the MCP dot plus error and warning counts when there are any. `Ctrl+Shift+M` or **Mode → Normal** goes back.
+
+Each mode remembers its own dock layout and open panels, so switching never rearranges the other one. A panel opened in agent mode (through the command palette or by an agent) stays part of the agent layout until you close it; **Mode → Reset Layout** returns agent mode to the full-window viewport and floating console.
+
+## Command palette
+
+`Ctrl+P` (or **Edit → Command Palette**, **Agent → Command Palette**) searches every editor action: panels, gizmos, styles, file commands, play, mode. Type part of a name, move with Up / Down, press Enter or click. These are the same actions an MCP agent invokes, minus the ones that need arguments.
+
+## Console input
+
+The line under the console log runs Lua in the editor's script state, the same one the MCP `execute_lua` tool uses. `=expr` prints a value, for example `=scene.get_node_count()`. Up / Down walk the history; Esc clears the line.
+
+As you type a name, a list of matching Lua functions opens above the line (names that start with the word come first). Up / Down move through the list while it is open; Tab, Enter or a click puts the highlighted name in the line (Tab takes the first one if none is highlighted). `/commands` opens a separate **Lua Commands** window listing every Lua function, with a filter box (`/commands scene` opens it filtered to "scene"). Clicking a name puts it in the console's Lua line. The window stays put while MCP agents fill the log.
 
 ## Toolbar
 
@@ -26,6 +42,8 @@ The default dock, restored with **Layout → Reset to Default Layout** (`Ctrl+Sh
 ## Viewport
 
 Click to select. The gizmo on the selection is **Translate (W)**, **Rotate (E)**, or **Scale (R)**. Those buttons live on the selection in Properties. **Local / World** switches the gizmo axes; scale always uses local axes. Hold **Ctrl** while dragging to snap; the snap step is the **Snap** field next to the gizmo buttons.
+
+A quick **right-click** (no drag, no hold) selects what is under the cursor and opens an agent menu: **Check this**, **Explain this** and **Fix this** copy a ready-made request naming that object (or the whole scene, on empty space) to the clipboard to paste into your agent chat. **Copy reference** copies just its name and id. Agents can also read the current selection from `list_editor_actions` (`state.selected_node`).
 
 Hold the **right mouse button** in the view to look. While it is held, **WASD** moves, **Left Shift** is faster, and **Space** / **Left Ctrl** go up and down. That fly script steps aside during play, so a game's own script owns those keys. Right-drag also suspends the gizmo so you do not grab it by accident.
 
@@ -61,7 +79,7 @@ Hold the **right mouse button** in the view to look. While it is held, **WASD** 
 
 ### Edit
 
-Undo and redo, described on the toolbar.
+Undo and redo, described on the toolbar, and the [Command Palette](#command-palette).
 
 ### Connection
 
@@ -76,6 +94,7 @@ Undo and redo, described on the toolbar.
 |---|---|
 | **Style** | Classic, Dark, Light, Modern, Unity, or Unreal. |
 | **Font Size** | Small (0.85), Medium (1), Large (1.25), Extra Large (1.5). |
+| **Mode** | Normal or [Agent](#agent-mode) (`Ctrl+Shift+M`). |
 | **Reset to Default Layout** | `Ctrl+Shift+L`. |
 
 ### Help
@@ -281,7 +300,7 @@ Smooth streamed terrain, one node, centred on the node.
 | Panel | What it is for |
 |---|---|
 | **File Browser** | The project Assets tree. **Open**, **Open in Prefab Viewer**, **Open in File Manager**, **Rename** (F2), **Copy** (Ctrl+C), **Paste** (Ctrl+V), **Delete** (Del), **New Folder**, **Refresh**. |
-| **Console** | Engine log. The status-bar buttons filter it to errors or warnings. |
+| **Console** | Engine log, plus a [Lua input line](#console-input). The status-bar buttons filter it to errors or warnings. |
 | **Profiler** | This editor's own frame and GPU-pass timings. It is not [Phasma Profiler](profiler.md); that one attaches to a running Player. |
 | **Script Editor** | Edit the Lua on a node, with **Show Functions** to browse what the script defines. The calls a script can make are in [Scripting](scripting.md). |
 | **Shader Editor** | Edit a shader the project overrides. Engine shaders hot-reload from the runtime assets. |
@@ -298,6 +317,9 @@ Smooth streamed terrain, one node, centred on the node.
 | Ctrl+S | Save scene |
 | Ctrl+Z / Ctrl+Y | Undo / redo |
 | Ctrl+Shift+L | Reset the dock layout |
+| Ctrl+Shift+M | Toggle agent mode |
+| Ctrl+P | Command palette |
+| Right-click (quick) | Agent menu for the object under the cursor |
 | W / E / R | Move / rotate / scale gizmo |
 | Ctrl while dragging | Snap |
 | Right mouse + WASD | Fly the camera |

@@ -852,6 +852,7 @@ namespace pe
         const ImVec2 panelMax(panelMin.x + panel.x, panelMin.y + panel.y);
         ImGui::GetWindowDrawList()->AddRectFilled(panelMin, panelMax, IM_COL32(0, 0, 0, 255));
 
+        GUIState::s_sceneViewPanelAspect = panel.x / panel.y;
         const float sourceAspect = (float)sceneTexture->GetWidth() / (float)sceneTexture->GetHeight();
         const float targetAspect = GUIState::GetSceneViewAspectRatio(sourceAspect);
         const ImVec2 imageSize = ComputeAspectFitSize(panel, targetAspect);
@@ -913,7 +914,22 @@ namespace pe
             {
                 ImGui::SetWindowFocus();
             }
+
+            // A quick, still right-click opens the agent menu; holding or dragging right is camera look/fly.
+            const ImGuiIO &io = ImGui::GetIO();
+            const float dragThreshold = io.MouseDragThreshold;
+            const bool rightTap = ImGui::IsMouseReleased(ImGuiMouseButton_Right) &&
+                                  io.MouseDragMaxDistanceSqr[ImGuiMouseButton_Right] < dragThreshold * dragThreshold &&
+                                  io.MouseDownDurationPrev[ImGuiMouseButton_Right] < 0.3f;
+            if (imageHovered && rightTap)
+            {
+                const ImVec2 mouse = ImGui::GetMousePos();
+                OpenAgentContextMenu((mouse.x - imageMin.x) / (imageMax.x - imageMin.x),
+                                     (mouse.y - imageMin.y) / (imageMax.y - imageMin.y));
+            }
         }
+
+        DrawAgentContextMenu();
 
         // Drag&drop
         const ImGuiID viewportDropId = ImGui::GetID("ViewportRuntimeUiDropTarget");
@@ -988,19 +1004,19 @@ namespace pe
         ImGui::End();
     }
 
-    void SceneView::PerformObjectPicking(float normalizedX, float normalizedY)
+    NodeId *SceneView::PerformObjectPicking(float normalizedX, float normalizedY, bool cycle)
     {
         RendererSystem *renderer = GetGlobalSystem<RendererSystem>();
         Scene &scene = renderer->GetScene();
         Camera *camera = scene.GetActiveCamera();
 
         if (!camera)
-            return;
+            return nullptr;
 
         vec3 rayOrigin(0.0f);
         vec3 rayDir(0.0f);
         if (!BuildViewportRay(camera, normalizedX, normalizedY, rayOrigin, rayDir))
-            return;
+            return nullptr;
         vec3 camPos = camera->GetPosition();
 
         struct Intersection
@@ -1052,7 +1068,7 @@ namespace pe
         auto &selection = SelectionManager::Instance();
 
         if (intersections.empty())
-            return;
+            return nullptr;
 
         // Sort by distance
         std::sort(intersections.begin(), intersections.end(), [](const Intersection &a, const Intersection &b)
@@ -1069,13 +1085,101 @@ namespace pe
             {
                 if (intersections[i].node == currentNode)
                 {
-                    selectIndex = (i + 1) % intersections.size();
+                    selectIndex = cycle ? (i + 1) % static_cast<int>(intersections.size()) : i;
                     break;
                 }
             }
         }
 
         selection.Select(intersections[selectIndex].node);
+        return intersections[selectIndex].node;
+    }
+
+    namespace
+    {
+        // Copy-paste prompts for an external agent (Claude Code, Codex) attached through the editor MCP server.
+        struct AgentPrompt
+        {
+            const char *label;
+            const char *tooltip;
+            const char *nodeText;  // %s = node name, %s = node id
+            const char *sceneText; // used when the click hit no object
+        };
+
+        constexpr AgentPrompt kAgentPrompts[] = {
+            {"Check this", "Ask the agent to inspect it and report anything that looks wrong.",
+             "In the running PhasmaEditor (MCP server phasmaeditor), check scene node \"%s\" (%s). Use get_node_info, "
+             "then report its transform, mesh, material and components and anything that looks wrong. Don't change it yet.",
+             "In the running PhasmaEditor (MCP server phasmaeditor), check the open scene. Use get_scene_info and "
+             "report anything that looks wrong (missing materials, bad transforms, disabled nodes, errors in the console). "
+             "Don't change anything yet."},
+            {"Explain this", "Ask the agent what it is and how it is set up.",
+             "In the running PhasmaEditor (MCP server phasmaeditor), explain scene node \"%s\" (%s): what it is, "
+             "how it is set up and which scripts or systems affect it. Use get_node_info.",
+             "In the running PhasmaEditor (MCP server phasmaeditor), give me an overview of the open scene: main "
+             "objects, lights, cameras and scripts. Use get_scene_info."},
+            {"Fix this", "Ask the agent to find and fix problems, describing each change.",
+             "In the running PhasmaEditor (MCP server phasmaeditor), find what's wrong with scene node \"%s\" (%s) "
+             "and fix it through the editor tools. Describe each change.",
+             "In the running PhasmaEditor (MCP server phasmaeditor), find problems in the open scene and fix them "
+             "through the editor tools. Describe each change."},
+        };
+
+        std::string NodeRef(const NodeId *node)
+        {
+            return "node:" + std::to_string(node->index) + ":" + std::to_string(node->revision);
+        }
+    } // namespace
+
+    void SceneView::OpenAgentContextMenu(float normalizedX, float normalizedY)
+    {
+        m_contextNode = PerformObjectPicking(normalizedX, normalizedY, false);
+        ImGui::OpenPopup("##ViewportAgentMenu");
+    }
+
+    void SceneView::DrawAgentContextMenu()
+    {
+        if (!ImGui::BeginPopup("##ViewportAgentMenu"))
+            return;
+
+        Scene *scene = GetActiveScene();
+        const bool hasNode = scene && m_contextNode && scene->IsNodeAlive(m_contextNode);
+        const std::string name = hasNode ? scene->GetNodeName(m_contextNode) : std::string();
+        const std::string ref = hasNode ? NodeRef(m_contextNode) : std::string();
+
+        ImGui::TextDisabled("%s", hasNode ? name.c_str() : "Scene");
+        ImGui::Separator();
+
+        for (const AgentPrompt &prompt : kAgentPrompts)
+        {
+            if (ImGui::MenuItem(prompt.label))
+            {
+                char text[768];
+                if (hasNode)
+                    snprintf(text, sizeof(text), prompt.nodeText, name.c_str(), ref.c_str());
+                else
+                    snprintf(text, sizeof(text), "%s", prompt.sceneText);
+
+                ImGui::SetClipboardText(text);
+                PE_INFO("[Agent] \"%s\" request for %s copied to the clipboard - paste it (Ctrl+V) into your agent chat",
+                        prompt.label,
+                        hasNode ? name.c_str() : "the scene");
+            }
+            ui::ItemTooltip(prompt.tooltip);
+        }
+
+        if (hasNode)
+        {
+            ImGui::Separator();
+            if (ImGui::MenuItem("Copy reference"))
+            {
+                const std::string text = "\"" + name + "\" (" + ref + ")";
+                ImGui::SetClipboardText(text.c_str());
+            }
+            ui::ItemTooltip("Copy the node's name and id, e.g. to mention it in a longer request.");
+        }
+
+        ImGui::EndPopup();
     }
 
     vec3 GetDirectionFromRotation(const vec4 &rotation)
