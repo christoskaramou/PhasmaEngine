@@ -377,6 +377,9 @@ target_link_libraries(Lua INTERFACE luajit::lib luajit::header)
 # exports the source dir, so sol2's lua.hpp can't see it without this.
 target_include_directories(Lua INTERFACE "${CMAKE_BINARY_DIR}/luajit-cmake")
 target_compile_definitions(Lua INTERFACE PE_LUAJIT=1)
+# sol2 checks 'self' only in debug builds by default; in Release obj.method() (instead of obj:method())
+# dereferenced a null self and crashed the editor. Every sol2 user links Lua, so all agree on this.
+target_compile_definitions(Lua INTERFACE SOL_SAFE_USERTYPE=1)
 
 if(PE_BUILD_MCP)
     # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer). Added
