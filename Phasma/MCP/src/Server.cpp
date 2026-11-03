@@ -169,7 +169,16 @@ namespace pmcp
                                         ? params["arguments"]
                                         : nlohmann::json::object();
 
-        Log(LogLevel::Info, "[MCP] [" + clientLabel + "] -> " + toolName);
+        // The arguments show what the call does (Lua code, paths, values).
+        // ponytail: cut at 2000 characters so file writes can't flood the log; raise kMaxLoggedArgs if a tool needs more.
+        constexpr size_t kMaxLoggedArgs = 2000;
+        std::string argsText = args.empty()
+                                   ? std::string()
+                                   : args.dump(-1, ' ', false, nlohmann::json::error_handler_t::replace);
+        if (argsText.size() > kMaxLoggedArgs)
+            argsText = argsText.substr(0, kMaxLoggedArgs) + "... (" + std::to_string(argsText.size()) + " characters)";
+
+        Log(LogLevel::Info, "[MCP] [" + clientLabel + "] -> " + toolName + (argsText.empty() ? "" : " " + argsText));
 
         auto tools = m_provider ? m_provider() : std::vector<ToolDefinition>{};
         const auto *tool = FindTool(tools, toolName);

@@ -261,6 +261,8 @@ namespace pe
 
                     if (!code.empty())
                     {
+                        PE_INFO("[Lua] %sAgent/command.lua:\n%s", Path::Assets.c_str(), code.c_str());
+
                         std::string result = ss->ExecuteLua(code);
                         std::ofstream out(Path::Assets + "Agent/result.txt", std::ios::trunc);
                         out << result;

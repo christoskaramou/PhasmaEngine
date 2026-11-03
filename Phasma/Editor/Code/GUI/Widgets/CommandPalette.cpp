@@ -117,6 +117,8 @@ namespace pe
         if (!m_gui || !entry.enabled)
             return;
 
+        PE_INFO("[Command] %s (%s)", entry.label.c_str(), entry.id.c_str());
+
         const nlohmann::json result = nlohmann::json::parse(m_gui->InvokeEditorAction(entry.id, "{}"), nullptr, false);
         if (!result.is_discarded() && result.contains("error"))
             PE_WARN("[Palette] %s: %s", entry.label.c_str(), result["error"].dump().c_str());

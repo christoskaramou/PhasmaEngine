@@ -228,6 +228,10 @@ namespace pe
 
         if (m_hasIdleSnapshot && m_settleFrames == 0 && current != m_idleSnapshot)
         {
+            // The edit that just finished, whatever made it (gizmo, panel, shortcut or an MCP tool).
+            std::string action = DiffSnapshots(m_idleSnapshot, current);
+            PE_INFO("[Edit] %s", action.c_str());
+
             if (m_selectedNode && m_selectedNode == m_mergeNode && !m_undoStack.empty())
             {
                 // Same object still selected: keep the state from before its first edit, refresh the label.
@@ -235,8 +239,7 @@ namespace pe
             }
             else
             {
-                std::string label = DiffSnapshots(m_idleSnapshot, current);
-                PushUndo({std::move(m_idleSnapshot), std::move(label)});
+                PushUndo({std::move(m_idleSnapshot), std::move(action)});
                 m_mergeNode = m_selectedNode;
             }
             m_redoStack.clear();
@@ -254,6 +257,8 @@ namespace pe
     {
         if (m_restoring)
             return;
+
+        PE_INFO("[Edit] %s", label.c_str());
 
         std::string current = scene.TakeSnapshot();
         PushUndo({std::move(current), std::move(label)});
@@ -275,9 +280,14 @@ namespace pe
         HistoryEntry current{scene.TakeSnapshot(), entry.label};
 
         if (RestoreEntry(scene, entry))
+        {
+            PE_INFO("[Undo] %s", entry.label.c_str());
             PushRedo(std::move(current));
+        }
         else
+        {
             PushUndo(std::move(entry));
+        }
     }
 
     void UndoRedo::Redo(Scene &scene)
@@ -291,9 +301,14 @@ namespace pe
         HistoryEntry current{scene.TakeSnapshot(), entry.label};
 
         if (RestoreEntry(scene, entry))
+        {
+            PE_INFO("[Redo] %s", entry.label.c_str());
             PushUndo(std::move(current));
+        }
         else
+        {
             PushRedo(std::move(entry));
+        }
     }
 
     void UndoRedo::UndoTo(Scene &scene, size_t stepsBack)
@@ -317,6 +332,7 @@ namespace pe
 
         if (RestoreEntry(scene, target))
         {
+            PE_INFO("[Undo] %zu steps, back to before: %s", stepsBack, target.label.c_str());
             PushRedo(std::move(current));
             for (auto &entry : popped)
                 PushRedo(std::move(entry));
@@ -350,6 +366,7 @@ namespace pe
 
         if (RestoreEntry(scene, target))
         {
+            PE_INFO("[Redo] %zu steps, through: %s", stepsForward, target.label.c_str());
             PushUndo(std::move(current));
             for (auto &entry : popped)
                 PushUndo(std::move(entry));
