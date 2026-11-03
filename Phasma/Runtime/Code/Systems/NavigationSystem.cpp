@@ -1,10 +1,10 @@
 #include "Systems/NavigationSystem.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include "Script/ScriptRuntimeHooks.h"
 
 #ifdef PE_PHYSICS
 #include "Systems/PhysicsSystem.h"
-#include "Script/ScriptRuntimeHooks.h"
 #endif
 
 namespace pe

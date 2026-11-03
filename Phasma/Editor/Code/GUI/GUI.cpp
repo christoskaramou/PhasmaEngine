@@ -196,6 +196,19 @@ namespace pe
         // Each mode keeps its own dock layout (.ini) and open-panel set (.json).
         bool s_agentMode = false;
 
+        // Startup mode follows the launcher: coding-agent CLIs export these to their child processes.
+        bool LaunchedByAgent()
+        {
+            for (const char *var : {"AI_AGENT", "CLAUDECODE", "CODEX_THREAD_ID", "CODEX_SANDBOX", "GEMINI_CLI"})
+            {
+                const char *value = std::getenv(var);
+                if (value && *value)
+                    return true;
+            }
+
+            return false;
+        }
+
         float ToolbarHeight()
         {
             return s_agentMode ? 0.0f : kToolbarHeight;
@@ -559,7 +572,7 @@ namespace pe
             nlohmann::ordered_json j = LoadEditorConfigObject(path);
             j[kEditorGuiStyleKey] = StyleId(GUIState::s_guiStyle);
             j[kEditorFontScaleKey] = ImGui::GetIO().FontGlobalScale;
-            j[kEditorModeKey] = s_agentMode ? "agent" : "normal";
+            j.erase(kEditorModeKey);
 
             std::error_code ec;
             std::filesystem::create_directories(path.parent_path(), ec);
@@ -582,8 +595,7 @@ namespace pe
             }
             if (j.contains(kEditorFontScaleKey) && j[kEditorFontScaleKey].is_number())
                 SetEditorFontScale(j[kEditorFontScaleKey].get<float>(), false);
-            if (j.contains(kEditorModeKey) && j[kEditorModeKey].is_string())
-                s_agentMode = j[kEditorModeKey].get<std::string>() == "agent";
+            s_agentMode = LaunchedByAgent();
             ui::ApplyTheme(GUIState::s_guiStyle);
         }
 
