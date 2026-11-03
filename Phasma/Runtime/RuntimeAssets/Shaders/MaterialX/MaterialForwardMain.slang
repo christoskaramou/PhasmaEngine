@@ -38,9 +38,8 @@ PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
     pe_ssao = 1.0;
     pe_occlusion = 1.0;
 
-    pe_load_material(pc.shape, pe_materialBytes, pe_constants[input.id].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    pe_fill_vertex_data(pc.shape, sp);
-    const PeSurfaceInputs inputs = pe_material_inputs(pc.shape, sp.nextUv, sp.spriteBlend);
+    const uint offset = pe_constants[input.id].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET;
+    const PeSurfaceInputs inputs = pe_material_inputs(pc.shape, pe_materialBytes, offset, sp, sp.nextUv, sp.spriteBlend);
     const float alpha = saturate(inputs.geometry_opacity);
     if (alpha < 0.001) // MaterialX's transparent-surface threshold (HwShaderGenerator.cpp)
         discard;

@@ -30,8 +30,7 @@ PeSurfacePoint PeBeginPixel(uint4 vis, uint2 pixel, uint2 at, uint2 size)
     pe_ssao = cb_ssao != 0 ? Ssao.SampleLevel(sampler_Ssao, (float2(pixel) + 0.5) / float2(size), 0).x : 1.0;
     pe_occlusion = MetRough.Load(int3(pixel, 0)).x;
 
-    pe_load_material(pc.shape, pe_materialBytes, pe_constants[vis.x - 1u].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    pe_fill_vertex_data(pc.shape, sp);
+    pe_fill_vertex_data(pc.shape, sp); // stage 2's BSDF reads vd
     return sp;
 }
 
@@ -51,7 +50,8 @@ void PeEvaluateTile(uint2 tile, uint2 local, uint2 size)
         if (shaded)
         {
             const PeSurfacePoint sp = PeBeginPixel(vis, pixel, (pixel & ~1u) + lane, size);
-            const PeSurfaceInputs p = pe_material_inputs(pc.shape, sp.nextUv, sp.spriteBlend);
+            const uint offset = pe_constants[vis.x - 1u].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET;
+            const PeSurfaceInputs p = pe_material_inputs(pc.shape, pe_materialBytes, offset, sp, sp.nextUv, sp.spriteBlend);
 
             // MaterialX's subsurface curvature (pe_curvature), on the normal mx_subsurface_bsdf passes it (mtlx_codegen.py
             // check_shade_once_curvature pins that).

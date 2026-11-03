@@ -25,8 +25,8 @@ void mainCS(uint3 group : SV_GroupID, uint3 local : SV_GroupThreadID)
     const PeTriangle tri = PeLoadTriangle(pe_geometry, pe_frameData, pe_deformed, pe_constants, pc.verticesOffset, vis);
     const PeSurfacePoint sp = PeSurfaceAt(tri, float2(lanePixel) + 0.5, float2(size));
 
-    pe_load_material(pc.shape, pe_materialBytes, pe_constants[vis.x - 1u].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    const PeThin thin = pe_material_thin(pc.shape, sp, sp.nextUv, sp.spriteBlend);
+    const uint offset = pe_constants[vis.x - 1u].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET;
+    const PeThin thin = pe_material_thin(pc.shape, pe_materialBytes, offset, sp, sp.nextUv, sp.spriteBlend);
 
     if (!all(lane == (pixel & 1u)))
         return;

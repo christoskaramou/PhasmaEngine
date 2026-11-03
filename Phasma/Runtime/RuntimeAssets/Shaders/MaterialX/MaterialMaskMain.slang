@@ -52,8 +52,8 @@ uint4 mainPS(VS_OUTPUT_OpenPBRMask input) : SV_TARGET0
                                  GetAttributeAtVertex(input.vertexId, 1),
                                  GetAttributeAtVertex(input.vertexId, 2));
     const PeSurfacePoint sp = PeMaskSurface(input, vertices);
-    pe_load_material(pc.shape, pe_materialBytes, constants[input.id].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    const float opacity = pe_material_mask(pc.shape, sp, sp.nextUv, sp.spriteBlend);
+    const uint offset = constants[input.id].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET;
+    const float opacity = pe_material_mask(pc.shape, pe_materialBytes, offset, sp, sp.nextUv, sp.spriteBlend);
 #ifdef PE_MASK_SHADOW
     const float cut = PeShadowThreshold(constants[input.id].alphaCut, input.position.xy);
 #else

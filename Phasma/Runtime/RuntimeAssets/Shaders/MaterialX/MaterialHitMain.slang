@@ -72,9 +72,8 @@ float3 PeLinearToSrgbHdr(float3 c)
 // GI and screen-probe rays light their hits as the legacy surface cache does (RT_FoldSurfaceCache): the graph's own inputs,
 // diffuse only, so a glossy MaterialX surface never reaches the probes as fireflies. In the legacy hit's colour space:
 // linear under linear_color, authored (sRGB) values otherwise.
-float3 PeSurfaceCacheHit(uint shape, PeSurfacePoint sp)
+float3 PeSurfaceCacheHit(PeSurfaceInputs p)
 {
-    const PeSurfaceInputs p = pe_material_inputs(shape, sp.nextUv, sp.spriteBlend);
     float3 albedo = saturate(p.base_color * p.base_weight);
     float metallic = saturate(p.base_metalness);
     float roughness = saturate(p.specular_roughness);
@@ -170,14 +169,13 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
                                                            b);
     pe_shadow_offset = mul(float4(terminatorOffset, 0.0), tri.world).xyz;
 
-    pe_load_material(shape, pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    pe_fill_vertex_data(shape, sp);
+    // The graph's inputs, then the BSDF outside the shape's case: the area-light seam sees the graph's normal and the BSDF is
+    // inlined once, not in every shape's case (DX12 inlines the dispatchers).
+    const uint offset = constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET;
+    const PeSurfaceInputs inputs = pe_material_inputs(shape, pe_materialBytes, offset, sp, sp.nextUv, sp.spriteBlend);
 #if defined(GI_PROBES) && !defined(REFLECTIONS)
-    const float3 color = PeSurfaceCacheHit(shape, sp);
+    const float3 color = PeSurfaceCacheHit(inputs);
 #else
-    // pe_material_shade's two steps, so the area-light seam sees the graph's normal and the BSDF is inlined once, not in
-    // every shape's case (DX12 inlines the dispatchers).
-    const PeSurfaceInputs inputs = pe_material_inputs(shape, sp.nextUv, sp.spriteBlend);
     const float3 shadingN = inputs.geometry_normal;
     if (dot(shadingN, shadingN) > 1e-8)
         pe_spec_N = normalize(shadingN);
@@ -252,8 +250,8 @@ void pe_hit_any(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     pe_P = sp.P;
     pe_N = sp.N;
     pe_hit_lod_base = -1000.0; // coverage at mip 0, as the legacy any-hit tests alpha
-    pe_load_material(shape, pe_materialBytes, constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET);
-    const float opacity = pe_material_mask(shape, sp, sp.nextUv, sp.spriteBlend);
+    const uint offset = constants[constantsId].materialByteOffset + PE_OPENPBR_INPUTS_OFFSET;
+    const float opacity = pe_material_mask(shape, pe_materialBytes, offset, sp, sp.nextUv, sp.spriteBlend);
     if (blended)
     {
         if (!(opacity >= 0.001)) // MaterialX's transparent-surface threshold, as the forward pass discards

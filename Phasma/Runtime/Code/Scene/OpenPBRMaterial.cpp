@@ -413,11 +413,11 @@ namespace pe
             return CookedModuleDir() + "shapes_abi" + std::to_string(kOpenPBRModuleAbi) + ".txt";
         }
 
-        // DX12 inlines every shape into the entry function, so its compile grows with the group (shade, 8 shapes: 5.6 s,
-        // 54: 34.6 s; 2026-10-29). SPIR-V keeps each shape a [noinline] function, so one group holds every shape.
+        // Shapes inline into the entry function, so compile time grows with the group (DX12 shade, 8 shapes: 5.6 s,
+        // 54: 34.6 s; 2026-10-29).
         uint32_t ShapeGroupSize()
         {
-            return RHII.GetApi() == PE_GRAPHICS_API_DX12 ? 8u : UINT32_MAX;
+            return 8u;
         }
 
         bool IsCookedModule(const std::string &code)

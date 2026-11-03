@@ -8,15 +8,10 @@ namespace pe
         constexpr std::string_view kEnd = "// PE_SHAPE_END";
         constexpr std::string_view kSpace = " \t\r\n\v\f";
 
-        // DX12 inlines every call into the entry function; SPIR-V raster passes keep each shape's functions apart, so the
-        // optimizer never sees all shapes in one function (54 shapes, shade: 35.4 s inlined, 7.0 s apart; 2026-10-29).
-        // RT hits (PE_MATERIAL_HIT) inline on Vulkan too: [noinline] shape calls in hit stages returned wrong values and
-        // lost the device on an RTX 4080 SUPER (driver 617.14, 2026-11-01), with spirv-val passing.
-        constexpr const char *kShapeFnMacro = "#if defined(PE_DX12) || defined(PE_MATERIAL_HIT)\n"
-                                              "#define PE_SHAPE_FN\n"
-                                              "#else\n"
-                                              "#define PE_SHAPE_FN [noinline]\n"
-                                              "#endif";
+        // Every API inlines the shapes. [noinline] shape calls on SPIR-V cost Vulkan raster 4x MaterialShade and 10x
+        // MaterialThin GPU time even with one shape, and in RT hits returned wrong values and lost the device
+        // (RTX 4080 SUPER, driver 617.14, 2026-11-01).
+        constexpr const char *kShapeFnMacro = "#define PE_SHAPE_FN";
 
         struct Item
         {
@@ -31,17 +26,19 @@ namespace pe
             const char *params;
             const char *args;
             const char *zero; // nullptr: void; "{}": a zero-initialized local
-            const char *guard;
+            bool load;        // the case loads the shape's material first (b, o)
+            bool fill;        // ... and fills the vertex data (sp)
         };
 
+        // A shape's statics are loaded in the same case that reads them. Loaded in one switch and read in another, every
+        // shape's statics stayed live across MaterialShade's quadrant loop: 411 values for 8 shapes, spilled per pixel
+        // (24.5 ms against 3.8; RTX 4080 SUPER, 2026-11-03). pe_fill_vertex_data writes only the shared vd.
+        constexpr const char *kLoadParams = "ByteAddressBuffer b, uint o, PeSurfacePoint sp, float2 nextUv, float blend";
         constexpr Dispatcher kDispatchers[] = {
-            {"void", "pe_load_material", "ByteAddressBuffer b, uint o", "b, o", nullptr, nullptr},
-            {"void", "pe_fill_vertex_data", "PeSurfacePoint sp", "sp", nullptr, nullptr},
-            {"PeSurfaceInputs", "pe_material_inputs", "float2 nextUv, float blend", "nextUv, blend", "{}", nullptr},
-            {"float", "pe_material_mask", "PeSurfacePoint sp, float2 nextUv, float blend", "sp, nextUv, blend", "0.0", nullptr},
-            {"PeThin", "pe_material_thin", "PeSurfacePoint sp, float2 nextUv, float blend", "sp, nextUv, blend", "{}", nullptr},
-            {"float4", "pe_material_shade", "float2 nextUv, float blend", "nextUv, blend", "float4(0.0, 0.0, 0.0, 0.0)",
-             "PE_MATERIAL_THIN"},
+            {"void", "pe_fill_vertex_data", "PeSurfacePoint sp", "sp", nullptr, false, false},
+            {"PeSurfaceInputs", "pe_material_inputs", kLoadParams, "nextUv, blend", "{}", true, true},
+            {"float", "pe_material_mask", kLoadParams, "sp, nextUv, blend", "0.0", true, false},
+            {"PeThin", "pe_material_thin", kLoadParams, "sp, nextUv, blend", "{}", true, false},
         };
 
         // The per-shape entry functions that get PE_SHAPE_FN.
@@ -306,8 +303,15 @@ namespace pe
             std::string text = ret + " " + d.name + "(uint shape, " + d.params + ")\n{\n    switch (shape)\n    {\n";
             for (uint32_t slot : slots)
             {
-                const std::string call = "pe_shape_" + std::to_string(slot) + "::" + d.name + "(" + d.args + ")";
+                const std::string space = "pe_shape_" + std::to_string(slot) + "::";
+                const std::string call = space + d.name + "(" + d.args + ")";
                 text += "    case " + std::to_string(slot) + ":\n";
+                if (d.load)
+                    text += "        " + space + "pe_load_material(b, o);\n";
+
+                if (d.fill)
+                    text += "        " + space + "pe_fill_vertex_data(sp);\n";
+
                 text += isVoid ? "        " + call + ";\n        return;\n" : "        return " + call + ";\n";
             }
 
@@ -320,7 +324,7 @@ namespace pe
                 text += "        return " + std::string(d.zero) + ";\n";
 
             text += "    }\n}";
-            return d.guard ? "#ifndef " + std::string(d.guard) + "\n" + text + "\n#endif" : text;
+            return text;
         }
     } // namespace
 
