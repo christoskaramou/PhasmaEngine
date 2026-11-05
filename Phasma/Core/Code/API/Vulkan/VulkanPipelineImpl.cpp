@@ -710,9 +710,11 @@ namespace pe
         layoutInfo.pSetLayouts = layouts.data();
         layoutInfo.pushConstantRangeCount = static_cast<uint32_t>(pcrs.size());
         layoutInfo.pPushConstantRanges = pcrs.data();
-        ConfigureDescriptorHeap(stages.data(), static_cast<uint32_t>(stages.size()));
-        if (!m_usesDescriptorHeap)
-            m_layout = VulkanRhi::Device().createPipelineLayout(layoutInfo);
+
+        // ponytail: ray tracing pipelines stay on descriptor sets. Created with the descriptor heap flag, the NVIDIA
+        // driver (617.14, 2026-11-05) never served them from the pipeline cache, so switching to Full RT recompiled them
+        // on every launch (31.8 s, against 0.4 s with sets). Upgrade: heap RT pipelines once the driver caches them.
+        m_layout = VulkanRhi::Device().createPipelineLayout(layoutInfo);
 
         vk::RayTracingPipelineCreateInfoKHR pipelineInfo{};
         pipelineInfo.stageCount = static_cast<uint32_t>(stages.size());

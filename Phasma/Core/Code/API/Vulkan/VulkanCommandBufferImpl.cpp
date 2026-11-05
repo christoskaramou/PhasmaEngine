@@ -542,8 +542,9 @@ namespace pe
             return;
         }
 
-        // Native sets invalidate heap push data. ponytail: a fallback set pipeline's own sets are not restored after
-        // heap pushes; none exists on heap devices today, so track set state per bind point only if one appears.
+        // Native sets invalidate heap push data. ponytail: a set pipeline's own sets are not restored after heap pushes.
+        // On heap devices only ray tracing pipelines use sets (VulkanPipelineImpl), and RayTracingPass binds them with
+        // the pipeline just before tracing; track set state per bind point if a pass ever traces again after a push.
         m_heapStateOwner = UINT32_MAX;
         const vk::PipelineBindPoint point = GetVulkanBindPoint(m_owner->m_boundPipeline);
         BatchBindDescriptorsVk(m_apiHandle, m_owner->m_boundPipeline, point, count, descriptors);
