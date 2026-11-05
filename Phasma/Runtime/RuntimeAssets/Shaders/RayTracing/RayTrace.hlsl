@@ -85,8 +85,14 @@ void raygeneration()
 #elif defined(GI_PROBES)
     uint2 launch = DispatchRaysIndex().xy;
     uint cascade = ProbeCascade(launch.y);
+    // Last frame's relocation, from the history atlas this pass reads (ProbeUpdate.hlsl).
+    float3 relocation = 0.0.xxx;
+    uint oldProbe;
+    if (ProbeHistoryIndex(launch.y, oldProbe))
+        relocation = ProbeOffset(oldProbe);
+
     RayDesc ray;
-    ray.Origin = ProbePosition(launch.y);
+    ray.Origin = ProbePosition(launch.y) + relocation;
     ray.Direction = gi_rayDirections.Load(int3(launch.xy, 0)).xyz;
     ray.TMin = 0.001;
     ray.TMax = ProbeMaxDistance(cascade);

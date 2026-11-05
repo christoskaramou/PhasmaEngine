@@ -52,10 +52,12 @@ namespace pe
         m_display->SetSampler(Sampler::Create(Sampler::CreateInfoInit(), "GI_MaterialSampler"));
         m_rtDepth = nullptr;
         // 32-bit: a 0.999 history moves each texel by 1/1000 of the difference, below half precision.
-        m_irradiance = create("GI_Irradiance", 64, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
-        m_distance = create("GI_Distance", 64, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
-        m_irradianceHistory = create("GI_IrradianceHistory", 64, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
-        m_distanceHistory = create("GI_DistanceHistory", 64, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
+        // One more column than the tiles: irradiance keeps each probe's relocation offset there (ProbeVolume.hlsl
+        // ProbeOffset); distance matches its width so ProbeSample's UV maths holds for both atlases.
+        m_irradiance = create("GI_Irradiance", 65, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
+        m_distance = create("GI_Distance", 65, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
+        m_irradianceHistory = create("GI_IrradianceHistory", 65, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
+        m_distanceHistory = create("GI_DistanceHistory", 65, 512 * kCascades, PE_FORMAT_R32G32B32A32_SFLOAT);
         m_uniforms.resize(RHII.GetSwapchainImageCount());
         m_probeUniforms.resize(RHII.GetSwapchainImageCount());
         m_probeData.reset = 1;

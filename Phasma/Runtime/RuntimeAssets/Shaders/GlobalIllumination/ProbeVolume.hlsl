@@ -240,10 +240,22 @@ float3 ProbeOctDecode(float2 uv)
     return normalize(direction);
 }
 
+// DDGI probe relocation (ProbeUpdate.hlsl): each probe's offset from its grid point lives in the irradiance atlas's
+// column past the tiles, one row per probe (a tile row is 8 texel rows of gridSize <= 8 probes).
+uint2 ProbeOffsetTexel(uint probe)
+{
+    return uint2(gi_gridSize * 8, probe);
+}
+
+float3 ProbeOffset(uint probe)
+{
+    return gi_irradiance.Load(int3(ProbeOffsetTexel(probe), 0)).xyz;
+}
+
 float4 ProbeSample(Texture2D<float4> atlas, uint probe, float3 direction)
 {
     float2 tile = float2(probe % gi_gridSize, probe / gi_gridSize) * 8.0;
-    float2 dimensions = float2(gi_gridSize * 8, gi_gridSize * gi_gridSize * 8 * GI_MAX_CASCADES);
+    float2 dimensions = float2(gi_gridSize * 8 + 1, gi_gridSize * gi_gridSize * 8 * GI_MAX_CASCADES);
     float2 uv = (tile + ProbeOctEncode(direction) * 6.0 + 1.0) / dimensions;
     return atlas.SampleLevel(gi_sampler, uv, 0);
 }
@@ -257,13 +269,32 @@ float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool
     float3 origin = ProbeOrigin(cascade, history);
     float3 spacing = gi_spacing[cascade].xyz;
     float3 biased = position + normal * ProbeNormalBias(cascade);
+#ifdef GI_TRACED_VISIBILITY
+    const bool traceProbes = gi_tracedVisibility != 0;
+    // In a gap narrower than the bias (a sphere's underside near where it rests on a floor) the biased point lies
+    // inside the floor, where every probe is blocked: a hard-edged dark ellipse around mirrored contacts. There the
+    // bias halves until the normal ray is clear (up to 3 more rays, only in such gaps); 2 mm off the surface, facets
+    // left jagged patches (2026-11-05).
+    if (traceProbes && TraceVisibility(position, normal, ProbeNormalBias(cascade)) < 0.5)
+    {
+        float clear = 0.5 * ProbeNormalBias(cascade);
+        [loop] for (uint halving = 0; halving < 3; ++halving)
+        {
+            if (TraceVisibility(position, normal, clear) >= 0.5)
+                break;
+
+            clear *= 0.5;
+        }
+
+        biased = position + normal * clear;
+    }
+#endif
     float3 grid = clamp((biased - origin) / spacing, 0.0, float(gi_gridSize - 1));
     uint3 base = min(uint3(grid), gi_gridSize - 2);
     float3 fraction = saturate(grid - float3(base));
     float3 irradiance = 0.0.xxx;
     float totalWeight = 0.0;
 #ifdef GI_TRACED_VISIBILITY
-    const bool traceProbes = gi_tracedVisibility != 0;
     // ponytail: [loop] even when gi_tracedVisibility is 0 (Full RT +0.03 ms mean, within noise); split off an unrolled
     // loop without the trace if that ever measures above noise.
     [loop] // unrolled, the traces of 8 corners x 2 cascades x call sites took minutes to compile (2026-10-20)
@@ -275,7 +306,7 @@ float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool
         uint3 offset = uint3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
         uint3 cell = base + offset;
         uint probe = ProbeIndex(cascade, cell);
-        float3 toSurface = biased - (origin + float3(cell) * spacing);
+        float3 toSurface = biased - (origin + float3(cell) * spacing + ProbeOffset(probe));
         float distance = length(toSurface);
         float3 direction = distance > 0.0001 ? toSurface / distance : normal;
         float2 moments = ProbeSample(gi_distance, probe, direction).xy;

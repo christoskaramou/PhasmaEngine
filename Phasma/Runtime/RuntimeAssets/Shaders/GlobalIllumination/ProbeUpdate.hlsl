@@ -4,6 +4,28 @@
 [[vk::image_format("rgba32f")]][[vk::binding(4, 0)]] RWTexture2D<float4> probeIrradiance;
 [[vk::image_format("rgba32f")]][[vk::binding(5, 0)]] RWTexture2D<float4> probeDistance;
 
+// DDGI probe relocation (Majercik et al. 2021): a probe enclosed by geometry steps through the closest back face its
+// rays hit, to half the minimum surface distance beyond it. One on a surface (a slab's face through its grid point,
+// common with whole-metre grids: half its rays start inside) instead steps half the minimum toward the directions its
+// rays escape by; through the closest back face it would cross the slab and see the sky behind it (2026-11-05). One
+// clear of every surface by twice the minimum drifts back toward its grid point, keeping the minimum. A move past 0.45
+// of a cell is rejected (DDGI's limit), so the probe keeps its offset and later frames' rotated rays try again.
+float3 ProbeRelocate(uint cascade, float3 offset, bool inside, float closestBack, float3 backDirection, float closestFront,
+                     float3 openDirection, bool open)
+{
+    const float minimum = 0.2 * gi_originSpacing[cascade].w;
+    float3 moved = offset;
+    if (inside && open && dot(openDirection, openDirection) > 0.0)
+        moved = offset + normalize(openDirection) * (0.5 * minimum);
+    else if (inside)
+        moved = offset + backDirection * (closestBack + 0.5 * minimum);
+    else if (closestFront > 2.0 * minimum && dot(offset, offset) > 0.0)
+        moved = offset - normalize(offset) * min(closestFront - minimum, length(offset));
+
+    const float3 cells = moved / gi_spacing[cascade].xyz;
+    return dot(cells, cells) < 0.45 * 0.45 ? moved : offset;
+}
+
 [numthreads(8, 8, 1)]
 void main(uint3 dispatch : SV_DispatchThreadID)
 {
@@ -24,6 +46,10 @@ void main(uint3 dispatch : SV_DispatchThreadID)
     float distanceWeight = 0.0;
     float backfaces = 0.0;
     float rayWeight = 0.0;
+    float closestBack = 1e30;
+    float3 backDirection = 0.0.xxx;
+    float closestFront = 1e30;
+    float3 openDirection = 0.0.xxx;
     for (uint ray = 0; ray < gi_rayCount; ++ray)
     {
         float4 sample = probeRays.Load(int3(ray, probe, 0));
@@ -32,6 +58,18 @@ void main(uint3 dispatch : SV_DispatchThreadID)
         float inversePdf = 1.0 / max(directionPdf.w, 0.000001);
         backfaces += sample.a < 0.0 ? inversePdf : 0.0;
         rayWeight += inversePdf;
+        if (sample.a < 0.0 && -sample.a < closestBack)
+        {
+            closestBack = -sample.a;
+            backDirection = directionPdf.xyz;
+        }
+
+        if (sample.a >= 0.0)
+        {
+            closestFront = min(closestFront, sample.a);
+            openDirection += directionPdf.xyz * inversePdf;
+        }
+
         float cosine = max(0.0, dot(direction, directionPdf.xyz));
         float weight = pow(cosine, 32.0) * inversePdf;
         float distance = max(sample.a, 0.0);
@@ -62,7 +100,19 @@ void main(uint3 dispatch : SV_DispatchThreadID)
     float variance = 0.0;
     bool pending = false;
     uint oldProbe;
-    if (ProbeHistoryIndex(probe, oldProbe))
+    const bool hasHistory = ProbeHistoryIndex(probe, oldProbe);
+    // This frame's rays left from last frame's offset (RayTrace.hlsl); one thread per probe writes the next.
+    if (all(dispatch.xy % 8 == 0))
+    {
+        const float3 offset = hasHistory ? ProbeOffset(oldProbe) : 0.0.xxx;
+        const bool inside = active == 0.0;
+        const bool open = (rayWeight - backfaces) * 4.0 >= rayWeight; // a quarter of the rays escape
+        const float3 relocated = ProbeRelocate(ProbeCascade(probe), offset, inside, closestBack, backDirection, closestFront,
+                                               openDirection, open);
+        probeIrradiance[ProbeOffsetTexel(probe)] = float4(relocated, 0.0);
+    }
+
+    if (hasHistory)
     {
         uint2 oldPixel = uint2(oldProbe % gi_gridSize, oldProbe / gi_gridSize) * 8 + dispatch.xy % 8;
         float4 oldIrradiance = gi_irradiance.Load(int3(oldPixel, 0));

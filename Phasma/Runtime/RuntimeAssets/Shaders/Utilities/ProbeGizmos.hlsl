@@ -39,13 +39,14 @@ float4x4 SceneMatrix(uint index)
 bool WorldProbeGizmo(uint probe, out float3 center, out float radius)
 {
     const uint cascade = ProbeCascade(probe);
-    center = ProbePosition(probe);
+    const float3 gridPosition = ProbePosition(probe);
+    center = gridPosition + ProbeOffset(probe);
     radius = pc.radius * gi_originSpacing[cascade].w;
     if (cascade == 0)
         return true;
 
     // Inside the finer cascade by a cell, ProbeCascadeAt never picks this one; its edge cells blend both.
-    const float3 grid = (center - gi_originSpacing[cascade - 1].xyz) / gi_spacing[cascade - 1].xyz;
+    const float3 grid = (gridPosition - gi_originSpacing[cascade - 1].xyz) / gi_spacing[cascade - 1].xyz;
     const bool inner = all(grid >= 1.0) && all(grid <= float(gi_gridSize) - 2.0);
     return !inner;
 }

@@ -211,7 +211,7 @@ float4 WorldRadianceCascade(uint cascade, float3 position, float3 normal, float3
         uint3 offset = uint3(corner & 1, (corner >> 1) & 1, (corner >> 2) & 1);
         uint3 cell = base + offset;
         uint probe = ProbeIndex(cascade, cell);
-        float3 toSurface = biased - (origin + float3(cell) * spacing);
+        float3 toSurface = biased - (origin + float3(cell) * spacing + ProbeOffset(probe));
         float distance = length(toSurface);
         float3 toward = distance > 0.0001 ? toSurface / distance : -normal;
         float facing = saturate(dot(normal, -toward) * 0.5 + 0.5);
