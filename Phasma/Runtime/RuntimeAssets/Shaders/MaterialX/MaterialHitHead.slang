@@ -118,10 +118,16 @@ float pe_hit_texture_lod(uint textureIndex)
     return max(pe_hit_lod_base + 0.5 * log2(float(width) * float(height)), 0.0);
 }
 
-// The hit's shape slot, or 0xffffffff (the dispatchers' zero value) for a record outside the table.
+// The hit's shape slot, or 0xffffffff (the dispatchers' zero value) for a record outside the table. Forward meshes
+// (alpha-blend, Transmission) carry only the forward flag, which PeModuleOf ignores: without them here every ray
+// skipped them in Full RT (opacity read as 0), and they cast no RT shadow.
 uint PeHitShape(uint constantsId)
 {
-    const uint module = PeModuleOf(pe_materialBytes, constants[constantsId]);
+    const Mesh_Constants mesh = constants[constantsId];
+    const bool forward = (mesh.editorFlags & PE_EDITOR_FLAG_MATERIALX_FORWARD) != 0u &&
+                         mesh.materialByteOffset != 0xffffffffu;
+    const uint module = forward ? pe_materialBytes.Load(mesh.materialByteOffset + PE_OPENPBR_MODULE_OFFSET)
+                                : PeModuleOf(pe_materialBytes, mesh);
     uint count;
     uint stride;
     pe_shapeSlots.GetDimensions(count, stride);

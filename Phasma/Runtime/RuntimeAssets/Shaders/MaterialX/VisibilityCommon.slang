@@ -6,6 +6,7 @@
 #include "../Common/DeformedGeometry.hlsl"
 
 static const uint PE_EDITOR_FLAG_MATERIALX = 32u; // Mesh_Constants.editorFlags: the mesh has a MaterialX material
+static const uint PE_EDITOR_FLAG_MATERIALX_FORWARD = 128u; // an alpha-blend/Transmission one (Scene::ComputeMeshConstants)
 // A MaterialX material's byte range: the legacy MaterialGpuData record (96 bytes: raster G-buffer, RT hits and the
 // off path read it), then the generated module's inputs (pe_load_material).
 static const uint PE_OPENPBR_INPUTS_OFFSET = 96u;
