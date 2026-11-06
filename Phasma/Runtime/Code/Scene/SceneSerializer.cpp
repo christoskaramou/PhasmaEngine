@@ -3127,7 +3127,9 @@ namespace pe
             AddComponentFlag(camNode, Component_Camera);
             m_nodeComponentCache[camNode->index].camera->camera = m_cameras[0];
             m_cameras[0]->SetNodeId(camNode);
+            AttachDefaultCameraScript(camNode); // as Scene() and AddCamera: the editor's fly navigation
         }
+
         EnsureSkyboxNodeFromSettings(false);
         // New (empty) scenes get a Scene Settings node by default so rendering is on out of the box.
         // Loaded scenes are NOT force-given one (opt-in: a deleted/absent node means post-process +
@@ -3975,6 +3977,19 @@ namespace pe
             NodeId *node = m_nodeIds[ni];
             if (NodeHasSkinnedMesh(node) && !GetAnimationClipsForNode(node).empty() && !GetSkinnedStrip2DState(node))
                 PlaySceneAnimation(*this, node, 0, true);
+        }
+
+        // A camera saved without a script (older scenes; new scenes until 2026-11-06) gets the editor's fly navigation, as
+        // Scene(), AddCamera and NewScene give theirs; a saved script is kept.
+        for (Camera *camera : m_cameras)
+        {
+            NodeId *camNode = camera ? camera->GetNodeId() : nullptr;
+            if (!camNode)
+                continue;
+
+            const auto *script = m_nodeComponentCache[camNode->index].script;
+            if (!script || script->path.empty())
+                AttachDefaultCameraScript(camNode);
         }
 
         UpdateCameras(false);
