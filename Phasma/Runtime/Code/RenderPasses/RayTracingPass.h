@@ -6,6 +6,7 @@ namespace pe
 {
     class Scene;
     class Image;
+    class ImageView;
     class Buffer; // Forward declaration
     class AccelerationStructure;
 
@@ -26,6 +27,12 @@ namespace pe
         uint32_t frame;           // RTCommon cb_frame: the frame counter sun-disk samples step with
         float sunTanHalfAngle;    // tan of half sun_angular_diameter (RTCommon TraceSunShadow; 0 = hard)
         uint32_t physicalFalloff; // physical_point_falloff (RTCommon cb_physicalFalloff)
+        uint32_t shadowMaps;      // RTCommon cb_shadowMaps: ReflectionPass shadows the sun from the cascaded maps
+        vec4 camForward;
+        vec4 cascadeViewZ;
+        vec4 cascadeTexel;
+        vec4 shadowParams; // normal bias, PCF radius in texels, 1 / map size, cascade count
+        mat4 shadowCascades[4];
     };
 
     class RayTracingPass : public IRenderPassComponent
@@ -72,8 +79,10 @@ namespace pe
         void UpdateShapeSlots();
 
         bool m_probeTracing = false;
-        bool m_screenProbes = false; // probe tracing for ScreenProbePass
-        bool m_reflections = false;  // probe tracing for ReflectionPass
+        bool m_screenProbes = false;                 // probe tracing for ScreenProbePass
+        bool m_reflections = false;                  // probe tracing for ReflectionPass
+        std::vector<ImageView *> m_boundShadowViews; // ReflectionPass: the depth maps set 1 binding 10 holds, if live
+        static std::vector<ImageView *> MappedShadowViews();
 
         // Ray tracing pipelines bind descriptor sets (VulkanPipelineImpl), written in place: a rebind during the session
         // marks every frame stale and each frame rewrites only its own sets in its Update, before recording, when its

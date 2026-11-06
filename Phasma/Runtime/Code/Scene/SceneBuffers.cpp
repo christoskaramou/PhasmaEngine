@@ -2752,6 +2752,10 @@ namespace pe
                 if (mesh.indexCount == 0 || !MeshUsesOpenPBRForward(mesh))
                     continue;
 
+                // Hybrid traces Transmission meshes (SetOpenPBRForwardRaster): drawn here too, they would cover the trace.
+                if (m_openpbrTraceTransmission && mesh.renderType == RenderType::Transmission)
+                    continue;
+
                 const uint32_t module = mesh.materialInstance->gpuOpenPBRModule;
                 if (module == UINT32_MAX) // not packed yet: the byte rebuild that follows the assignment packs it
                     continue;

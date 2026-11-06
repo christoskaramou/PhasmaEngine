@@ -330,7 +330,10 @@ float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool
         irradiance += sample.rgb * weight;
         totalWeight += weight;
     }
-    return totalWeight > 0.00001 ? float4(irradiance / totalWeight, 1.0) : 0.0.xxxx;
+
+    // Any weight counts: where every traced visibility fails (a sphere's underside at its contact) only the 0.001 x
+    // moments weights remain, and a 1e-5 cutoff turned them into a hard-edged black blob in reflections (2026-11-06).
+    return totalWeight > 0.0 ? float4(irradiance / totalWeight, 1.0) : 0.0.xxxx;
 }
 
 // rgb irradiance; a = how much it replaces environment lighting (0 outside every cascade).

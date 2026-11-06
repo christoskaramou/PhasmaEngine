@@ -51,7 +51,13 @@ float3 PeSkyAlongRay()
     return sky;
 }
 
-#ifndef GI_PROBES
+// Hits that see alpha-blend and Transmission surfaces: the camera pass's and, since 2026-11-05, the Reflections
+// pass's (a mirror shows glass). GI probe hits never reach them (pe_hit_any, payload.skipBlended).
+#if !defined(GI_PROBES) || defined(REFLECTIONS)
+#define PE_HIT_SEES_BLENDED 1
+#endif
+
+#ifdef PE_HIT_SEES_BLENDED
 // A ray on from the hit through or off its surface, as the legacy closest hit continues one: its radiance in the hit
 // output's space (display-referred unless linear_color). As there, a refracted ray sees everything, a pass-through ray
 // only transparent geometry in Hybrid (where the raster frame stands behind it).
@@ -87,7 +93,7 @@ float3 PeTraceContinuation(float3 dir, bool refractive)
 bool pe_traced_refraction(float3 N, float3 V, float ior, out float3 radiance)
 {
     radiance = float3(0.0, 0.0, 0.0);
-#ifdef GI_PROBES
+#ifndef PE_HIT_SEES_BLENDED
     return false;
 #else
     if (!pe_hit_refracts)
@@ -168,7 +174,7 @@ void pe_light_sample(uint i, float3 P, out float3 L, out float3 radiance, out fl
         L = normalize(-RotateVectorByQuat(float3(0, 0, -1), light.rotation));
         radiance = light.color.rgb * light.color.w;
         if (i == 0)
-            occlusion = PeShadowOcclusion(TraceSunShadow(P + pe_shadow_offset, L), radiance);
+            occlusion = PeShadowOcclusion(TraceSunShadow(P + pe_shadow_offset, L, pe_N), radiance);
 
         return;
     }

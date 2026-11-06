@@ -40,6 +40,10 @@ namespace pe
         [[nodiscard]] Sampler *GetSampler() const { return m_sampler; }
         [[nodiscard]] float GetCascadeViewZ(uint32_t cascade) const;
         [[nodiscard]] float GetCascadeTexelSizeWorld(uint32_t cascade) const;
+        [[nodiscard]] mat4 GetCascadeMatrix(uint32_t cascade) const
+        {
+            return cascade < m_cascades.size() ? m_cascades[cascade] : mat4(1.0f);
+        }
         void SetScene(Scene *scene) { m_scene = scene; }
         OpenPBRMask &GetMasks() { return m_masks; }
         void SyncMaskModules(Scene &scene, bool enabled);

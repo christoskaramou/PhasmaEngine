@@ -78,7 +78,7 @@ void raygeneration()
     RT_PixelCone(float(height), pixelWidth, pixelSpread);
     payload.coneWidth = pixelWidth + pixelSpread * length(cb_camPos.xyz - position);
     payload.coneSpread = pixelSpread + roughness * roughness;
-    payload.skipBlended = 1;
+    payload.skipBlended = 0; // a mirror shows glass and alpha-blend surfaces (2026-11-05)
     TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, payload);
     float3 radiance = payload.t >= 0.0 && payload.hitKind == HIT_KIND_TRIANGLE_BACK_FACE ? 0.0.xxx : payload.radiance;
     output[launch] = float4(max(radiance, 0.0), payload.t >= 0.0 ? payload.t : ray.TMax);
@@ -458,8 +458,34 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
             diffuseIBL = 1.0 - indirect.a;
         }
 #endif
+#ifdef GI_PROBES
+        const bool traceReflection = false;
+#else
+        // Camera-pass hits on smooth surfaces see the scene in their mirror direction, not only the environment: in Full RT
+        // every one, in Hybrid the traced ones (glass and alpha-blend surfaces, and what is seen through them).
+        const bool traceReflection = cb_renderMode != 0 && payload.depth <= RT_REFLECTION_MAX_DEPTH &&
+                                     roughness < RT_REFLECTION_MAX_ROUGHNESS;
+#endif
         if (cb_IBL != 0)
-            lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF, diffuseIBL) * cb_iblIntensity;
+        {
+            const float specularIBL = traceReflection ? 0.0 : 1.0;
+            lighting += ComputeIBL(N, V, combinedColor.rgb, metallic, roughness, F0, envBRDF, diffuseIBL, specularIBL) *
+                        cb_iblIntensity;
+        }
+
+        if (traceReflection)
+        {
+            lighting += TraceSpecularReflection(payload,
+                                                shadowOrigin,
+                                                N,
+                                                V,
+                                                F0,
+                                                envBRDF,
+                                                energyCompensation,
+                                                roughness,
+                                                coneWidth);
+        }
+
         lighting *= occlusion;
 
         // Direct Lighting
@@ -467,7 +493,7 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
         DirectionalLight sun = LoadDirectionalLight(0);
         float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
         float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
-        float3 sunShadow = TraceSunShadow(shadowOrigin, L);
+        float3 sunShadow = TraceSunShadow(shadowOrigin, L, N);
         for (uint i = 0; i < cb_numDirectionalLights; i++)
         {
             // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)

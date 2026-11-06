@@ -241,7 +241,7 @@ float4 WorldRadianceCascade(uint cascade, float3 position, float3 normal, float3
         radiance += sample / sampleWeight * weight;
         total += weight;
     }
-    return total > 0.00001 ? float4(radiance / total, 1.0) : 0.0.xxxx;
+    return total > 0.0 ? float4(radiance / total, 1.0) : 0.0.xxxx; // as ProbeCascadeIrradiance: no cutoff to black
 }
 
 float3 WorldRadianceCache(float3 position, float3 normal, float3 direction, float3 fallback)

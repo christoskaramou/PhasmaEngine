@@ -577,7 +577,9 @@ namespace pe
 
         // While OpenPBR is effective, forward meshes leave the TLAS transparent mask (0x80): Hybrid's transparent-only
         // primary trace would paint their legacy hit over the forward pass. Other rays (0xFF) still hit them.
-        void SetOpenPBRForwardRaster(bool active);
+        // With traceTransmission (Hybrid), Transmission meshes are traced instead: they keep the transparent mask and
+        // leave the forward draws, so their camera hit refracts the scene rather than only the environment.
+        void SetOpenPBRForwardRaster(bool active, bool traceTransmission);
 
         const std::vector<ImageView *> &GetImageViews() const { return m_imageViews; }
         bool CanUseOpenPBRImages(const OpenPBRMaterialSource &source, std::string &error) const;
@@ -1002,6 +1004,7 @@ namespace pe
         std::vector<uint32_t> m_openpbrMaskModules;
         std::vector<uint32_t> m_openpbrForwardModules;
         bool m_openpbrForwardRaster = false;
+        bool m_openpbrTraceTransmission = false;
         Sampler *m_defaultSampler = nullptr;
 
         static std::vector<uint32_t> s_aabbIndices;

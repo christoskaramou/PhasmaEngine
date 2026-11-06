@@ -99,6 +99,12 @@ struct Vertex
     uint cb_frame;       // frame counter: TraceSunShadow's sample sequence
     float cb_sunTanHalfAngle; // tan(sun_angular_diameter / 2); 0 = hard sun shadows
     uint cb_physicalFalloff;  // physical_point_falloff: local lights fall off by inverse square (RT_DistanceFalloff)
+    uint cb_shadowMaps;       // raster/Hybrid ReflectionPass: sun shadow from the cascaded maps (RT_MappedSunShadow)
+    float4 cb_camForward;     // the camera's forward axis: cascade selection, as LightingPS's viewDepth
+    float4 cb_cascadeViewZ;   // each cascade's far distance along it (ShadowPass::GetCascadeViewZ)
+    float4 cb_cascadeTexel;   // each cascade's world-space texel size (normal bias)
+    float4 cb_shadowParams;   // x normal bias, y PCF radius in texels, z 1 / map size, w cascade count
+    float4x4 cb_shadowCascades[4];
 };
 
 // Set 2
@@ -107,6 +113,10 @@ struct Vertex
 // Primary-hit device depth for RTDepthResolvePass (full RT). Set 1 because set 0 ends with the
 // unbounded texture array (binding 12), which must stay the last binding of its set.
 [[vk::image_format("r32f")]][[vk::binding(3, 1)]] RWTexture2D<float> rtDepth;
+#ifdef REFLECTIONS
+[[vk::binding(10, 1)]] Texture2D rs_shadowMaps[4]; // ShadowPass's depth maps (slots past the cascade count repeat one)
+[[vk::binding(11, 1)]] SamplerComparisonState rs_shadowSampler;
+#endif
 
 // LightingPS's physical_point_falloff: windowed inverse square for point, spot and area lights (intensity in luminance *
 // distance^2), else the hit's own artistic falloff.
@@ -399,12 +409,53 @@ float3 GetTriangleTangent(float3 v0, float3 v1, float3 v2, float2 uv0, float2 uv
 }
 
 // Improved Single-Scatter Energy Compensation (Kulla-Conty approx)
-float3 ComputeIBL(float3 N, float3 V, float3 albedo, float metallic, float roughness, float3 F0, float2 envBRDF, float diffuseWeight = 1.0)
+float3 ComputeIBL(float3 N,
+                  float3 V,
+                  float3 albedo,
+                  float metallic,
+                  float roughness,
+                  float3 F0,
+                  float2 envBRDF,
+                  float diffuseWeight = 1.0,
+                  float specularWeight = 1.0)
 {
     return ComputeIBL_Common(
         N, V, albedo, metallic, roughness, F0, 1.0,
-        skybox, material_sampler, envBRDF, diffuseWeight
+        skybox, material_sampler, envBRDF, diffuseWeight, specularWeight
     );
+}
+
+// Full RT's specular for a smooth camera hit: the mirror direction, traced as ReflectionPass traces it in raster and
+// Hybrid (Full RT has no G-buffer for that pass). It replaces the environment's specular lobe.
+// ponytail: one mirror ray, no GGX sampling or denoise, so roughness up to 0.4 reads sharper than the Reflections pass;
+// sample the lobe and accumulate if rough mirrors in Full RT ever matter.
+static const float RT_REFLECTION_MAX_ROUGHNESS = 0.4; // REFLECTION_MAX_ROUGHNESS (ReflectionCommon.hlsl)
+// Hits this deep still trace their mirror ray, so a mirror seen through glass or an alpha-blend surface reflects
+// (camera -> glass -> its exit -> the floor at depth 2). The reflected hit, at depth 3, traces only shadow rays: the
+// fifth nested ray (RayTracingPass maxRecursionDepth 5).
+static const uint RT_REFLECTION_MAX_DEPTH = 2;
+
+float3 TraceSpecularReflection(HitPayload payload, float3 origin, float3 N, float3 V, float3 F0, float2 envBRDF,
+                               float3 energyCompensation, float roughness, float coneWidth)
+{
+    RayDesc ray;
+    ray.Origin = origin;
+    ray.Direction = reflect(-V, N);
+    ray.TMin = 0.01;
+    ray.TMax = 10000.0;
+
+    HitPayload next = (HitPayload)0;
+    next.t = -1.0;
+    next.alpha = 1.0;
+    next.depth = payload.depth + 1;
+    next.opaqueTMax = 10000.0;
+    next.coneWidth = coneWidth;
+    next.coneSpread = payload.coneSpread + roughness * roughness;
+    next.skipBlended = payload.skipBlended;
+    TraceRay(tlas, RAY_FLAG_NONE, 0xFF, 0, 0, 0, ray, next);
+
+    const float3 radiance = next.hitKind == HIT_KIND_TRIANGLE_BACK_FACE && next.t >= 0.0 ? 0.0.xxx : next.radiance;
+    return max(radiance, 0.0) * (F0 * envBRDF.x + envBRDF.y) * energyCompensation;
 }
 
 // Shadow rays leave from the smooth surface the vertex normals describe (Hanika, "Hacking the Shadow Terminator", Ray
@@ -432,8 +483,62 @@ float3 TraceShadowRay(float3 origin, float3 dir, float dist)
 // The sun is a disk sun_angular_diameter wide: each frame the shadow ray aims at another point of it (a per-pixel offset
 // into the R2 sequence), and the passes' temporal filters (reflection history, TAA, probe averages) turn the hits into a
 // penumbra. L points to the sun's centre.
-float3 TraceSunShadow(float3 origin, float3 L)
+#ifdef REFLECTIONS
+// Raster and Hybrid reflection hits take the sun's shadow from the cascaded maps the lit frame uses (Lighting.hlsl
+// CalculateShadows: its biases, biasMat and 3x3 bilinear PCF, no cascade blend), so a mirror shows the shadow edge
+// the surface shows directly. False outside every cascade (behind the camera, past shadow_distance): those trace.
+bool RT_MappedSunShadow(float3 P, float3 N, float3 L, out float3 visibility)
 {
+    visibility = 1.0;
+    const float depth = dot(P - cb_camPos.xyz, cb_camForward.xyz);
+    const uint count = min((uint)cb_shadowParams.w, 4u);
+    if (cb_shadowMaps == 0u || depth < 0.0)
+        return false;
+
+    for (uint i = 0; i < count; ++i)
+    {
+        if (depth >= cb_cascadeViewZ[i])
+            continue;
+
+        const float NdL = saturate(dot(N, L));
+        const float texel = cb_shadowParams.z;
+        const float zBias = clamp(texel * tan(acos(NdL)), 0.0, texel * 2.0);
+        const float normalBiasScale = lerp(0.35, 2.5, 1.0 - NdL);
+        const float3 biased = P + N * cb_shadowParams.x * normalBiasScale * cb_cascadeTexel[i];
+        float4 sc = mul(float4(biased, 1.0), cb_shadowCascades[i]);
+        sc.xy = sc.xy * 0.5 + 0.5 * sc.w; // biasMat
+        sc.z += zBias;
+        const float3 proj = sc.xyz / sc.w;
+        if (any(proj.xy < 0.0) || any(proj.xy > 1.0) || proj.z < 0.0 || proj.z > 1.0)
+            return false;
+
+        const float offset = max(cb_shadowParams.y, 0.0) * texel;
+        float lit = 0.0;
+        [unroll] for (int x = -1; x <= 1; ++x)
+        {
+            [unroll] for (int y = -1; y <= 1; ++y)
+            {
+                const float2 uv = proj.xy + float2(x, y) * offset;
+                lit += rs_shadowMaps[NonUniformResourceIndex(i)].SampleCmpLevelZero(rs_shadowSampler, uv, proj.z);
+            }
+        }
+
+        visibility = lit / 9.0;
+        return true;
+    }
+
+    return false;
+}
+#endif
+
+float3 TraceSunShadow(float3 origin, float3 L, float3 N)
+{
+#ifdef REFLECTIONS
+    float3 mapped;
+    if (RT_MappedSunShadow(origin, N, L, mapped))
+        return mapped;
+#endif
+
     float3 dir = L;
     if (cb_sunTanHalfAngle > 0.0)
     {
@@ -810,7 +915,7 @@ float3 RT_LightOpaque(float3 P,
     DirectionalLight sun = LoadDirectionalLight(0);
     float3 sunDir = normalize(RotateVectorByQuat(float3(0, 0, -1), sun.rotation));
     float3 L = normalize(-sunDir); // Negate: direction is ray dir, L is to-light
-    float3 sunShadow = TraceSunShadow(shadowOrigin, L);
+    float3 sunShadow = TraceSunShadow(shadowOrigin, L, N);
     for (uint i = 0; i < cb_numDirectionalLights; i++)
     {
         // Only shadowing the first one for now as per previous logic (or optimize shadow tracing)

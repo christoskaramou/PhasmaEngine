@@ -1,5 +1,6 @@
 #include "RayTracingPass.h"
 #include "GlobalIlluminationPass.h"
+#include "ShadowPass.h"
 #include "API/AccelerationStructure.h"
 #include "Render/SceneRenderTargets.h"
 #include "API/Buffer.h"
@@ -119,7 +120,9 @@ namespace pe
                 }
             }
 
-            info.acceleration.maxRecursionDepth = 4;
+            // Camera ray, two continuations (into and out of glass), a mirror ray (RTCommon RT_REFLECTION_MAX_DEPTH), and
+            // the reflected hit's shadow ray.
+            info.acceleration.maxRecursionDepth = 5;
             info.Update();
             return SIZE_MAX;
         }
@@ -308,6 +311,21 @@ namespace pe
         UpdateDescriptorSets();
     }
 
+    // ReflectionPass in raster and Hybrid shadows the sun from ShadowPass's maps (RTCommon RT_MappedSunShadow), as the
+    // lit frame does; empty when it cannot (Full RT, shadows off or not drawn), so the hits trace instead.
+    std::vector<ImageView *> RayTracingPass::MappedShadowViews()
+    {
+        const auto &gSettings = Settings::Get<SceneSettings>();
+        ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
+        const bool live = shadows && gSettings.shadows && SceneSettingsActive() && shadows->HasLiveResources();
+        if (!live || gSettings.render_mode == RenderMode::RayTracing)
+            return {};
+
+        std::vector<ImageView *> views = shadows->GetTextureViews();
+        views.resize(std::min<size_t>(gSettings.num_cascades, 4)); // the depth maps; the tint maps follow them
+        return views;
+    }
+
     void RayTracingPass::UpdateDescriptorSets()
     {
         Scene &scene = *GetActiveScene();
@@ -372,6 +390,21 @@ namespace pe
 
                 if (desc->HasBinding(9) && m_shapeSlots)
                     desc->SetBuffer(9, m_shapeSlots);
+
+                // Unused placeholders while the maps are not live (cb_shadowMaps 0 keeps the hits from sampling them).
+                if (desc->HasBinding(10) && desc->HasBinding(11))
+                {
+                    m_boundShadowViews = MappedShadowViews();
+                    auto *placeholder = RequireActiveSceneRendererHost().GetIBL_LUT();
+                    std::vector<ImageView *> views(4, placeholder->GetSRV());
+                    for (size_t c = 0; c < views.size() && !m_boundShadowViews.empty(); ++c)
+                        views[c] = m_boundShadowViews[std::min(c, m_boundShadowViews.size() - 1)];
+
+                    desc->SetImageViews(10, views, {});
+                    ShadowPass *shadows = GetGlobalComponent<ShadowPass>();
+                    Sampler *sampler = m_boundShadowViews.empty() ? placeholder->GetSampler() : shadows->GetSampler();
+                    desc->SetSampler(11, sampler);
+                }
 
                 // A rebuild before the frame's sync can still carry module groups after openpbr destroyed the sky; the
                 // sync drops them before any ray is traced.
@@ -451,6 +484,25 @@ namespace pe
         ubo.sunTanHalfAngle = std::tan(glm::radians(sunDiameter) * 0.5f);
         ubo.physicalFalloff = gSettings.physical_point_falloff ? 1u : 0u;
 
+        // Bound views that no longer match (shadows toggled, maps rebuilt) trace until the sets are rewritten below.
+        const std::vector<ImageView *> shadowViews = m_reflections ? MappedShadowViews() : std::vector<ImageView *>{};
+        ubo.shadowMaps = !shadowViews.empty() && shadowViews == m_boundShadowViews ? 1u : 0u;
+        if (ubo.shadowMaps)
+        {
+            ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
+            ubo.camForward = vec4(camera->GetFront(), 0.0f);
+            ubo.shadowParams = vec4(gSettings.shadow_normal_bias,
+                                    gSettings.shadow_filter_radius,
+                                    1.0f / static_cast<float>(gSettings.shadow_map_size),
+                                    static_cast<float>(shadowViews.size()));
+            for (uint32_t c = 0; c < shadowViews.size(); ++c)
+            {
+                ubo.cascadeViewZ[c] = shadows.GetCascadeViewZ(c);
+                ubo.cascadeTexel[c] = shadows.GetCascadeTexelSizeWorld(c);
+                ubo.shadowCascades[c] = shadows.GetCascadeMatrix(c);
+            }
+        }
+
         BufferRange range{};
         range.data = &ubo;
         range.size = sizeof(ubo);
@@ -467,6 +519,8 @@ namespace pe
         const uint32_t frame = RHII.GetFrameIndex();
         if (!tlasChanged && frame < m_boundLightStorage.size() && m_boundLightStorage[frame] != scene.GetLightStorage(frame))
             RebindDescriptorSets(); // the enabled lights outgrew this frame's buffer
+        else if (!tlasChanged && m_reflections && shadowViews != m_boundShadowViews)
+            RebindDescriptorSets(); // the shadow maps came, went or were rebuilt
 
         // Every set, for all frames: a geometry change can come with a texture-table resize, which leaves set 0 empty.
         if (tlasChanged || geoChanged)

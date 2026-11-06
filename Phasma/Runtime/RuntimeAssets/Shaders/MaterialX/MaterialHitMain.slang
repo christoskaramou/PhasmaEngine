@@ -113,7 +113,7 @@ bool PeBlendedRenderType(uint renderType)
     return renderType == 3u || renderType == 4u;
 }
 
-#ifndef GI_PROBES
+#ifdef PE_HIT_SEES_BLENDED
 // Leaving a Transmission mesh (its entry hit already shaded and tinted the light): the ray only refracts out, as the legacy
 // hit's exit faces pass the escaped radiance through. N is the surface normal, out of the medium.
 float3 PeExitTransmission(float ior, float3 N)
@@ -180,8 +180,8 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     if (dot(shadingN, shadingN) > 1e-8)
         pe_spec_N = normalize(shadingN);
 
-#ifndef GI_PROBES
-    // Forward meshes reach only the camera pass's hits (probe rays skip them in pe_hit_any).
+#ifdef PE_HIT_SEES_BLENDED
+    // Forward meshes reach only the camera and Reflections passes' hits (probe rays skip them in pe_hit_any).
     const uint renderType = meshInfos[instanceId].renderType;
     const bool blended = PeBlendedRenderType(renderType);
     if (renderType == 4u && dot(WorldRayDirection(), sp.N) > 0.0)
@@ -203,7 +203,7 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     if (cb_linearColor == 0)
         color = LinearToSrgb(color);
 
-#ifndef GI_PROBES
+#ifdef PE_HIT_SEES_BLENDED
     // The forward pass's blend (MaterialX's SRC_ALPHA over a colour that already carries the opacity), over what the
     // surface lets through.
     const float alpha = saturate(inputs.geometry_opacity);

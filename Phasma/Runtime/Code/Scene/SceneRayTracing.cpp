@@ -178,12 +178,13 @@ namespace pe
         m_tlasMasksDirty = true;
     }
 
-    void Scene::SetOpenPBRForwardRaster(bool active)
+    void Scene::SetOpenPBRForwardRaster(bool active, bool traceTransmission)
     {
-        if (active == m_openpbrForwardRaster)
+        if (active == m_openpbrForwardRaster && traceTransmission == m_openpbrTraceTransmission)
             return;
 
         m_openpbrForwardRaster = active;
+        m_openpbrTraceTransmission = traceTransmission;
         m_tlasMasksDirty = true;
     }
 
@@ -251,7 +252,8 @@ namespace pe
             const mat4 &t = m_nodeRuntime[record.nodeIndex].gpuData.worldMatrix;
             // set_visible(false) keeps the instance (no rebuild); mask 0 makes every ray skip it.
             const bool hidden = m_nodeRuntime[record.nodeIndex].gpuData.renderVisible == 0u;
-            const bool forwardRaster = m_openpbrForwardRaster && MeshUsesOpenPBRForward(mesh);
+            const bool tracedGlass = m_openpbrTraceTransmission && mesh.renderType == RenderType::Transmission;
+            const bool forwardRaster = m_openpbrForwardRaster && MeshUsesOpenPBRForward(mesh) && !tracedGlass;
             const uint32_t visibleMask = forwardRaster ? 0x02u : (isTransparent ? 0x80u : 0x01u);
             const uint32_t mask = hidden ? 0x00u : visibleMask;
             const uint32_t hitGroup = RTHitGroup(mesh, m_rtHitModules);

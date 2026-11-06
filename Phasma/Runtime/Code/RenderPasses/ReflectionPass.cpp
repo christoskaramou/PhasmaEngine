@@ -1,5 +1,6 @@
 #include "ReflectionPass.h"
 #include "GlobalIlluminationPass.h"
+#include "ShadowPass.h"
 #include "API/Buffer.h"
 #include "API/Command.h"
 #include "API/Descriptor.h"
@@ -200,6 +201,14 @@ namespace pe
         }
         for (Image *image : ScreenProbeImages())
             builder.ReadCompute(image);
+
+        // The shadow maps its hits sample in raster and Hybrid (RayTracingPass::MappedShadowViews).
+        if (!MappedShadowViews().empty())
+        {
+            for (Image *map : GetGlobalComponent<ShadowPass>()->GetTextures())
+                builder.ReadRayTracing(map);
+        }
+
         builder.ReadCompute(m_history);
         if (m_velocity)
             builder.ReadCompute(m_velocity);

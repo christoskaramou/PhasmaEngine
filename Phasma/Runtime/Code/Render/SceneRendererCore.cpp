@@ -243,7 +243,11 @@ namespace pe
             static_cast<MaterialShadePass *>(m_scenePasses.materialShade)->SyncModules(modules);
 
         if (Scene *active = GetActiveScene())
-            active->SetOpenPBRForwardRaster(SceneUsesOpenPBR());
+        {
+            const RenderMode mode = Settings::Get<SceneSettings>().render_mode;
+            const bool hybrid = mode == RenderMode::Hybrid && RHII.GetCaps().rayTracing;
+            active->SetOpenPBRForwardRaster(SceneUsesOpenPBR(), SceneUsesOpenPBR() && hybrid);
+        }
 
         if (m_renderGraphPassInitialized[static_cast<size_t>(SceneRenderGraphPassId::OpenPBRForward)])
         {
