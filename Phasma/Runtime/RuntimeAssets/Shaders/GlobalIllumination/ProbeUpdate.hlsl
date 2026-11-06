@@ -9,7 +9,8 @@
 // common with whole-metre grids: half its rays start inside) instead steps half the minimum toward the directions its
 // rays escape by; through the closest back face it would cross the slab and see the sky behind it (2026-11-05). One
 // clear of every surface by twice the minimum drifts back toward its grid point, keeping the minimum. A move past 0.45
-// of a cell is rejected (DDGI's limit), so the probe keeps its offset and later frames' rotated rays try again.
+// of a cell is rejected (DDGI's limit), so the probe keeps its offset. Only the fixed rays (ProbeVolume.hlsl) decide,
+// so every run moves a probe the same way.
 float3 ProbeRelocate(uint cascade, float3 offset, bool inside, float closestBack, float3 backDirection, float closestFront,
                      float3 openDirection, bool open)
 {
@@ -50,25 +51,49 @@ void main(uint3 dispatch : SV_DispatchThreadID)
     float3 backDirection = 0.0.xxx;
     float closestFront = 1e30;
     float3 openDirection = 0.0.xxx;
+    float fixedBackfaces = 0.0;
+
+    // Between back faces about as close, an enclosed probe leaves toward its volume's centre, the side the scene is on
+    // (a fitted volume surrounds it, camera cascades centre on the camera). One in the middle of a floor slab otherwise
+    // left under the floor in every run: the fixed rays break the tie the same way each time (2026-11-06).
+    const uint cascade = ProbeCascade(probe);
+    const float3 toCentre = (0.5 * float(gi_gridSize - 1) - float3(ProbeCell(probe))) * gi_spacing[cascade].xyz;
+    const float3 inward = normalize(toCentre);
+    const float exitBias = 0.1 * gi_originSpacing[cascade].w; // half ProbeRelocate's minimum
+    float exitScore = 1e30;
+
     for (uint ray = 0; ray < gi_rayCount; ++ray)
     {
         float4 sample = probeRays.Load(int3(ray, probe, 0));
         float4 directionPdf = rayDirections.Load(int3(ray, probe, 0));
+
+        // Relocation reads only the fixed rays (ProbeVolume.hlsl), everything else only the sampled ones.
+        if (ray < PROBE_FIXED_RAYS)
+        {
+            if (sample.a < 0.0)
+            {
+                fixedBackfaces += 1.0;
+                const float score = -sample.a - exitBias * dot(directionPdf.xyz, inward);
+                if (score < exitScore)
+                {
+                    exitScore = score;
+                    closestBack = -sample.a;
+                    backDirection = directionPdf.xyz;
+                }
+            }
+            else
+            {
+                closestFront = min(closestFront, sample.a);
+                openDirection += directionPdf.xyz;
+            }
+
+            continue;
+        }
+
         // Every sum is weighted by 1/pdf, so importance-sampled rays still estimate the same integrals.
         float inversePdf = 1.0 / max(directionPdf.w, 0.000001);
         backfaces += sample.a < 0.0 ? inversePdf : 0.0;
         rayWeight += inversePdf;
-        if (sample.a < 0.0 && -sample.a < closestBack)
-        {
-            closestBack = -sample.a;
-            backDirection = directionPdf.xyz;
-        }
-
-        if (sample.a >= 0.0)
-        {
-            closestFront = min(closestFront, sample.a);
-            openDirection += directionPdf.xyz * inversePdf;
-        }
 
         float cosine = max(0.0, dot(direction, directionPdf.xyz));
         float weight = pow(cosine, 32.0) * inversePdf;
@@ -105,9 +130,10 @@ void main(uint3 dispatch : SV_DispatchThreadID)
     if (all(dispatch.xy % 8 == 0))
     {
         const float3 offset = hasHistory ? ProbeOffset(oldProbe) : 0.0.xxx;
-        const bool inside = active == 0.0;
-        const bool open = (rayWeight - backfaces) * 4.0 >= rayWeight; // a quarter of the rays escape
-        const float3 relocated = ProbeRelocate(ProbeCascade(probe), offset, inside, closestBack, backDirection, closestFront,
+        const float fixedRays = float(PROBE_FIXED_RAYS);
+        const bool inside = fixedBackfaces * 4.0 >= fixedRays;              // the threshold `active` uses
+        const bool open = (fixedRays - fixedBackfaces) * 4.0 >= fixedRays; // a quarter of the rays escape
+        const float3 relocated = ProbeRelocate(cascade, offset, inside, closestBack, backDirection, closestFront,
                                                openDirection, open);
         probeIrradiance[ProbeOffsetTexel(probe)] = float4(relocated, 0.0);
     }

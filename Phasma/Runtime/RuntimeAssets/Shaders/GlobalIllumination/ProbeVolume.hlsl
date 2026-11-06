@@ -148,15 +148,18 @@ uint ProbeCascadeAt(float3 position, bool history, out float edge)
     return GI_MAX_CASCADES;
 }
 
-float3 ProbeRayDirection(uint ray)
+// DDGI's fixed rays (RTXGI's DDGI_NUM_FIXED_RAYS): a probe's first PROBE_FIXED_RAYS rays keep these directions every
+// frame, a spherical Fibonacci set that never rotates, and only relocation reads them (ProbeUpdate.hlsl). A probe in
+// the same scene then steps the same way in every run, whatever frames it saw; from the rotated, importance-sampled
+// rays its offset depended on them. Irradiance and visibility keep the other gi_rayCount - PROBE_FIXED_RAYS rays.
+#define PROBE_FIXED_RAYS 32
+
+float3 ProbeFixedRayDirection(uint ray)
 {
-    float z = 1.0 - 2.0 * (float(ray) + 0.5) / float(gi_rayCount);
-    float angle = float(ray) * 2.399963229728653 + float(gi_frame % 1024) * 0.61803398875;
-    float radius = sqrt(max(0.0, 1.0 - z * z));
-    float3 direction = float3(radius * cos(angle), radius * sin(angle), z);
-    float rotation = float(gi_frame % 1024) * 1.32471795724;
-    return float3(direction.x, direction.y * cos(rotation) - direction.z * sin(rotation),
-                  direction.y * sin(rotation) + direction.z * cos(rotation));
+    const float z = 1.0 - 2.0 * (float(ray) + 0.5) / float(PROBE_FIXED_RAYS);
+    const float angle = float(ray) * 2.399963229728653;
+    const float radius = sqrt(max(0.0, 1.0 - z * z));
+    return float3(radius * cos(angle), radius * sin(angle), z);
 }
 
 #define PROBE_RADIANCE_SIZE 16

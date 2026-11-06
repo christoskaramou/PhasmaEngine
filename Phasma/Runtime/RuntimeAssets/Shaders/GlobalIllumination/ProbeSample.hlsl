@@ -26,11 +26,12 @@ void InclusiveScan(uint t, inout float value, uint which)
     }
 }
 
-// One workgroup per probe, one thread per ray (and per radiance texel). Rays are importance-sampled from last
-// frame's radiance cache, as Lumen's probes do: a texel is chosen with probability 0.75 x its share of the probe's
-// incoming flux + 0.25 x its share of the sphere, so every direction keeps a non-zero pdf. Rays are stratified over
-// that distribution and jittered inside their texel; the pdf over the sphere goes to ProbeUpdate, which weights
-// every ray by 1/pdf so the irradiance estimate stays unbiased. Without history the distribution is uniform.
+// One workgroup per probe, one thread per ray (and per radiance texel). Rays past the fixed ones are
+// importance-sampled from last frame's radiance cache, as Lumen's probes do: a texel is chosen with probability 0.75 x
+// its share of the probe's incoming flux + 0.25 x its share of the sphere, so every direction keeps a non-zero pdf.
+// Rays are stratified over that distribution and jittered inside their texel; the pdf over the sphere goes to
+// ProbeUpdate, which weights every ray by 1/pdf so the irradiance estimate stays unbiased. Without history the
+// distribution is uniform.
 [numthreads(256, 1, 1)]
 void main(uint3 group : SV_GroupID, uint3 thread : SV_GroupThreadID)
 {
@@ -66,9 +67,19 @@ void main(uint3 group : SV_GroupID, uint3 thread : SV_GroupThreadID)
 
     if (t >= gi_rayCount)
         return;
-    // Stratified: ray t takes the t-th of gi_rayCount equal slices of the distribution, all shifted by one offset.
+
+    // The fixed rays (ProbeVolume.hlsl) keep their directions; their pdf is the uniform sphere's.
+    if (t < PROBE_FIXED_RAYS)
+    {
+        rayDirections[uint2(t, probe)] = float4(ProbeFixedRayDirection(t), 0.25 / PI);
+        return;
+    }
+
+    // Stratified: the other rays take the distribution's equal slices in order, all shifted by one offset.
+    const uint slice = t - PROBE_FIXED_RAYS;
+    const float slices = float(gi_rayCount - PROBE_FIXED_RAYS);
     const uint seed = probe * 256u + t + gi_frame * 131071u;
-    const float target = (float(t) + ProbeRandom(probe * 9781u + gi_frame * 6271u)) / float(gi_rayCount) * total;
+    const float target = (float(slice) + ProbeRandom(probe * 9781u + gi_frame * 6271u)) / slices * total;
     uint low = 0;
     uint high = 255;
     while (low < high)
