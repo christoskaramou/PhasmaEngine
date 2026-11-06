@@ -74,7 +74,17 @@ namespace pe
         bool m_probeTracing = false;
         bool m_screenProbes = false; // probe tracing for ScreenProbePass
         bool m_reflections = false;  // probe tracing for ReflectionPass
-        uint32_t m_traceHeight = 0;  // rays traced per column; 0: the display image's height
+
+        // Ray tracing pipelines bind descriptor sets (VulkanPipelineImpl), written in place: a rebind during the session
+        // marks every frame stale and each frame rewrites only its own sets in its Update, before recording, when its
+        // previous use has finished (as for its uniforms). Rewriting them all at once lost the device while frames still
+        // read them (a slider drag on a glass sphere's transmission in Full RT, 2026-11-06).
+        void RebindDescriptorSets();
+        void RebindStaleFrame();
+        bool UpdatesFrame(uint32_t frame) const { return m_descriptorFrame == UINT32_MAX || frame == m_descriptorFrame; }
+        uint32_t m_descriptorFrame = UINT32_MAX; // the one frame UpdateDescriptorSets writes; UINT32_MAX: all (idle GPU)
+        uint32_t m_staleDescriptorFrames = 0;
+        uint32_t m_traceHeight = 0; // rays traced per column; 0: the display image's height
         Buffer *m_giFallbackUniform = nullptr;
         Scene *m_scene = nullptr;
         Image *m_display = nullptr;

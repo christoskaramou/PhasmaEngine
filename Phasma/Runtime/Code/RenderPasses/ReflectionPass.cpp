@@ -111,6 +111,9 @@ namespace pe
         m_boundProbeImages = probes;
         for (uint32_t frame = 0; frame < RHII.GetSwapchainImageCount(); ++frame)
         {
+            if (!UpdatesFrame(frame))
+                continue;
+
             auto &raySets = m_passInfo->GetDescriptors(frame);
             Buffer *giUniform = gi ? gi->GetProbeUniform(frame) : nullptr;
             if (raySets.size() > 2 && raySets[2] && giUniform)
@@ -154,13 +157,15 @@ namespace pe
         const uint32_t frame = RHII.GetFrameIndex();
         auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
         if ((gi && gi->GetProbeUniform(frame) && m_boundGIUniforms[frame] != gi->GetProbeUniform(frame)) || m_boundProbeImages != ScreenProbeImages())
-            UpdateDescriptorSets();
+            RebindDescriptorSets();
         // The velocity target comes and goes with the settings that need it (SceneNeedsVelocityRT).
         if (Image *velocity = RequireActiveSceneRendererHost().GetRenderTarget("velocity"); velocity != m_velocity)
         {
             m_velocity = velocity;
-            UpdateDescriptorSets();
+            RebindDescriptorSets();
         }
+
+        RebindStaleFrame();
         m_data.hasVelocity = m_velocity ? 1u : 0u;
         // A frame rendered without this pass (GI toggled off, no TLAS) leaves history that no longer matches the view.
         const bool reset = m_historyScene != scene || m_historyGeneration != scene->GetGeneration() || !m_lastUpdate ||

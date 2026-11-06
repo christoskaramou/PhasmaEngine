@@ -315,8 +315,14 @@ namespace pe
         if (!scene.GetTLAS() || m_uniforms.empty())
             return;
 
+        if (m_descriptorFrame == UINT32_MAX)
+            m_staleDescriptorFrames = 0;
+
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
+            if (!UpdatesFrame(i))
+                continue;
+
             auto &descriptors = m_passInfo->GetDescriptors(i);
 
             // All bindings go in Set 0 (raytracing shaders share the same descriptor set layout)
@@ -397,6 +403,23 @@ namespace pe
         }
     }
 
+    void RayTracingPass::RebindDescriptorSets()
+    {
+        m_staleDescriptorFrames = (1u << RHII.GetSwapchainImageCount()) - 1u;
+    }
+
+    void RayTracingPass::RebindStaleFrame()
+    {
+        const uint32_t frame = RHII.GetFrameIndex();
+        if ((m_staleDescriptorFrames & (1u << frame)) == 0u)
+            return;
+
+        m_staleDescriptorFrames &= ~(1u << frame);
+        m_descriptorFrame = frame;
+        UpdateDescriptorSets(); // virtual: ReflectionPass's own sets follow the same frame
+        m_descriptorFrame = UINT32_MAX;
+    }
+
     void RayTracingPass::Update()
     {
         Camera *camera = GetActiveScene()->GetActiveCamera();
@@ -443,12 +466,12 @@ namespace pe
         bool geoChanged = geoVersion != m_lastGeometryVersion;
         const uint32_t frame = RHII.GetFrameIndex();
         if (!tlasChanged && frame < m_boundLightStorage.size() && m_boundLightStorage[frame] != scene.GetLightStorage(frame))
-            UpdateDescriptorSets(); // the enabled lights outgrew this frame's buffer
+            RebindDescriptorSets(); // the enabled lights outgrew this frame's buffer
 
         // Every set, for all frames: a geometry change can come with a texture-table resize, which leaves set 0 empty.
         if (tlasChanged || geoChanged)
         {
-            UpdateDescriptorSets();
+            RebindDescriptorSets();
             m_tlas = tlas;
             m_lastGeometryVersion = geoVersion;
         }
@@ -457,7 +480,9 @@ namespace pe
                                       (m_boundMaterialBytes != scene.GetMaterialByteBuffer() ||
                                        m_boundEnvRadiance != RequireActiveSceneRendererHost().GetSkyBox().GetOpenPBRRadiance());
         if (hitBindingsMoved)
-            UpdateDescriptorSets();
+            RebindDescriptorSets();
+
+        RebindStaleFrame();
 
         if (!m_probeTracing)
         {
