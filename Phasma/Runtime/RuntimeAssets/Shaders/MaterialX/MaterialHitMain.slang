@@ -152,6 +152,9 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     pe_N = sp.N;
     pe_spec_N = sp.N;
     pe_hit_depth = payload.depth;
+#ifdef GI_TRACED_VISIBILITY
+    rt_traceProbeVisibility = payload.depth == 0u;
+#endif
     pe_hit_cone_width = RT_ConeWidthAtHit(payload);
     pe_hit_cone_spread = payload.coneSpread;
     pe_hit_refracts = false;
@@ -184,6 +187,11 @@ void pe_hit_closest(inout HitPayload payload, in BuiltInTriangleIntersectionAttr
     // Forward meshes reach only the camera and Reflections passes' hits (probe rays skip them in pe_hit_any).
     const uint renderType = meshInfos[instanceId].renderType;
     const bool blended = PeBlendedRenderType(renderType);
+#ifdef GI_TRACED_VISIBILITY
+    if (blended)
+        rt_traceProbeVisibility = false;
+#endif
+
     if (renderType == 4u && dot(WorldRayDirection(), sp.N) > 0.0)
     {
         const float3 escaped = PeExitTransmission(inputs.specular_ior, sp.N);

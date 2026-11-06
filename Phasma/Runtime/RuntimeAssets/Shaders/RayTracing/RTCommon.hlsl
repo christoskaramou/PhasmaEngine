@@ -172,6 +172,12 @@ float TraceVisibility(float3 origin, float3 dir, float dist)
 // Ray-traced shading and reflection hits trace each world probe's visibility (ProbeVolume.hlsl); probe and screen-probe
 // rays keep the distance moments alone, as up to 8 more rays per hit would multiply their cost.
 #define GI_TRACED_VISIBILITY 1
+
+// Only first hits on opaque surfaces trace it (depth 0: camera hits and the Reflections pass's own). Glass and
+// alpha-blend surfaces, whose diffuse light barely shows, and hits seen through them or in a Full RT mirror keep the
+// moments: each traced lookup is up to 9 rays per cascade, so a glass chain of 4-5 shaded hits traced about 80 per
+// pixel (Full RT close to two transparent spheres 15 -> 55 ms, 2026-11-06).
+static bool rt_traceProbeVisibility = true;
 #endif
 #if defined(GI_PROBES) || defined(GI_SHADING)
 #include "../GlobalIllumination/ProbeVolume.hlsl"

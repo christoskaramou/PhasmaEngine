@@ -273,7 +273,7 @@ float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool
     float3 spacing = gi_spacing[cascade].xyz;
     float3 biased = position + normal * ProbeNormalBias(cascade);
 #ifdef GI_TRACED_VISIBILITY
-    const bool traceProbes = gi_tracedVisibility != 0;
+    const bool traceProbes = gi_tracedVisibility != 0 && rt_traceProbeVisibility;
     // In a gap narrower than the bias (a sphere's underside near where it rests on a floor) the biased point lies
     // inside the floor, where every probe is blocked: a hard-edged dark ellipse around mirrored contacts. There the
     // bias halves until the normal ray is clear (up to 3 more rays, only in such gaps); 2 mm off the surface, facets

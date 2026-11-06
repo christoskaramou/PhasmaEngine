@@ -354,6 +354,9 @@ void closesthit(inout HitPayload payload, in BuiltInTriangleIntersectionAttribut
     bool isAlphaCutMaterial = renderType == 2;
     bool isAlphaBlendMaterial = renderType == 3;
     bool isTransmissive = renderType == 4;
+#ifdef GI_TRACED_VISIBILITY
+    rt_traceProbeVisibility = payload.depth == 0 && !isAlphaBlendMaterial && !isTransmissive;
+#endif
 
     // 1. Base Color
     float4 combinedColor = color * mat.baseColorFactor;
