@@ -1,8 +1,13 @@
 #include "API/Surface_Internal.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanSurfaceImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12SurfaceImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuSwapchainImpl.h"
 #endif
 
 namespace pe
@@ -12,14 +17,20 @@ namespace pe
         const PeGraphicsApi api = RHII.GetApi();
         switch (api)
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanSurfaceImpl(owner, window);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12SurfaceImpl(owner, window);
 #else
             PE_ERROR("CreateSurfaceImpl: DX12 backend is Windows-only");
             return nullptr;
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuSurfaceImpl(owner, window);
 #endif
         default:
             PE_ERROR("CreateSurfaceImpl: unsupported graphics api %u", static_cast<uint32_t>(api));

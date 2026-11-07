@@ -2,13 +2,16 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/Helpers_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanEventImpl.h"
 #include "API/Vulkan/VulkanImageImpl.h"
 #include "API/Vulkan/VulkanRHITypeUtils.h"
+#endif
 
+#if defined(PE_VULKAN)
 namespace pe
 {
     namespace
@@ -181,3 +184,31 @@ namespace pe
         m_set = false;
     }
 } // namespace pe
+#else
+namespace pe
+{
+    // GPU events are a Vulkan feature; DX12 has no caller either and WebGPU has no equivalent.
+    Event::Event(const std::string &name)
+    {
+        PE_ERROR("Event '%s': GPU events need the Vulkan backend", name.c_str());
+    }
+
+    Event::~Event() = default;
+
+    void Event::Set(CommandBuffer *, Image *, PeImageLayout, PeImageLayout, PeBarrierSync, PeBarrierSync, PeBarrierAccess,
+                    PeBarrierAccess)
+    {
+        PE_ERROR("Event::Set: GPU events need the Vulkan backend");
+    }
+
+    void Event::Wait()
+    {
+        PE_ERROR("Event::Wait: GPU events need the Vulkan backend");
+    }
+
+    void Event::Reset(PeBarrierSync)
+    {
+        PE_ERROR("Event::Reset: GPU events need the Vulkan backend");
+    }
+} // namespace pe
+#endif

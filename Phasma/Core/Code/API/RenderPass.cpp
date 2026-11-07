@@ -1,7 +1,9 @@
 #include "API/RenderPass_Internal.h"
 #include "API/Command.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanRenderPassImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12RenderPassImpl.h"
 #endif
@@ -13,8 +15,10 @@ namespace pe
         const PeGraphicsApi api = RHII.GetApi();
         switch (api)
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanRenderPassImpl(owner, count, attachments, name);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12RenderPassImpl(owner, count, attachments, name);

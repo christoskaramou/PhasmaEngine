@@ -252,6 +252,10 @@ namespace pe
         CreateStorageBuffers();
         MarkUniformsDirty();
         CreateIndirectBuffers(cmd);
+
+        // Primitive-only scenes never load a model, so nothing has created the fallback textures that material
+        // sets bind for empty slots yet.
+        ModelAsset::GetDefaultResources(cmd);
         UpdateImageViews();
         CreateMaterialTable();
         CreateMeshConstants(cmd);
@@ -1022,6 +1026,14 @@ namespace pe
         CollectOpenPBRImages();
         BuildImageViewTable(UINT32_MAX);
 
+        // Without bindless (the web profile), meshes bind their own material textures instead of indexing a table.
+        if (RHII.GetCaps().maxBindlessTextures == 0)
+        {
+            UpdateMaterialSets();
+            m_geometryVersion++;
+            return;
+        }
+
         // Bindless arrays grow with the scene; past the device or heap limit, the extra textures sample white.
         const uint32_t count = static_cast<uint32_t>(m_imageViews.size());
         if (!RHII.ReserveBindlessTextures(count))
@@ -1041,6 +1053,65 @@ namespace pe
         }
 
         m_geometryVersion++;
+    }
+
+    void Scene::UpdateMaterialSets()
+    {
+        // The views behind the old sets may be gone after a rebuild, so start over. WebGPU keeps a released bind
+        // group alive while recorded commands still use it.
+        DestroyMaterialSets();
+        for (MeshRuntime &runtime : m_meshRuntimes)
+            runtime.materialSet = MaterialSetFor(runtime);
+
+        PE_INFO("[Scene] %zu meshes share %zu material bind groups", m_meshRuntimes.size(), m_materialSets.size());
+    }
+
+    Descriptor *Scene::MaterialSetFor(const MeshRuntime &runtime)
+    {
+        // Empty slots get a default texture; GBufferPS samples only the slots its texture mask marks.
+        const auto &defaults = ModelAsset::GetDefaultResources();
+        std::array<ImageView *, 5> views{};
+        for (uint32_t k = 0; k < 5; ++k)
+        {
+            const uint32_t index = runtime.imageViewIndices[k];
+            const bool bound = index < m_imageViews.size();
+            Image *fallback = k == static_cast<uint32_t>(TextureType::Normal) ? defaults.normal : defaults.white;
+            PE_ERROR_IF(!bound && !fallback, "Scene::MaterialSetFor: default textures not created yet");
+            views[k] = bound ? m_imageViews[index] : fallback->GetSRV();
+        }
+
+        auto [it, inserted] = m_materialSets.try_emplace(views, nullptr);
+        if (!inserted)
+            return it->second;
+
+        // Set 2, bindings 0-4: the five material textures every web pass that binds the material set declares.
+        std::vector<DescriptorBindingInfo> bindings(5);
+        for (uint32_t k = 0; k < 5; ++k)
+        {
+            bindings[k].binding = k;
+            bindings[k].type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
+            bindings[k].imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            bindings[k].name = "pe_material_texture_" + std::to_string(k);
+        }
+
+        const std::string name = "Scene_material_set_" + std::to_string(m_materialSets.size() - 1);
+        Descriptor *set = Descriptor::Create(bindings, PE_SHADER_STAGE_FRAGMENT, false, name);
+        for (uint32_t k = 0; k < 5; ++k)
+            set->SetImageView(k, views[k]);
+
+        set->Update();
+        it->second = set;
+        return set;
+    }
+
+    void Scene::DestroyMaterialSets()
+    {
+        for (auto &[views, set] : m_materialSets)
+            Descriptor::Destroy(set);
+
+        m_materialSets.clear();
+        for (MeshRuntime &runtime : m_meshRuntimes)
+            runtime.materialSet = nullptr;
     }
 
     void Scene::BuildImageViewTable(uint32_t limit)
@@ -2752,9 +2823,9 @@ namespace pe
                 if (mesh.indexCount == 0 || !MeshUsesOpenPBRForward(mesh))
                     continue;
 
-                // Hybrid traces Transmission meshes (SetOpenPBRForwardRaster): drawn here too, they would cover the trace.
-                if (m_openpbrTraceTransmission && mesh.renderType == RenderType::Transmission)
-                    continue;
+                // Hybrid traces Transmission meshes (SetOpenPBRForwardRaster): shaded here too, they would cover the trace,
+                // so the forward pass only gives depth of field their depth.
+                const bool dofOnly = m_openpbrTraceTransmission && mesh.renderType == RenderType::Transmission;
 
                 const uint32_t module = mesh.materialInstance->gpuOpenPBRModule;
                 if (module == UINT32_MAX) // not packed yet: the byte rebuild that follows the assignment packs it
@@ -2767,7 +2838,8 @@ namespace pe
                                  mesh.indexCount,
                                  mesh.indexOffset,
                                  static_cast<int32_t>(mesh.vertexOffset),
-                                 length(centre - cameraPosition)});
+                                 length(centre - cameraPosition),
+                                 dofOnly});
             }
         }
 
@@ -2940,6 +3012,9 @@ namespace pe
             return true;
 
         runtime.imageViewIndices[textureSlot] = imageViewIndex;
+        if (RHII.GetCaps().maxBindlessTextures == 0)
+            runtime.materialSet = MaterialSetFor(runtime);
+
         if (std::find(m_pendingTextureMeshUploads.begin(), m_pendingTextureMeshUploads.end(), meshIndex) ==
             m_pendingTextureMeshUploads.end())
             m_pendingTextureMeshUploads.push_back(meshIndex);

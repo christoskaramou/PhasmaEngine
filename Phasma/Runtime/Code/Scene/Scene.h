@@ -520,6 +520,10 @@ namespace pe
         uint32_t GetOpenPBRSkinningJobsOffset() const { return m_openpbrSkinningJobsOffset; }
         Buffer *GetClusterBuffer() const { return m_clusterBuffer; }
         void BindDrawIdBuffer(CommandBuffer *cmd) const;
+        // Draws one cull bucket, named by its counter (0/1 opaque/alpha-cut single-sided, 2 alpha-blend,
+        // 3 transmission, 5/6 opaque/alpha-cut double-sided): the compacted list through the count buffer, or under
+        // the web profile one draw per mesh with that mesh's material set (WebGPU RHI spec decision 9).
+        void DrawBucket(CommandBuffer *cmd, Buffer *indirect, Buffer *counters, uint32_t bucket, uint32_t maxDrawCount);
         Buffer *GetCullingCountersBuffer(uint32_t frame) const { return m_cullingCountersBuffers[frame]; }
         Buffer *GetIndirectOpaqueSS(uint32_t frame) const { return m_indirectOpaqueSS[frame]; }
         Buffer *GetIndirectAlphaCutSS(uint32_t frame) const { return m_indirectAlphaCutSS[frame]; }
@@ -569,6 +573,7 @@ namespace pe
             uint32_t firstIndex;
             int32_t vertexOffset;
             float distance;
+            bool dofOnly; // Hybrid traces this Transmission mesh: draw only its depth-of-field depth, no colour
         };
 
         // The forward pass's draws, far to near by the distance from the camera to each mesh's world bounds centre
@@ -812,6 +817,9 @@ namespace pe
         void DestroyOpenPBRSkinningBuffers();
         void UpdateImageViews();
         void BuildImageViewTable(uint32_t limit);
+        void UpdateMaterialSets();
+        Descriptor *MaterialSetFor(const MeshRuntime &runtime);
+        void DestroyMaterialSets();
         void CollectOpenPBRImages();
         void CreateOpenPBRSamplers();
         void CreateMaterialTable();
@@ -866,6 +874,7 @@ namespace pe
         std::vector<Buffer *> m_drawInstanceIds;
         bool m_pendingDrawInstanceUpload = false;
         std::vector<Buffer *> m_cullingCountersBuffers;
+        // Web profile: CullingCS writes every mesh's draw at its slot here (spec decision 9).
         std::vector<Buffer *> m_indirectOpaqueSS;
         std::vector<Buffer *> m_indirectAlphaCutSS;
         std::vector<Buffer *> m_indirectOpaqueDS;
@@ -934,6 +943,17 @@ namespace pe
         uint32_t m_indirectCapacity = 1;
         bool m_hasTransparentMeshes = false;
         bool m_hasAlphaBlendMeshes = false;
+
+        // Web profile: each cull bucket's meshes this frame, the transparent ones back to front (BuildWebDraws).
+        struct WebDraw
+        {
+            uint32_t slot;
+            Descriptor *materialSet;
+            float distance;
+        };
+        void BuildWebDraws();
+        std::array<std::vector<WebDraw>, 7> m_webDraws;
+        uint32_t m_webDrawsFrame = UINT32_MAX;
         bool m_hasTransmissionMeshes = false;
         bool m_hasLinesMeshes = false;
         uint32_t m_alphaBlendMeshCount = 0;
@@ -969,6 +989,8 @@ namespace pe
 
         std::vector<ImageView *> m_imageViews;
         std::unordered_map<ImageView *, uint32_t> m_imageViewIndices; // table index per view, overflow included
+        // Web profile (no bindless): one bind group per distinct set of five material texture views (decision 9).
+        std::map<std::array<ImageView *, 5>, Descriptor *> m_materialSets;
         std::vector<int> m_pendingTextureMeshUploads;
         ImageView *m_voxelAtlasView = nullptr;
         ImageView *m_terrainSplatView = nullptr;

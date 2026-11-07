@@ -138,6 +138,7 @@ namespace pe
         friend struct VulkanPipelineImpl;
         friend struct Dx12CommandBufferImpl;
         friend struct Dx12PipelineImpl;
+        friend struct WebGpuPipelineImpl;
 
         void ReflectDescriptors();
         void UpdateHash() override;
@@ -179,6 +180,7 @@ namespace pe
         friend struct VulkanCommandBufferImpl;
         friend struct VulkanPipelineImpl;
         friend struct Dx12PipelineImpl;
+        friend struct WebGpuPipelineImpl;
 
         Impl *m_impl{};
         PassInfo &m_info;

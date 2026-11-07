@@ -3,10 +3,15 @@
 #include "API/Command.h"
 #include "API/Downsampler/Downsampler.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanImageImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ImageImpl.h"
 #include "API/DX12/Dx12CommandBufferImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuImageImpl.h"
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -20,7 +25,16 @@ namespace pe
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             return new Dx12ImageImpl(owner, desc);
 #endif
+#if defined(PE_WEB)
+        if (RHII.GetApi() == PE_GRAPHICS_API_WEBGPU)
+            return new WebGpuImageImpl(owner, desc);
+#endif
+#if defined(PE_VULKAN)
         return new VulkanImageImpl(owner, desc);
+#else
+        PE_ERROR("%s: unsupported graphics api %u", __func__, static_cast<uint32_t>(RHII.GetApi()));
+        return nullptr;
+#endif
     }
 
     void Image_Barrier_Backend(CommandBuffer *cmd, const ImageBarrierInfo &info)
@@ -33,7 +47,12 @@ namespace pe
             return;
         }
 #endif
+#if defined(PE_VULKAN)
         Image_Barrier_Vulkan(cmd, info);
+#else
+        (void)cmd; // WebGPU tracks usage itself; barriers are no-ops (spec decision 5)
+        (void)info;
+#endif
     }
 
     void Image_Barriers_Backend(CommandBuffer *cmd, const std::vector<ImageBarrierInfo> &infos)
@@ -46,7 +65,12 @@ namespace pe
             return;
         }
 #endif
+#if defined(PE_VULKAN)
         Image_Barriers_Vulkan(cmd, infos);
+#else
+        (void)cmd;
+        (void)infos;
+#endif
     }
 
     namespace

@@ -22,6 +22,12 @@ namespace pe
             bool present = false;
         };
 
+#if defined(PE_WEB)
+        constexpr PeGraphicsApi kPlatformDefaultApi = PE_GRAPHICS_API_WEBGPU;
+#else
+        constexpr PeGraphicsApi kPlatformDefaultApi = PE_GRAPHICS_API_VULKAN;
+#endif
+
         bool StartsWith(std::string_view value, std::string_view prefix)
         {
             return value.size() >= prefix.size() && value.substr(0, prefix.size()) == prefix;
@@ -32,9 +38,19 @@ namespace pe
             switch (api)
             {
             case PE_GRAPHICS_API_VULKAN:
+#if defined(PE_VULKAN)
                 return true;
+#else
+                return false;
+#endif
             case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
+                return true;
+#else
+                return false;
+#endif
+            case PE_GRAPHICS_API_WEBGPU:
+#if defined(PE_WEB)
                 return true;
 #else
                 return false;
@@ -50,6 +66,10 @@ namespace pe
             {
             case PE_GRAPHICS_API_DX12:
                 return "DX12 backend is Windows-only";
+            case PE_GRAPHICS_API_WEBGPU:
+                return "WebGPU backend is browser-only";
+            case PE_GRAPHICS_API_VULKAN:
+                return "Vulkan backend is not built for the browser";
             default:
                 return "unsupported graphics API";
             }
@@ -57,7 +77,13 @@ namespace pe
 
         std::string ExpectedApiList()
         {
+#if defined(PE_WEB)
+            return "webgpu";
+#elif defined(PE_WIN32)
             return "vulkan, dx12";
+#else
+            return "vulkan";
+#endif
         }
 
         std::string InvalidApiMessage(const std::string &label, const std::string &value)
@@ -129,7 +155,7 @@ namespace pe
             std::ifstream file(path, std::ios::binary);
             if (!file.is_open())
             {
-                warning = "Could not open " + path.string() + "; falling back to vulkan";
+                warning = "Could not open " + path.string() + "; falling back to " + std::string(GraphicsApiConfigName(kPlatformDefaultApi));
                 return false;
             }
 
@@ -142,13 +168,14 @@ namespace pe
             if (document.HasParseError())
             {
                 warning = "Could not parse " + path.string() + ": " +
-                          rapidjson::GetParseError_En(document.GetParseError()) + "; falling back to vulkan";
+                          rapidjson::GetParseError_En(document.GetParseError()) + "; falling back to " + std::string(GraphicsApiConfigName(kPlatformDefaultApi));
                 return false;
             }
 
             if (!document.IsObject())
             {
-                warning = path.string() + " must contain a JSON object; falling back to vulkan";
+                warning = path.string() + " must contain a JSON object; falling back to " +
+                          GraphicsApiConfigName(kPlatformDefaultApi);
                 return false;
             }
 
@@ -163,7 +190,8 @@ namespace pe
             const rapidjson::Value &value = document[key];
             if (!value.IsString())
             {
-                warning = path.string() + " field '" + key + "' must be a string; falling back to vulkan";
+                warning = path.string() + " field '" + key + "' must be a string; falling back to " +
+                          GraphicsApiConfigName(kPlatformDefaultApi);
                 return false;
             }
 
@@ -219,6 +247,12 @@ namespace pe
             return true;
         }
 
+        if (value == "webgpu")
+        {
+            api = PE_GRAPHICS_API_WEBGPU;
+            return true;
+        }
+
         return false;
     }
 
@@ -230,6 +264,8 @@ namespace pe
             return "vulkan";
         case PE_GRAPHICS_API_DX12:
             return "dx12";
+        case PE_GRAPHICS_API_WEBGPU:
+            return "webgpu";
         default:
             return "unknown";
         }
@@ -292,16 +328,19 @@ namespace pe
                 runtimeConfigPath && *runtimeConfigPath ? std::filesystem::path(runtimeConfigPath) : DefaultRuntimeConfigPath();
             if (TryReadRuntimeConfigApi(configPath, config, warning))
             {
-                PeGraphicsApi configApi = PE_GRAPHICS_API_VULKAN;
+                PeGraphicsApi configApi = kPlatformDefaultApi;
                 if (!TryParseGraphicsApiName(config.value, configApi))
                 {
-                    StoreWarning(selection, InvalidApiMessage(config.label, config.value) + "; falling back to vulkan");
+                    StoreWarning(selection,
+                                 InvalidApiMessage(config.label, config.value) + "; falling back to " +
+                                     GraphicsApiConfigName(kPlatformDefaultApi));
                 }
                 else if (!IsSupportedOnCurrentPlatform(configApi))
                 {
                     StoreWarning(selection,
                                  "Unsupported " + config.label + " value '" + config.value + "': " +
-                                     UnsupportedReason(configApi) + "; falling back to vulkan");
+                                     UnsupportedReason(configApi) + "; falling back to " +
+                                     GraphicsApiConfigName(kPlatformDefaultApi));
                 }
                 else
                 {
@@ -317,7 +356,7 @@ namespace pe
             }
         }
 
-        selection.api = PE_GRAPHICS_API_VULKAN;
+        selection.api = kPlatformDefaultApi;
         selection.source = GraphicsApiSelectionSource::BuiltInDefault;
         selection.value = GraphicsApiConfigName(selection.api);
         return selection;

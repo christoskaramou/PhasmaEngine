@@ -1,7 +1,9 @@
 #include "API/QueryPool_Internal.h"
 
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanQueryPool.h"
+#endif
 
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12QueryPool.h"
@@ -13,8 +15,10 @@ namespace pe
     {
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return std::make_unique<VulkanQueryPool>(desc);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return std::make_unique<Dx12QueryPool>(desc);

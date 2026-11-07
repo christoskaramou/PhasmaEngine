@@ -4,6 +4,7 @@
 
 namespace pe
 {
+    class Descriptor;
     class Entity;
     class Image;
     class Material;
@@ -139,6 +140,7 @@ namespace pe
     {
         uint32_t imageViewIndices[5] = {0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF};
         uint32_t materialGpuIndex = 0xFFFFFFFF;
+        Descriptor *materialSet = nullptr; // web profile: bind group of the five textures above (spec decision 9)
         SkinnedBounds skinBounds;
     };
     // Transform an AABB by a matrix (8-corner method)

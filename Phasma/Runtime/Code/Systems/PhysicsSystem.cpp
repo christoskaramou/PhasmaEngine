@@ -30,6 +30,7 @@
 #include <Jolt/Jolt.h>
 
 #include <Jolt/Core/Factory.h>
+#include <Jolt/Core/JobSystemSingleThreaded.h>
 #include <Jolt/Core/JobSystemThreadPool.h>
 #include <Jolt/Core/TempAllocator.h>
 #include <Jolt/Physics/Body/Body.h>
@@ -236,9 +237,13 @@ namespace pe
         JPH::RegisterTypes();
 
         m_tempAllocator = new JPH::TempAllocatorImpl(kTempAllocatorBytes);
+#if PE_THREADPOOL_INLINE
+        m_jobSystem = new JPH::JobSystemSingleThreaded(JPH::cMaxPhysicsJobs);
+#else
         m_jobSystem = new JPH::JobSystemThreadPool(
             JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers,
             static_cast<int>(std::max(1u, std::thread::hardware_concurrency() - 1)));
+#endif
 
         constexpr uint32_t numBodyMutexes = 0; // auto
 

@@ -9,9 +9,14 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Semaphore.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuCommandBufferImpl.h"
 #endif
 
 namespace pe
@@ -711,6 +716,15 @@ namespace pe
 #endif
         }
 
+#if defined(PE_WEB)
+        if (RHII.GetApi() == PE_GRAPHICS_API_WEBGPU)
+            return new WebGpuCommandBufferImpl(owner, commandPool, name);
+#endif
+#if defined(PE_VULKAN)
         return new VulkanCommandBufferImpl(owner, commandPool, name);
+#else
+        PE_ERROR("CreateCommandBufferImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
+        return nullptr;
+#endif
     }
 } // namespace pe

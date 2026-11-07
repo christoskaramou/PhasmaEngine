@@ -35,13 +35,22 @@ namespace pe
     {
     public:
         Hash() : m_hash(0) {}
-        Hash(const size_t &hash) : m_hash(hash) {}
+        Hash(uint64_t hash) : m_hash(hash) {}
         Hash(const Hash &hash) : m_hash(hash.m_hash) {}
 
-        void Combine(const size_t &hash)
+        // 64 bits on every target, so wasm32 (32-bit size_t) derives the same persisted keys as a 64-bit desktop bake.
+        void Combine(uint64_t hash)
         {
             m_hash ^= hash + 0x9e3779b9 + (m_hash << 6) + (m_hash >> 2);
         }
+
+#if SIZE_MAX < UINT64_MAX
+        // Where size_t is narrower, keep it off the templated std::hash overload below (which would recurse).
+        void Combine(size_t hash)
+        {
+            Combine(static_cast<uint64_t>(hash));
+        }
+#endif
 
         void Combine(const Hash &hash)
         {
@@ -63,7 +72,7 @@ namespace pe
         // elsewhere — e.g. shader-cache source text, entry points, and shader defines.
         void CombineString(std::string_view value)
         {
-            Combine(static_cast<size_t>(Fnv1a64(value)));
+            Combine(Fnv1a64(value));
         }
 
         // Portable integer combine. The templated Combine<T> routes integers through std::hash<T>,
@@ -72,15 +81,16 @@ namespace pe
         // API/target/stage), feed the raw value straight into the portable mixer instead.
         void CombineValue(uint64_t value)
         {
-            Combine(static_cast<size_t>(value));
+            Combine(value);
         }
 
         bool operator==(const Hash &other) { return m_hash == other.m_hash; }
-        operator size_t() { return m_hash; }
-        operator size_t() const { return m_hash; }
+        operator size_t() { return static_cast<size_t>(m_hash); }
+        operator size_t() const { return static_cast<size_t>(m_hash); }
+        uint64_t Value() const { return m_hash; }
 
     private:
-        size_t m_hash;
+        uint64_t m_hash;
     };
 
     class StringHash : public Hash

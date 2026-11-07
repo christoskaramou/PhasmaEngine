@@ -1,9 +1,14 @@
 #include "API/Swapchain_Internal.h"
 #include "API/Image.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanSwapchainImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12SwapchainImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuSwapchainImpl.h"
 #endif
 
 namespace pe
@@ -13,14 +18,20 @@ namespace pe
         const PeGraphicsApi api = RHII.GetApi();
         switch (api)
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanSwapchainImpl(owner, desc);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12SwapchainImpl(owner, desc);
 #else
             PE_ERROR("CreateSwapchainImpl: DX12 backend is Windows-only");
             return nullptr;
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuSwapchainImpl(owner, desc);
 #endif
         default:
             PE_ERROR("CreateSwapchainImpl: unsupported graphics api %u", static_cast<uint32_t>(api));

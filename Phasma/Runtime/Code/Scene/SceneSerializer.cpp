@@ -12,6 +12,7 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#include "Render/SceneRenderTargets.h"
 #include "Render/ScriptRenderPasses.h"
 #ifdef PE_PHYSICS2D
 #include "Systems/Physics2DSystem.h"
@@ -636,6 +637,8 @@ namespace pe
                         gSettings.pipeline_values[member->name.GetString()] = std::string(value.GetString());
                 }
             }
+
+            ApplyWebProfileSettings();
         }
 
         void ApplySceneSettingsMembers(const rapidjson::Value &settings)

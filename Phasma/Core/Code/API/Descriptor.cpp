@@ -1,8 +1,13 @@
 #include "API/Descriptor_Internal.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanDescriptorImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12DescriptorImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuDescriptorImpl.h"
 #endif
 
 namespace pe
@@ -11,11 +16,17 @@ namespace pe
     {
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanDescriptorPoolImpl(owner, desc);
+#endif
 #if defined(PE_WIN32)
         case PE_GRAPHICS_API_DX12:
             return new Dx12DescriptorPoolImpl(owner, desc);
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuDescriptorPoolImpl();
 #endif
         default:
             PE_ERROR("CreateDescriptorPoolImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
@@ -27,11 +38,17 @@ namespace pe
     {
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanDescriptorLayoutImpl(owner);
+#endif
 #if defined(PE_WIN32)
         case PE_GRAPHICS_API_DX12:
             return new Dx12DescriptorLayoutImpl(owner);
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuDescriptorLayoutImpl(owner);
 #endif
         default:
             PE_ERROR("CreateDescriptorLayoutImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
@@ -43,11 +60,17 @@ namespace pe
     {
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanDescriptorImpl(owner);
+#endif
 #if defined(PE_WIN32)
         case PE_GRAPHICS_API_DX12:
             return new Dx12DescriptorImpl(owner);
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuDescriptorImpl(owner);
 #endif
         default:
             PE_ERROR("CreateDescriptorImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));

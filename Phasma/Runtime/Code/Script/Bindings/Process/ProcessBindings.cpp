@@ -5,9 +5,13 @@
 #if defined(PE_WIN32)
 #include <windows.h>
 #else
+#include <fcntl.h>
 #include <signal.h>
+#if defined(PE_LINUX)
 #include <sys/prctl.h>
+#endif
 #include <sys/wait.h>
+#include <unistd.h>
 #endif
 
 namespace pe
@@ -171,7 +175,9 @@ namespace pe
                 }
                 if (pid == 0)
                 {
+#if defined(PE_LINUX)
                     prctl(PR_SET_PDEATHSIG, SIGKILL); // die with the game, same intent as the job object
+#endif
                     dup2(inPipe[0], STDIN_FILENO);
                     dup2(outPipe[1], STDOUT_FILENO);
                     dup2(outPipe[1], STDERR_FILENO);

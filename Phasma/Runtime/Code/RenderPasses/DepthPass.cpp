@@ -200,12 +200,12 @@ namespace pe
             m_scene->BindDrawIdBuffer(cmd);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirectCount(opaqueSS, 0, counters, 0 * sizeof(uint32_t), mesh);
-            cmd->DrawIndexedIndirectCount(alphaCutSS, 0, counters, 1 * sizeof(uint32_t), mesh);
+            m_scene->DrawBucket(cmd, opaqueSS, counters, 0, mesh);
+            m_scene->DrawBucket(cmd, alphaCutSS, counters, 1, mesh);
 
             cmd->BindPipeline(*m_passInfoDS);
-            cmd->DrawIndexedIndirectCount(opaqueDS, 0, counters, 5 * sizeof(uint32_t), mesh);
-            cmd->DrawIndexedIndirectCount(alphaCutDS, 0, counters, 6 * sizeof(uint32_t), mesh);
+            m_scene->DrawBucket(cmd, opaqueDS, counters, 5, mesh);
+            m_scene->DrawBucket(cmd, alphaCutDS, counters, 6, mesh);
             m_masks.Draw(cmd, *m_scene, alphaCutSS, counters, 1, mesh, false);
             m_masks.Draw(cmd, *m_scene, alphaCutDS, counters, 6, mesh, true);
             cmd->EndPass();

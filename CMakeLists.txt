@@ -57,10 +57,25 @@ set(PE_DEFAULT_PROJECT_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/De
 set(PE_DESKTOP_TARGETS_DEFAULT ON)
 set(PE_RUNTIME_SHADER_COMPILER_DEFAULT ON)
 set(PE_ASSIMP_DEFAULT ON)
+set(PE_TLS_DEFAULT ON)
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(PE_DESKTOP_TARGETS_DEFAULT OFF)
     set(PE_RUNTIME_SHADER_COMPILER_DEFAULT OFF)
     set(PE_ASSIMP_DEFAULT OFF)
+endif()
+
+# Browser build: WebGPU RHI backend, single-threaded, SDL2 and WebGPU from Emscripten ports
+# (docs/wiki/superpowers/specs/2026-11-06-webgpu-rhi-backend-design.md).
+set(PE_WEB OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    set(PE_WEB ON)
+    set(PE_DESKTOP_TARGETS_DEFAULT OFF)
+    set(PE_RUNTIME_SHADER_COMPILER_DEFAULT OFF)
+    set(PE_ASSIMP_DEFAULT OFF)
+    set(PE_TLS_DEFAULT OFF)
+    # Every object must agree on the exception model; the player host catches on its startup and frame paths.
+    add_compile_options(-fwasm-exceptions -sUSE_SDL=2)
+    add_link_options(-fwasm-exceptions -sUSE_SDL=2)
 endif()
 
 option(PE_BUILD_EDITOR "Build the editor host and editor module" ${PE_DESKTOP_TARGETS_DEFAULT})
@@ -79,6 +94,23 @@ option(PE_SLANG_VALIDATION "Also compile each runtime HLSL shader DXC compiles w
 include("${CMAKE_CURRENT_SOURCE_DIR}/Phasma/ProjectNative/ProjectNative.cmake")
 
 set(PE_SDL2_INCLUDE_DIR "${PE_THIRD_PARTY_DIR}/SDL2")
+if(PE_WEB)
+    set(PE_SDL2_INCLUDE_DIR "") # the -sUSE_SDL=2 port supplies the headers
+endif()
+
+# SPIRV-Cross core only, built from source for the Android and browser players (desktop links prebuilt ones).
+if(CMAKE_SYSTEM_NAME STREQUAL "Android" OR PE_WEB)
+    set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_GLSL OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_MSL OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_CPP OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "" FORCE)
+    set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "" FORCE)
+endif()
+
 if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(PE_ANDROID_SDL2_ROOT "" CACHE PATH "Full SDL2 source tree with Android CMake/Java glue")
     set(PE_ANDROID_SPIRV_CROSS_ROOT "" CACHE PATH "Full SPIRV-Cross source tree with CMake support")
@@ -109,22 +141,26 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(SDL_TEST OFF CACHE BOOL "" FORCE)
     add_subdirectory("${PE_ANDROID_SDL2_ROOT}" "${CMAKE_BINARY_DIR}/SDL2" EXCLUDE_FROM_ALL)
 
-    set(SPIRV_CROSS_CLI OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_TESTS OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_GLSL OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_HLSL OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_MSL OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_CPP OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_REFLECT OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_C_API OFF CACHE BOOL "" FORCE)
-    set(SPIRV_CROSS_ENABLE_UTIL OFF CACHE BOOL "" FORCE)
     add_subdirectory("${PE_ANDROID_SPIRV_CROSS_ROOT}" "${CMAKE_BINARY_DIR}/SPIRV-Cross" EXCLUDE_FROM_ALL)
+endif()
+
+if(PE_WEB)
+    # The browser reflects the shipped SPIR-V (WebGPU RHI spec decision 7). This tag's headers are the ones in
+    # Phasma/Core/third_party/spirv_cross (Vulkan SDK 1.4.335.0), which Core compiles against.
+    include(FetchContent)
+    FetchContent_Declare(SPIRVCrossWeb
+        GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Cross.git
+        GIT_TAG        vulkan-sdk-1.4.335.0
+        GIT_SHALLOW    TRUE
+        GIT_PROGRESS   TRUE
+    )
+    FetchContent_MakeAvailable(SPIRVCrossWeb)
 endif()
 
 include(cmake/PhasmaRuntimeLayout.cmake)
 pe_add_root_runtime_dependencies_target()
 
-if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+if(CMAKE_SYSTEM_NAME STREQUAL "Android" OR PE_WEB)
     set(PE_CORE_LINK_DIRS)
 else()
     set(PE_CORE_LINK_DIRS
@@ -142,7 +178,7 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
         $<$<CONFIG:MinSizeRel>:spirv-cross-core>
         $<$<CONFIG:RelWithDebInfo>:spirv-cross-core>
     )
-else()
+elseif(NOT PE_WEB)
     set(PE_SPIRV_CROSS_CORE_LIB spirv-cross-core)
 endif()
 
@@ -221,7 +257,9 @@ endif()
 # --- MaterialX (OpenPBR shader generation; PhasmaCook only) ---
 option(PE_MATERIALX "Build MaterialX shader generation into PhasmaCook" ON)
 # MaterialX 1.39.5 needs CMake 3.26; older CMake keeps building the engine, without OpenPBR generation.
-if(PE_MATERIALX AND NOT ANDROID AND CMAKE_VERSION VERSION_LESS 3.26)
+if(PE_WEB)
+    # OpenPBR generation is a desktop cook step.
+elseif(PE_MATERIALX AND NOT ANDROID AND CMAKE_VERSION VERSION_LESS 3.26)
     message(WARNING "PE_MATERIALX needs CMake 3.26 or newer (MaterialX 1.39.5): building without OpenPBR generation")
 elseif(PE_MATERIALX AND NOT ANDROID)
     include(FetchContent)
@@ -279,7 +317,7 @@ option(PE_AUDIO "Enable miniaudio integration" ON)
 #
 # The packaged release, not the git tag: since 3.6.1 part of the build lives in a `framework`
 # submodule that only the release asset carries, and a bare clone fails to configure without it.
-option(PE_TLS "Build the net binding with TLS client support (mbedTLS)" ON)
+option(PE_TLS "Build the net binding with TLS client support (mbedTLS)" ${PE_TLS_DEFAULT})
 if(PE_TLS)
     include(FetchContent)
     set(ENABLE_PROGRAMS OFF CACHE BOOL "" FORCE)
@@ -341,6 +379,15 @@ endif()
 # Add PhasmaCore subdirectory
 add_subdirectory(Phasma/Core)
 
+if(PE_WEB)
+    # LuaJIT's VM is hand-written assembly per CPU with no wasm target, so the browser build runs the vendored
+    # PUC Lua 5.4. Compiled as C++ so Lua errors unwind through sol2's C++ frames instead of longjmp-ing past them.
+    file(GLOB PE_LUA54_SOURCES "${PE_SHARED_THIRD_PARTY_DIR}/lua/*.c")
+    set_source_files_properties(${PE_LUA54_SOURCES} PROPERTIES LANGUAGE CXX)
+    add_library(Lua STATIC ${PE_LUA54_SOURCES})
+    target_include_directories(Lua PUBLIC "${PE_SHARED_THIRD_PARTY_DIR}/lua")
+    target_compile_definitions(Lua PUBLIC SOL_USING_CXX_LUA=1 SOL_SAFE_USERTYPE=1)
+else()
 # --- LuaJIT 2.1 VM ---
 if(CMAKE_CROSSCOMPILING)
     # LuaJIT's build generates its VM via host-run minilua/buildvm; the NDK
@@ -380,6 +427,7 @@ target_compile_definitions(Lua INTERFACE PE_LUAJIT=1)
 # sol2 checks 'self' only in debug builds by default; in Release obj.method() (instead of obj:method())
 # dereferenced a null self and crashed the editor. Every sol2 user links Lua, so all agree on this.
 target_compile_definitions(Lua INTERFACE SOL_SAFE_USERTYPE=1)
+endif()
 
 if(PE_BUILD_MCP)
     # Engine-agnostic MCP server library (protocol + transport + optional codebase indexer). Added
@@ -417,6 +465,14 @@ if(PE_ENABLE_ASSIMP AND NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
 endif()
 
 # (Phasma/MCP is added above, before PhasmaRuntime, so the runtime can link it.)
+
+if(PE_WEB)
+    add_subdirectory(Phasma/WebGPU/Tests/RhiBufferRules)
+    add_subdirectory(Phasma/WebGPU/Tests/RhiSwapchain)
+    add_subdirectory(Phasma/WebGPU/Tests/RhiImages)
+    add_subdirectory(Phasma/WebGPU/Tests/RhiShaders)
+    add_subdirectory(Phasma/WebGPU/Tests/RhiDraw)
+endif()
 
 # Add PhasmaWebGPU subdirectory (WebGPU C API layer over PhasmaCore)
 if(PE_WEBGPU)

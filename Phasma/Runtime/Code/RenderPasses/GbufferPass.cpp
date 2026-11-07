@@ -477,12 +477,13 @@ namespace pe
             }
             else
             {
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), mesh);
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutSS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), mesh);
+                Buffer *counters = m_scene->GetCullingCountersBuffer(frame);
+                m_scene->DrawBucket(cmd, m_scene->GetIndirectOpaqueSS(frame), counters, 0, mesh);
+                m_scene->DrawBucket(cmd, m_scene->GetIndirectAlphaCutSS(frame), counters, 1, mesh);
 
                 cmd->BindPipeline(*m_passInfoDS);
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectOpaqueDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), mesh);
-                cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaCutDS(frame), 0, m_scene->GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), mesh);
+                m_scene->DrawBucket(cmd, m_scene->GetIndirectOpaqueDS(frame), counters, 5, mesh);
+                m_scene->DrawBucket(cmd, m_scene->GetIndirectAlphaCutDS(frame), counters, 6, mesh);
             }
 
             if (voxelDrawReady)
@@ -820,7 +821,7 @@ namespace pe
             m_scene->BindDrawIdBuffer(cmd);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectAlphaBlend(frame), 0, m_scene->GetCullingCountersBuffer(frame), 2 * sizeof(uint32_t), m_scene->GetMeshCount());
+            m_scene->DrawBucket(cmd, m_scene->GetIndirectAlphaBlend(frame), m_scene->GetCullingCountersBuffer(frame), 2, m_scene->GetMeshCount());
             cmd->EndPass();
         }
 
@@ -836,7 +837,7 @@ namespace pe
             m_scene->BindDrawIdBuffer(cmd);
             cmd->SetConstants(pushConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirectCount(m_scene->GetIndirectTransmission(frame), 0, m_scene->GetCullingCountersBuffer(frame), 3 * sizeof(uint32_t), m_scene->GetMeshCount());
+            m_scene->DrawBucket(cmd, m_scene->GetIndirectTransmission(frame), m_scene->GetCullingCountersBuffer(frame), 3, m_scene->GetMeshCount());
             cmd->EndPass();
         }
 

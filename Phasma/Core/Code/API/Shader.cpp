@@ -3,9 +3,14 @@
 #include "API/Descriptor.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanShaderImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ShaderImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuShaderImpl.h"
 #endif
 
 namespace pe
@@ -73,6 +78,9 @@ namespace pe
                         aInfo.count = std::max(aInfo.count, bInfo.count);
                         if (bInfo.bindless && !aInfo.bindless)
                             aInfo.bindless = true;
+#if defined(PE_WEB)
+                        aInfo.webgpu = MergeWebGpuBindingFacts(aInfo.webgpu, bInfo.webgpu, aInfo.name);
+#endif
                         break;
                     }
                 }
@@ -135,11 +143,34 @@ namespace pe
 #endif
         }
 
+        if (RHII.GetApi() == PE_GRAPHICS_API_WEBGPU)
+        {
+#if defined(PE_WEB)
+            // The browser has no shader compiler: every module comes from the desktop bake (WebGPU spec decision 7).
+            PE_ERROR_IF(needsCompile,
+                        "[Shader] no baked module for '%s' (entry '%s', key %llu): bake it on desktop Vulkan with "
+                        "PHASMA_SPIRV_TARGET=1.2, then run tools/convert_web_shaders.py",
+                        desc.sourcePath.c_str(),
+                        desc.entryPoint.c_str(),
+                        static_cast<unsigned long long>(owner->GetCache().GetHash()));
+            return new WebGpuShaderImpl(owner);
+#else
+            PE_ERROR("[Shader] WebGPU shaders exist only in the browser build");
+            return nullptr;
+#endif
+        }
+
+#if defined(PE_VULKAN)
         if (needsCompile)
             return new VulkanShaderImpl(owner, desc);
 
         std::vector<uint32_t> cached = owner->GetCache().ReadSpvFile();
         return new VulkanShaderImpl(owner, cached.data(), cached.size());
+#else
+        (void)needsCompile;
+        PE_ERROR("CreateShaderImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
+        return nullptr;
+#endif
     }
 
     Shader::Shader() = default;
@@ -172,7 +203,7 @@ namespace pe
         }
         definesHash.CombineValue(static_cast<uint32_t>(desc.stage));
 
-        shader->m_cache.Init(path, shader->m_entryName, definesHash);
+        shader->m_cache.Init(path, shader->m_entryName, definesHash.Value());
         for (const std::string &include : shader->m_cache.GetIncludes())
             WatchShaderFile(include);
 
@@ -231,7 +262,11 @@ namespace pe
             const size_t wordCount = desc.spirvSizeBytes / sizeof(uint32_t);
             std::vector<uint32_t> spirv(wordCount);
             memcpy(spirv.data(), desc.spirv, desc.spirvSizeBytes);
+#if defined(PE_VULKAN)
             shader->m_impl = new VulkanShaderImpl(shader, spirv.data(), spirv.size());
+#else
+            PE_ERROR("[Shader] '%s': SPIR-V bytecode shaders need the Vulkan backend", debugName.c_str());
+#endif
         }
 
         shader->m_reflection.Init(shader);
@@ -290,7 +325,7 @@ namespace pe
         m_globalDefines.push_back({name, value});
     }
 
-    size_t Shader::GetGlobalDefinesHash()
+    uint64_t Shader::GetGlobalDefinesHash()
     {
         Hash hash;
         for (const Define &def : m_globalDefines)
@@ -298,7 +333,9 @@ namespace pe
             hash.CombineString(def.name);
             hash.CombineString(def.value);
         }
-        return hash;
+
+        // Value(), not the size_t conversion: size_t is 32 bits on wasm32, and the browser must key like the bake.
+        return hash.Value();
     }
 
     std::vector<Descriptor *> Shader::ReflectPassDescriptors(const PassInfo &passInfo)

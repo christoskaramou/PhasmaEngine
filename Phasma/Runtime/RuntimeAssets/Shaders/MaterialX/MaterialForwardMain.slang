@@ -51,10 +51,20 @@ PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
     output.velocity = float4(0.0, 0.0, 0.0, 0.0);
 #endif
 #ifdef PE_FORWARD_DOF_DEPTH
+    // Depth of field blurs a surface by its own depth where it hides what is behind it: at least half opaque, and not
+    // a thin-walled pane that shows the scene behind at that scene's own depth.
+    const bool hides = alpha >= 0.5 && !(inputs.transmission_weight > 0.0 && inputs.geometry_thin_walled);
+    const float dofDepth = hides ? input.position.z : 0.0;
     output.dofDepth = 0.0;
 #endif
     if (pc.depth_only != 0u)
+    {
+#ifdef PE_FORWARD_DOF_DEPTH
+        if (pc.depth_only == 2u) // Hybrid traces this mesh: only depth of field's depth, no colour or velocity
+            output.dofDepth = dofDepth;
+#endif
         return output;
+    }
 
     float3 color = pe_shade_inputs(inputs).rgb;
 
@@ -84,10 +94,7 @@ PeForwardOutput mainPS(VS_OUTPUT_Gbuffer input)
 #endif
 
 #ifdef PE_FORWARD_DOF_DEPTH
-    // Depth of field blurs a surface by its own depth where it hides what is behind it: at least half opaque, and not
-    // a thin-walled pane that shows the scene behind at that scene's own depth.
-    const bool hides = alpha >= 0.5 && !(inputs.transmission_weight > 0.0 && inputs.geometry_thin_walled);
-    output.dofDepth = hides ? input.position.z : 0.0;
+    output.dofDepth = dofDepth;
 #endif
 
     return output;

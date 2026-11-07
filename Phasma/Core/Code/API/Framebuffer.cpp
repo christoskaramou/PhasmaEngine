@@ -1,6 +1,8 @@
 #include "API/Framebuffer_Internal.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanFramebufferImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12FramebufferImpl.h"
 #endif
@@ -17,8 +19,10 @@ namespace pe
         const PeGraphicsApi api = RHII.GetApi();
         switch (api)
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanFramebufferImpl(owner, width, height, views, renderPass, name);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12FramebufferImpl(owner, width, height, views, renderPass, name);

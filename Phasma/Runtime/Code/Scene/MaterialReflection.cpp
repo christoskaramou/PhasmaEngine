@@ -159,7 +159,7 @@ namespace pe
         // The content hash below reads every stage and include from disk (~3 ms), and every instance
         // rebuild (each spawn and despawn) asks: keep it until a shader file changes (hot reload calls
         // InvalidateMaterialLayouts), the defines do or the asset root does (the resolved paths).
-        const size_t definesHash = Shader::GetGlobalDefinesHash();
+        const uint64_t definesHash = Shader::GetGlobalDefinesHash();
         const std::string vertexPath = surface->vertexShader.empty() ? "" : Path::ResolveAsset(surface->vertexShader);
         const std::string fragmentPath = surface->fragmentShader.empty() ? "" : Path::ResolveAsset(surface->fragmentShader);
         Hash key(definesHash);
@@ -182,7 +182,7 @@ namespace pe
             Hash stageHash(definesHash);
             stageHash.CombineValue(static_cast<uint32_t>(stage));
             ShaderCache source;
-            source.Init(path, entry, stageHash);
+            source.Init(path, entry, stageHash.Value());
             hash.Combine(source.GetHash());
         };
         addStage(vertexPath, "mainVS", PE_SHADER_STAGE_VERTEX);

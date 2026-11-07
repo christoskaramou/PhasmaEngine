@@ -8,6 +8,10 @@ namespace pe
 
     ThreadPool::ThreadPool(size_t threads)
     {
+#if PE_THREADPOOL_INLINE
+        (void)threads;
+        return;
+#endif
         const size_t count = ClampThreads(threads);
         m_workers.reserve(count);
         for (size_t i = 0; i < count; ++i)
@@ -55,7 +59,8 @@ namespace pe
     void ThreadPool::WaitIdle()
     {
         std::unique_lock<std::mutex> lock(m_queue_mutex);
-        m_idle.wait(lock, [this] { return m_tasks.empty() && m_activeWorkers == 0; });
+        m_idle.wait(lock, [this]
+                    { return m_tasks.empty() && m_activeWorkers == 0; });
     }
 
     static const size_t N = ClampThreads(std::thread::hardware_concurrency());

@@ -135,6 +135,11 @@ namespace pe
 
     void FileWatcher::Start(double interval)
     {
+#if PE_THREADPOOL_INLINE
+        // Browser files never change, and an inline pool would run the watch loop forever on the main thread.
+        (void)interval;
+        return;
+#endif
         if (!s_enabled)
             return;
 

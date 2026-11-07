@@ -147,6 +147,11 @@ namespace pe
         ma_resource_manager_config rmConfig = ma_resource_manager_config_init();
         rmConfig.decodedFormat = ma_format_f32;
         rmConfig.pVFS = reinterpret_cast<ma_vfs *>(&s_packVfs);
+#if PE_THREADPOOL_INLINE
+        // No threads in the browser build: no job threads, and Update processes the queued load and stream jobs.
+        rmConfig.flags |= MA_RESOURCE_MANAGER_FLAG_NO_THREADING;
+        rmConfig.jobThreadCount = 0;
+#endif
         s_resourceManager = new ma_resource_manager();
         if (ma_resource_manager_init(&rmConfig, s_resourceManager) != MA_SUCCESS)
         {
@@ -184,6 +189,12 @@ namespace pe
         PE_PROFILE_SCOPE("Audio System");
         if (!m_engine)
             return;
+
+#if PE_THREADPOOL_INLINE
+        while (s_resourceManager && ma_resource_manager_process_next_job(s_resourceManager) == MA_SUCCESS)
+        {
+        }
+#endif
 
         CleanupFinishedSounds();
         SyncListenerToCamera();

@@ -127,7 +127,7 @@ struct PushConstants_Lighting
     uint shape;       // dword 23: the module's slot in its shape group; also keeps the jitters 8-byte aligned
     float2 projJitter;     // dwords 24-25: TAA jitter, removed from the velocity as GBufferPS does
     float2 prevProjJitter; // dwords 26-27: last frame's
-    uint depth_only;       // dword 28: 1 for the depth draw that precedes each mesh's shading draw
+    uint depth_only;       // dword 28: 1 for the depth draw before each shading draw, 2 for depth of field only
 #endif
 };
 #endif

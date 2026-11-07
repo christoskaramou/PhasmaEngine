@@ -42,6 +42,7 @@ namespace pe
 #if defined(PE_WIN32)
         friend struct Dx12SamplerImpl;
 #endif
+        friend struct WebGpuSamplerImpl;
 
         Sampler(const SamplerDesc &desc, const std::string &name);
         ~Sampler();

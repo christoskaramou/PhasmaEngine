@@ -5,11 +5,16 @@
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Swapchain.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanCommandPoolImpl.h"
 #include "API/Vulkan/VulkanQueueImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandPoolImpl.h"
 #include "API/DX12/Dx12QueueImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuQueueImpl.h"
 #endif
 
 namespace pe
@@ -19,14 +24,20 @@ namespace pe
         const PeGraphicsApi api = RHII.GetApi();
         switch (api)
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanCommandPoolImpl(owner, queue, flags, name);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12CommandPoolImpl(owner, queue, flags, name);
 #else
             PE_ERROR("CreateCommandPoolImpl: DX12 backend is Windows-only");
             return nullptr;
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuCommandPoolImpl();
 #endif
         default:
             PE_ERROR("CreateCommandPoolImpl: unsupported graphics api %u", static_cast<uint32_t>(api));
@@ -39,14 +50,20 @@ namespace pe
         const PeGraphicsApi api = RHII.GetApi();
         switch (api)
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanQueueImpl(owner, familyId, name);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return new Dx12QueueImpl(owner, familyId, name);
 #else
             PE_ERROR("CreateQueueImpl: DX12 backend is Windows-only");
             return nullptr;
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuQueueImpl();
 #endif
         default:
             PE_ERROR("CreateQueueImpl: unsupported graphics api %u", static_cast<uint32_t>(api));

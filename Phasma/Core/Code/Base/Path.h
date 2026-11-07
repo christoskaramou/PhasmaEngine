@@ -52,6 +52,9 @@ namespace pe
                                const char *storagePath = SDL_AndroidGetInternalStoragePath();
                                if (storagePath && storagePath[0] != '\0')
                                    Executable = storagePath;
+#elif defined(PE_WEB)
+                               // The browser build preloads its files at the MEMFS root; there is no executable path.
+                               Executable = "/";
 #else
                                char str[PATH_MAX];
                                ssize_t length = readlink("/proc/self/exe", str, sizeof(str) - 1);

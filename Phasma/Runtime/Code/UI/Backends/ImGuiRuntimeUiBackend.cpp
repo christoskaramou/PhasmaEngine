@@ -6,6 +6,7 @@
 #include "API/RHI.h"
 #include "API/RenderPass.h"
 #include "API/Surface.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
@@ -13,6 +14,7 @@
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
+#endif
 #include "UI/RuntimeUiInputEvents.h"
 #include "Render/SceneRendererHost.h"
 #include "Runtime/RuntimeStartup.h"
@@ -32,7 +34,9 @@
 #include "imgui.h"
 #include "imgui_internal.h"
 #include "imgui_impl_sdl2.h"
+#if defined(PE_VULKAN)
 #include "imgui_impl_vulkan.h"
+#endif
 
 namespace pe
 {
@@ -261,25 +265,7 @@ namespace pe
                             io.FontDefault = font;
                     }
 
-                    if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
-                    {
-                        if (!InitVulkan(initInfo.renderTarget))
-                        {
-                            Shutdown();
-                            return false;
-                        }
-                    }
-#if defined(PE_WIN32)
-                    else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
-                    {
-                        if (!InitDx12(initInfo.renderTarget))
-                        {
-                            Shutdown();
-                            return false;
-                        }
-                    }
-#endif
-                    else
+                    if (!InitRenderer(initInfo.renderTarget))
                     {
                         Shutdown();
                         return false;
@@ -308,7 +294,7 @@ namespace pe
                         ImGui_ImplDX12_Shutdown();
                     else
                         ImGui_ImplVulkan_Shutdown();
-#else
+#elif defined(PE_VULKAN)
                     ImGui_ImplVulkan_Shutdown();
 #endif
                     m_rendererInitialized = false;
@@ -392,12 +378,14 @@ namespace pe
                 io.FontGlobalScale = uiScale;
                 ImGui_ImplSDL2_NewFrame();
                 SyncMousePosition(io);
+#if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
                     ImGui_ImplVulkan_NewFrame();
                 }
+#endif
 #if defined(PE_WIN32)
-                else if (m_api == PE_GRAPHICS_API_DX12)
+                if (m_api == PE_GRAPHICS_API_DX12)
                 {
                     ImGui_ImplDX12_NewFrame();
                 }
@@ -678,12 +666,14 @@ namespace pe
                 attachment.storeOp = PE_STORE_OP_STORE;
 
                 context.cmd->BeginPass(1, &attachment, "RuntimeUI", true);
+#if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
                     ImGui_ImplVulkan_RenderDrawData(drawData, GetVulkanCommandBuffer(context.cmd));
                 }
+#endif
 #if defined(PE_WIN32)
-                else if (m_api == PE_GRAPHICS_API_DX12)
+                if (m_api == PE_GRAPHICS_API_DX12)
                 {
                     Dx12RhiImpl *rhi = static_cast<Dx12RhiImpl *>(RHII.GetImpl());
                     Dx12CommandBufferImpl *dx12Cmd = Dx12CommandBufferImpl::From(context.cmd);
@@ -1584,6 +1574,7 @@ namespace pe
                 if (!image || !image->GetSampler() || !image->GetSRV())
                     return nullptr;
 
+#if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
                     VkSampler sampler = pe::GetVulkanSampler(image->GetSampler());
@@ -1593,6 +1584,7 @@ namespace pe
 
                     return (void *)ImGui_ImplVulkan_AddTexture(sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
                 }
+#endif
 
 #if defined(PE_WIN32)
                 if (m_api == PE_GRAPHICS_API_DX12)
@@ -1625,12 +1617,14 @@ namespace pe
                 if (!textureID)
                     return;
 
+#if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
                     ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)textureID);
                 }
+#endif
 #if defined(PE_WIN32)
-                else if (m_api == PE_GRAPHICS_API_DX12)
+                if (m_api == PE_GRAPHICS_API_DX12)
                 {
                     const uint64_t key = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(textureID));
                     auto it = m_dx12ImGuiSlots.find(key);
@@ -1771,6 +1765,24 @@ namespace pe
                                     MapYToSurface(static_cast<float>(mouseY)));
             }
 
+            bool InitRenderer(Image *renderTarget)
+            {
+                switch (RHII.GetApi())
+                {
+#if defined(PE_VULKAN)
+                case PE_GRAPHICS_API_VULKAN:
+                    return InitVulkan(renderTarget);
+#endif
+#if defined(PE_WIN32)
+                case PE_GRAPHICS_API_DX12:
+                    return InitDx12(renderTarget);
+#endif
+                default:
+                    return false; // ponytail: no WebGPU ImGui renderer yet (spec decision 11)
+                }
+            }
+
+#if defined(PE_VULKAN)
             bool InitVulkan(Image *renderTarget)
             {
                 if (!renderTarget)
@@ -1808,6 +1820,7 @@ namespace pe
                 m_api = PE_GRAPHICS_API_VULKAN;
                 return true;
             }
+#endif
 
 #if defined(PE_WIN32)
             bool InitDx12(Image *renderTarget)
@@ -1867,8 +1880,10 @@ namespace pe
 
             void CreateFontsTexture()
             {
+#if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                     ImGui_ImplVulkan_CreateFontsTexture();
+#endif
             }
 
             ImGuiContext *m_context = nullptr;

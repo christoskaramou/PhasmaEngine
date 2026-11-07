@@ -26,6 +26,11 @@ namespace pe
     // openpbr is on and this platform/GPU runs the MaterialX visibility-buffer path (warns once when it cannot).
     bool SceneUsesOpenPBR();
     bool SceneUsesOpenPBRDebug();
+    // The device has no bindless textures (WebGPU, or Vulkan under PHASMA_CAPS_PROFILE=webgpu): the web profile's
+    // shader variants and per-mesh draws (WebGPU RHI spec decision 6).
+    bool SceneUsesWebProfile();
+    // Under the web profile, turns off the settings the web cannot run and caps num_cascades; called where they change.
+    void ApplyWebProfileSettings();
     // An sRGB-authored colour as the frame uses it: decoded in a linear-colour scene (values above 1 keep their
     // brightness), unchanged otherwise.
     vec3 SceneColor(const vec3 &srgb);
@@ -37,7 +42,8 @@ namespace pe
                                    PeImageUsageFlags usage = PE_IMAGE_USAGE_NONE,
                                    bool useRenderTargetScale = true,
                                    bool useMips = false,
-                                   vec4 clearColor = Color::Transparent);
+                                   vec4 clearColor = Color::Transparent,
+                                   bool storage = true);
 
     Image *CreateSceneDepthStencilTarget(SceneRenderTargetMap &depthStencilTargets,
                                          const std::string &name,

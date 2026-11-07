@@ -60,6 +60,18 @@
             "cacheVariables": { "PE_WEBGPU": "ON" }
         },
         {
+            "name": "wasm-player",
+            "displayName": "Emscripten browser player (WebGPU)",
+            "description": "PhasmaPlayer.html/.js/.wasm for desktop Chrome over the WebGPU backend. Needs EMSDK set to an emsdk checkout.",
+            "inherits": "_ninja_base",
+            "binaryDir": "${sourceDir}/build-wasm-player",
+            "cacheVariables": {
+                "CMAKE_TOOLCHAIN_FILE": "$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
+                "FETCHCONTENT_BASE_DIR": "${sourceDir}/.fetchcontent-wasm",
+                "PE_PHYSICS": "ON"
+            }
+        },
+        {
             "name": "ninja-full",
             "displayName": "Ninja Full (WebGPU + Physics)",
             "description": "Ninja Multi-Config. Everything optional turned on except Tracy. Matches the historic default.",

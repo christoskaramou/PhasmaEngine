@@ -5,9 +5,10 @@
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ShaderImpl.h"
 #endif
-#include "API/Vulkan/VulkanReflection.h"
-#include "API/Vulkan/VulkanShaderImpl.h"
+#if defined(PE_VULKAN) || defined(PE_WEB)
+#include "API/SpirvReflection.h"
 #include "spirv_cross.hpp"
+#endif
 
 namespace pe
 {
@@ -46,6 +47,7 @@ namespace pe
             return (value + 3u) & ~3u;
         }
 
+#if defined(PE_VULKAN) || defined(PE_WEB)
         std::string GetSpirvResourceName(const spirv_cross::Compiler &compiler, spirv_cross::ID id)
         {
             std::string name = compiler.get_name(id);
@@ -58,12 +60,11 @@ namespace pe
                                                   const std::string &bufferName,
                                                   ReflectedMaterialResources &out)
         {
-            const uint32_t *spirvData = GetVulkanShaderSpirv(shader);
-            const size_t spirvWords = GetVulkanShaderSpirvSizeWords(shader);
-            if (!spirvData || spirvWords == 0)
+            const std::span<const uint32_t> spirv = GetShaderSpirv(shader);
+            if (spirv.empty())
                 return false;
 
-            spirv_cross::Compiler compiler{spirvData, spirvWords};
+            spirv_cross::Compiler compiler{spirv.data(), spirv.size()};
             const spirv_cross::ShaderResources resources = compiler.get_shader_resources();
 
             for (const spirv_cross::Resource &sbuf : resources.storage_buffers)
@@ -88,6 +89,7 @@ namespace pe
 
             return false;
         }
+#endif
 
 #if defined(PE_WIN32)
         bool ReflectMaterialBufferStructFromDx12(Shader *shader,
@@ -105,14 +107,14 @@ namespace pe
         }
 #endif
 
+#if defined(PE_VULKAN) || defined(PE_WEB)
         void ReflectBindlessTextureSlotsFromSpirv(Shader *shader, std::vector<MaterialTextureSlot> &outSlots)
         {
-            const uint32_t *spirvData = GetVulkanShaderSpirv(shader);
-            const size_t spirvWords = GetVulkanShaderSpirvSizeWords(shader);
-            if (!spirvData || spirvWords == 0)
+            const std::span<const uint32_t> spirv = GetShaderSpirv(shader);
+            if (spirv.empty())
                 return;
 
-            spirv_cross::Compiler compiler{spirvData, spirvWords};
+            spirv_cross::Compiler compiler{spirv.data(), spirv.size()};
             const spirv_cross::ShaderResources resources = compiler.get_shader_resources();
 
             for (const spirv_cross::Resource &img : resources.separate_images)
@@ -129,7 +131,7 @@ namespace pe
             }
         }
 
-        ReflectedMaterialResources ReflectMaterialResourcesFromVulkan(const PassVariant &variant)
+        ReflectedMaterialResources ReflectMaterialResourcesFromSpirv(const PassVariant &variant)
         {
             ReflectedMaterialResources resources;
 
@@ -154,6 +156,7 @@ namespace pe
 
             return resources;
         }
+#endif
 
 #if defined(PE_WIN32)
         ReflectedMaterialResources ReflectMaterialResourcesFromDx12(const PassVariant &variant)
@@ -185,8 +188,14 @@ namespace pe
 
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
-            return ReflectMaterialResourcesFromVulkan(variant);
+            return ReflectMaterialResourcesFromSpirv(variant);
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return ReflectMaterialResourcesFromSpirv(variant);
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             return ReflectMaterialResourcesFromDx12(variant);

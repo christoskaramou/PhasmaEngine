@@ -11,8 +11,11 @@ struct DrawIndexedIndirectCommand
 
 [[vk::binding(0, 0)]] StructuredBuffer<DrawIndexedIndirectCommand> IndirectCommandsIn;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> MeshConstants;
+#ifndef PE_WEB_PROFILE // the web profile writes each mesh's draw at its slot in binding 3 (WebGPU RHI spec decision 9)
 [[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [opaqueSS, alphaCutSS, alphaBlend, transmission, selected, opaqueDS, alphaCutDS, voxels, terrain]
+#endif
 [[vk::binding(3, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectOpaqueSS;
+#ifndef PE_WEB_PROFILE
 [[vk::binding(4, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectAlphaCutSS;
 [[vk::binding(5, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectAlphaBlendOut;
 [[vk::binding(6, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectTransmissionOut;
@@ -21,8 +24,9 @@ struct DrawIndexedIndirectCommand
 [[vk::binding(9, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectAlphaCutDS;
 [[vk::binding(10, 0)]] RWStructuredBuffer<float> SortKeysAlphaBlend;
 [[vk::binding(11, 0)]] RWStructuredBuffer<float> SortKeysTransmission;
+#endif
 [[vk::binding(12, 0)]] ByteAddressBuffer NodeData;
-#if !defined(PHASE1) && !defined(PHASE2)
+#if !defined(PHASE1) && !defined(PHASE2) && !defined(PE_WEB_PROFILE)
 [[vk::binding(17, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectVoxelsOut;
 [[vk::binding(18, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectTerrainOut;
 #endif
@@ -54,6 +58,7 @@ struct PushConstants
     uint clusterOrthographic;
 };
 
+#ifndef PE_WEB_PROFILE // cluster geometry and instance batching are off on the web (spec decision 6)
 struct GeometryCluster
 {
     float4 bounds;
@@ -67,6 +72,7 @@ struct GeometryCluster
 [[vk::binding(20, 0)]] StructuredBuffer<GeometryCluster> GeometryClusters;
 
 #include "InstanceBatch.hlsl"
+#endif
 
 float4x4 LoadMatrix(uint byteOffset)
 {
@@ -231,6 +237,58 @@ void EmitOpaque(DrawIndexedIndirectCommand cmd, uint type, bool doubleSided, boo
 }
 #endif
 
+// Discrete LOD: pick a level by camera distance to the world AABB and override the draw's index range.
+void SelectLod(inout DrawIndexedIndirectCommand cmd, Mesh_Constants constants, float3 aabbMin, float3 aabbMax)
+{
+    if (lodEnabled == 0u || constants.lodMeshEnabled == 0u || constants.lodCount <= 1u)
+        return;
+
+    // Nearest point of the AABB, not its center: a big mesh (an arena floor) stays full-res while the
+    // camera is over it instead of dropping to a coarse LOD whose edge chords open holes underfoot.
+    float3 lodCam = float3(pc.cameraPositionX, pc.cameraPositionY, pc.cameraPositionZ);
+    float lodDist = distance(lodCam, clamp(lodCam, aabbMin, aabbMax)) * lodBias * constants.lodMeshBias;
+    uint lod = 0u;
+    if (lodDist > lodDistances.x) lod = 1u;
+    if (lodDist > lodDistances.y) lod = 2u;
+    if (lodDist > lodDistances.z) lod = 3u;
+    lod = min(lod + constants.lodShift, constants.lodCount - 1u); // per-mesh shift toward coarser
+    cmd.firstIndex = constants.lodIndexOffset[lod];
+    cmd.indexCount = constants.lodIndexCount[lod];
+}
+
+#ifdef PE_WEB_PROFILE
+// Web profile (WebGPU RHI spec decision 9): every mesh's draw goes to its own slot every frame, a culled one with zero
+// instances, so there are no counters, buckets, wave ops or zero fills. Scene::DrawBucket picks each pass's meshes.
+[numthreads(64, 1, 1)] void mainCS(uint3 group : SV_GroupID, uint3 thread : SV_GroupThreadID)
+{
+    uint idx = (group.x + group.y * 65535u) * 64u + thread.x;
+    if (idx >= pc.maxDrawCount)
+        return;
+
+    DrawIndexedIndirectCommand cmd = IndirectCommandsIn[idx];
+    Mesh_Constants constants = MeshConstants[idx];
+    uint2 nodeVisibility = NodeData.Load2(constants.meshDataOffset + 128u);
+    bool visible = cmd.indexCount != 0u && cmd.instanceCount != 0u && nodeVisibility.x != 0u;
+
+    float3 localMin = float3(constants.aabbMinX, constants.aabbMinY, constants.aabbMinZ);
+    float3 localMax = float3(constants.aabbMaxX, constants.aabbMaxY, constants.aabbMaxZ);
+    float3 aabbMin, aabbMax;
+    TransformAABB(localMin, localMax, LoadMatrix(constants.meshDataOffset), aabbMin, aabbMax);
+    if (nodeVisibility.y != 0u)
+    {
+        aabbMin = asfloat(NodeData.Load3(nodeVisibility.y));
+        aabbMax = asfloat(NodeData.Load3(nodeVisibility.y + 16u));
+    }
+
+    if (pc.enableFrustumCulling != 0u)
+        visible = visible && AABBInFrustum(aabbMin, aabbMax);
+
+    SelectLod(cmd, constants, aabbMin, aabbMax);
+    cmd.instanceCount = visible ? cmd.instanceCount : 0u;
+    cmd.firstInstance = idx;
+    IndirectOpaqueSS[idx] = cmd;
+}
+#else
 #if !defined(PHASE1) && !defined(PHASE2)
 // Wave-coalesced append into a counter-addressed buffer. The lanes of this wave with `emit==true`
 // reserve a contiguous slot range with a SINGLE InterlockedAdd issued by the first active lane
@@ -377,22 +435,8 @@ void EmitGeometryClusters(DrawIndexedIndirectCommand draw, Mesh_Constants consta
         return;
     }
 
-    // Discrete LOD: pick a level by camera distance to the world AABB and override this draw's
-    // index range. Applies to every variant (frustum, occlusion, phase1/2) since they all emit `cmd`.
-    if (lodEnabled != 0u && constants.lodMeshEnabled != 0u && constants.lodCount > 1u)
-    {
-        // Nearest point of the AABB, not its center: a big mesh (an arena floor) stays full-res while the
-        // camera is over it instead of dropping to a coarse LOD whose edge chords open holes underfoot.
-        float3 lodCam = float3(pc.cameraPositionX, pc.cameraPositionY, pc.cameraPositionZ);
-        float lodDist = distance(lodCam, clamp(lodCam, aabbMin, aabbMax)) * lodBias * constants.lodMeshBias;
-        uint lod = 0u;
-        if (lodDist > lodDistances.x) lod = 1u;
-        if (lodDist > lodDistances.y) lod = 2u;
-        if (lodDist > lodDistances.z) lod = 3u;
-        lod = min(lod + constants.lodShift, constants.lodCount - 1u); // per-mesh shift toward coarser
-        cmd.firstIndex = constants.lodIndexOffset[lod];
-        cmd.indexCount = constants.lodIndexCount[lod];
-    }
+    // Discrete LOD: applies to every variant (frustum, occlusion, phase1/2) since they all emit `cmd`.
+    SelectLod(cmd, constants, aabbMin, aabbMax);
 
 #if defined(PHASE1)
     if (isVoxel || isTerrain)
@@ -522,3 +566,4 @@ void EmitGeometryClusters(DrawIndexedIndirectCommand draw, Mesh_Constants consta
         IndirectTerrainOut[slot] = cmd;
 #endif
 }
+#endif

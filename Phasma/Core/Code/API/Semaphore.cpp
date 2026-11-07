@@ -1,8 +1,13 @@
 #include "API/Semaphore_Internal.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanSemaphoreImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12SemaphoreImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuQueueImpl.h"
 #endif
 
 namespace pe
@@ -18,7 +23,16 @@ namespace pe
             return nullptr;
 #endif
         }
+#if defined(PE_WEB)
+        if (RHII.GetApi() == PE_GRAPHICS_API_WEBGPU)
+            return new WebGpuSemaphoreImpl();
+#endif
+#if defined(PE_VULKAN)
         return new VulkanSemaphoreImpl(owner, timeline, name);
+#else
+        PE_ERROR("%s: unsupported graphics api %u", __func__, static_cast<uint32_t>(RHII.GetApi()));
+        return nullptr;
+#endif
     }
 
     Semaphore::Semaphore(bool timeline, const std::string &name)

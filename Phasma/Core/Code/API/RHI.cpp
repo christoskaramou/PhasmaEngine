@@ -1,8 +1,13 @@
 #include "API/RHI.h"
 #include "API/RHI_Internal.h"
+#include "rapidjson/document.h"
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12RhiImpl.h"
 #endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuRhiImpl.h"
+#endif
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorHeap.h"
 #include "API/Vulkan/VulkanImageImpl.h"
@@ -10,6 +15,7 @@
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRhiImpl.h"
 #include "API/Vulkan/VulkanSurfaceImpl.h"
+#endif
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
@@ -40,7 +46,9 @@
 #pragma comment(lib, "psapi.lib")
 #endif
 
+#if defined(PE_VULKAN)
 VULKAN_HPP_DEFAULT_DISPATCH_LOADER_DYNAMIC_STORAGE
+#endif
 
 namespace pe
 {
@@ -51,7 +59,9 @@ namespace pe
 
     RHI &RHII = GetRHI();
 
+#if defined(PE_VULKAN)
     vk::Format GetVulkanDepthFormat();
+#endif
 
     static void SyncRayTracingSettingsToCaps(const RHI::Caps &caps)
     {
@@ -60,6 +70,7 @@ namespace pe
         settings.render_mode = ClampRenderModeToRayTracingSupport(settings.render_mode, caps.rayTracing);
     }
 
+#if defined(PE_VULKAN)
     static inline uint32_t VkVendorID(const vk::PhysicalDevice &gpu)
     {
         return gpu.getProperties().vendorID; // 0x10DE NVIDIA, 0x1002 AMD, 0x8086 Intel
@@ -74,6 +85,7 @@ namespace pe
 
         return false;
     }
+#endif
 
     static std::string ReadEnv(const char *name)
     {
@@ -483,6 +495,143 @@ namespace pe
         return flag == "0" || flag == "false" || flag == "FALSE" || flag == "off" || flag == "OFF";
     }
 
+#if defined(PE_VULKAN)
+// GpuLimits carries WebGPU's own limit names; `alignment` limits are lower bounds, the rest upper bounds.
+#define PE_WEBGPU_LIMIT_FIELDS(X)                     \
+    X(maxTextureDimension1D, max)                     \
+    X(maxTextureDimension2D, max)                     \
+    X(maxTextureDimension3D, max)                     \
+    X(maxTextureArrayLayers, max)                     \
+    X(maxBindGroups, max)                             \
+    X(maxDynamicUniformBuffersPerPipelineLayout, max) \
+    X(maxDynamicStorageBuffersPerPipelineLayout, max) \
+    X(maxSampledTexturesPerShaderStage, max)          \
+    X(maxSamplersPerShaderStage, max)                 \
+    X(maxStorageBuffersPerShaderStage, max)           \
+    X(maxStorageTexturesPerShaderStage, max)          \
+    X(maxUniformBuffersPerShaderStage, max)           \
+    X(maxUniformBufferBindingSize, max)               \
+    X(maxStorageBufferBindingSize, max)               \
+    X(minUniformBufferOffsetAlignment, alignment)     \
+    X(minStorageBufferOffsetAlignment, alignment)     \
+    X(maxVertexBuffers, max)                          \
+    X(maxBufferSize, max)                             \
+    X(maxVertexAttributes, max)                       \
+    X(maxVertexBufferArrayStride, max)                \
+    X(maxInterStageShaderVariables, max)              \
+    X(maxColorAttachments, max)                       \
+    X(maxComputeWorkgroupStorageSize, max)            \
+    X(maxComputeInvocationsPerWorkgroup, max)         \
+    X(maxComputeWorkgroupSizeX, max)                  \
+    X(maxComputeWorkgroupSizeY, max)                  \
+    X(maxComputeWorkgroupSizeZ, max)                  \
+    X(maxComputeWorkgroupsPerDimension, max)
+
+    // WebGPU's default limits (WebGPU section 3.6.2): what every adapter guarantees, used when no queried file exists.
+    static GpuLimits WebGpuDefaultLimits()
+    {
+        GpuLimits limits{};
+        limits.maxTextureDimension1D = 8192;
+        limits.maxTextureDimension2D = 8192;
+        limits.maxTextureDimension3D = 2048;
+        limits.maxTextureArrayLayers = 256;
+        limits.maxBindGroups = 4;
+        limits.maxDynamicUniformBuffersPerPipelineLayout = 8;
+        limits.maxDynamicStorageBuffersPerPipelineLayout = 4;
+        limits.maxSampledTexturesPerShaderStage = 16;
+        limits.maxSamplersPerShaderStage = 16;
+        limits.maxStorageBuffersPerShaderStage = 8;
+        limits.maxStorageTexturesPerShaderStage = 4;
+        limits.maxUniformBuffersPerShaderStage = 12;
+        limits.maxUniformBufferBindingSize = 65536;
+        limits.maxStorageBufferBindingSize = 134217728;
+        limits.minUniformBufferOffsetAlignment = 256;
+        limits.minStorageBufferOffsetAlignment = 256;
+        limits.maxVertexBuffers = 8;
+        limits.maxBufferSize = 268435456;
+        limits.maxVertexAttributes = 16;
+        limits.maxVertexBufferArrayStride = 2048;
+        limits.maxInterStageShaderVariables = 16;
+        limits.maxColorAttachments = 8;
+        limits.maxComputeWorkgroupStorageSize = 16384;
+        limits.maxComputeInvocationsPerWorkgroup = 256;
+        limits.maxComputeWorkgroupSizeX = 256;
+        limits.maxComputeWorkgroupSizeY = 256;
+        limits.maxComputeWorkgroupSizeZ = 64;
+        limits.maxComputeWorkgroupsPerDimension = 65535;
+        return limits;
+    }
+
+    // A browser adapter's actual limits, by WebGPU's names, as tools/query_webgpu_limits.py writes them from Chrome:
+    // {"limits": {"maxBindGroups": 4, ...}}. The browser backend requests the adapter's maximum (spec decision 5).
+    static GpuLimits ReadWebGpuLimits()
+    {
+        std::string path = ReadEnv("PHASMA_WEBGPU_LIMITS");
+        if (path.empty())
+            path = Path::Executable + "webgpu_limits.json";
+
+        GpuLimits web = WebGpuDefaultLimits();
+        std::ifstream file(path, std::ios::binary);
+        if (!file.is_open())
+        {
+            PE_WARN("[WebGPU profile] no %s (tools/query_webgpu_limits.py writes it): using WebGPU's default limits",
+                    path.c_str());
+            return web;
+        }
+
+        std::stringstream text;
+        text << file.rdbuf();
+        const std::string json = text.str();
+        rapidjson::Document document;
+        document.Parse(json.c_str(), json.size());
+        const bool valid = !document.HasParseError() && document.IsObject() && document.HasMember("limits");
+        PE_ERROR_IF(!valid || !document["limits"].IsObject(), "[WebGPU profile] cannot read limits from %s", path.c_str());
+
+        const rapidjson::Value &limits = document["limits"];
+#define PE_READ_WEBGPU_LIMIT(field, kind)                      \
+    if (limits.HasMember(#field) && limits[#field].IsUint64()) \
+        web.field = static_cast<decltype(web.field)>(limits[#field].GetUint64());
+        PE_WEBGPU_LIMIT_FIELDS(PE_READ_WEBGPU_LIMIT)
+#undef PE_READ_WEBGPU_LIMIT
+
+        PE_INFO("[WebGPU profile] WebGPU limits from %s", path.c_str());
+        return web;
+    }
+
+    template <typename T>
+    static T TightestLimit(T device, T web, bool alignment)
+    {
+        return alignment ? std::max(device, web) : std::min(device, web);
+    }
+
+    // PHASMA_CAPS_PROFILE=webgpu (WebGPU RHI spec decision 6): desktop Vulkan reports what the browser backend reports,
+    // so the web shader variants and draw paths render, validate and bake here. Shipping bake and verification
+    // tooling, like PHASMA_SPIRV_TARGET.
+    static void ApplyWebGpuCapsProfile(RHI::Caps &caps, GpuFeatureSupport &features, GpuLimits &limits)
+    {
+        caps.maxBindlessTextures = 0;                   // the web paths key off this
+        Shader::AddGlobalDefine("PE_WEB_PROFILE", "1"); // enters every cache key, so the bake's keys are the browser's
+        caps.rayTracing = false;
+        caps.indirectCount = false;
+        caps.meshShaders = false;
+        caps.pushDescriptor = false;
+        caps.maxPushConstantsBytes = std::min(caps.maxPushConstantsBytes, 128u);
+        features.fragmentBarycentric = false; // the legacy material path, as on WebGPU
+        features.computeDerivativeQuads = false;
+
+        const GpuLimits web = ReadWebGpuLimits();
+#define PE_APPLY_WEBGPU_LIMIT(field, kind) \
+    limits.field = TightestLimit(limits.field, web.field, std::string_view(#kind) == "alignment");
+        PE_WEBGPU_LIMIT_FIELDS(PE_APPLY_WEBGPU_LIMIT)
+#undef PE_APPLY_WEBGPU_LIMIT
+
+        PE_INFO("[WebGPU profile] on: no bindless, ray tracing, indirect count or barycentrics; %u sampled textures and "
+                "%u storage buffers per stage",
+                limits.maxSampledTexturesPerShaderStage,
+                limits.maxStorageBuffersPerShaderStage);
+    }
+#endif
+
     static void CheckRequiredVulkanFeature(bool supported, const char *message, bool warnOnly)
     {
 #if defined(PE_ANDROID)
@@ -502,6 +651,7 @@ namespace pe
         PE_ERROR_IF(!supported, "%s", message);
     }
 
+#if defined(PE_VULKAN)
     static uint32_t QueryLoaderApiVersion(PFN_vkGetInstanceProcAddr vkGetInstanceProcAddr)
     {
         uint32_t version = VK_API_VERSION_1_0;
@@ -572,6 +722,7 @@ namespace pe
                 VK_API_VERSION_PATCH(version),
                 version);
     }
+#endif
 
 #if defined(PE_WIN32)
     static bool Dx12FormatSupportsTextureSample(ID3D12Device *device, DXGI_FORMAT format)
@@ -619,6 +770,8 @@ namespace pe
     }
 #endif
 
+    // Vendor VRAM queries keyed by the Vulkan adapter's PCI address; only VulkanRhiImpl::GetGpuMemorySnapshot uses them.
+#if defined(PE_VULKAN)
     static bool GetVkPciBusId(vk::PhysicalDevice gpu, uint32_t &domain, uint32_t &bus, uint32_t &device, uint32_t &function)
     {
 #if defined(VK_EXT_pci_bus_info)
@@ -936,6 +1089,7 @@ namespace pe
         return false;
     }
 #endif
+#endif // PE_VULKAN
 
     void RHI::Init(SDL_Window *window, PeGraphicsApi api)
     {
@@ -1047,6 +1201,47 @@ namespace pe
             return;
 #endif
         }
+#if defined(PE_WEB)
+        if (api == PE_GRAPHICS_API_WEBGPU)
+        {
+            auto *web = new WebGpuRhiImpl();
+            m_impl = web;
+            if (!m_impl->Init(window))
+            {
+                PE_ERROR("RHI::Init: WebGpuRhiImpl::Init failed");
+                return;
+            }
+
+            // Spec decision 5: no bindless, ray tracing, indirect count or device addresses; push constants are a
+            // 128-byte uniform slot (decision 8).
+            m_caps.maxPushConstantsBytes = 128;
+            m_gpuName = "WebGPU";
+            web->FillLimits(m_gpuLimits);
+            m_gpuFeatureSupport.drawIndirectFirstInstance = true; // required by WebGpuRhiImpl::Init
+            m_gpuFeatureSupport.textureCompressionBC = web->m_textureCompressionBC;
+
+            m_maxUniformBufferSize = m_gpuLimits.maxUniformBufferBindingSize;
+            m_maxStorageBufferSize = m_gpuLimits.maxStorageBufferBindingSize;
+            m_minUniformBufferOffsetAlignment = m_gpuLimits.minUniformBufferOffsetAlignment;
+            m_minStorageBufferOffsetAlignment = m_gpuLimits.minStorageBufferOffsetAlignment;
+            m_textureDataPitchAlignment = 256; // bytesPerRow of buffer-texture copies
+            m_maxPushConstantsSize = m_caps.maxPushConstantsBytes;
+            m_maxDrawIndirectCount = std::numeric_limits<uint32_t>::max();
+
+            m_mainQueue = Queue::Create(0, "Main_queue");
+            m_stagingManager = new StagingManager();
+            CreateDescriptorPool(150);
+            if (window) // RHI test programs run without a canvas
+                m_surface = Surface::Create(m_window);
+
+            Shader::AddGlobalDefine("PE_WEB_PROFILE", "1"); // spec decision 6, as the Vulkan profile's bake adds it
+
+            return;
+        }
+#endif
+#if !defined(PE_VULKAN)
+        PE_ERROR("RHI::Init: unsupported graphics api enum %u", static_cast<uint32_t>(api));
+#else
         PE_ERROR_IF(api != PE_GRAPHICS_API_VULKAN, "RHI::Init: unsupported graphics api enum %u", static_cast<uint32_t>(api));
         m_impl = new VulkanRhiImpl();
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
@@ -1056,6 +1251,12 @@ namespace pe
         FindGpu();
         CreateSurface();
         CreateDevice();
+        const std::string capsProfile = ReadEnv("PHASMA_CAPS_PROFILE");
+        if (capsProfile == "webgpu")
+            ApplyWebGpuCapsProfile(m_caps, m_gpuFeatureSupport, m_gpuLimits);
+        else if (!capsProfile.empty())
+            PE_WARN("[Vulkan] Ignoring PHASMA_CAPS_PROFILE='%s' (expected webgpu)", capsProfile.c_str());
+
         SyncRayTracingSettingsToCaps(m_caps);
         CreateAllocator();
         vk->CreateDescriptorHeaps();
@@ -1085,6 +1286,7 @@ namespace pe
 #else
         (void)vk;
 #endif
+#endif // PE_VULKAN
     }
 
     Descriptor *RHI::GetTextureTable(uint32_t frame)
@@ -1156,7 +1358,8 @@ namespace pe
     {
         WaitDeviceIdle();
 
-        if (m_api == PE_GRAPHICS_API_DX12)
+        // Backend-neutral teardown; only Vulkan below needs more (its heaps, allocator, device and instance).
+        if (m_api == PE_GRAPHICS_API_DX12 || m_api == PE_GRAPHICS_API_WEBGPU)
         {
             for (auto &queue : m_deletionQueues)
             {
@@ -1197,6 +1400,7 @@ namespace pe
             return;
         }
 
+#if defined(PE_VULKAN)
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
 
 #ifdef PE_TRACY
@@ -1297,10 +1501,12 @@ namespace pe
 
         delete m_impl;
         m_impl = nullptr;
+#endif
     }
 
     void RHI::SavePipelineCache()
     {
+#if defined(PE_VULKAN)
         if (m_api != PE_GRAPHICS_API_VULKAN || !m_impl)
             return;
 
@@ -1309,8 +1515,10 @@ namespace pe
             return;
 
         SaveVulkanPipelineCacheAsync(vk->m_device, vk->m_pipelineCache);
+#endif
     }
 
+#if defined(PE_VULKAN)
     void RHI::CreateInstance(SDL_Window *window)
     {
         auto *vk = static_cast<VulkanRhiImpl *>(m_impl);
@@ -1430,6 +1638,8 @@ namespace pe
         Debug::CreateDebugMessenger();
     }
 
+#endif // PE_VULKAN
+
     void RHI::CreateSurface()
     {
         m_surface = Surface::Create(m_window);
@@ -1454,6 +1664,7 @@ namespace pe
 #endif
     }
 
+#if defined(PE_VULKAN)
     struct GPUScore
     {
         vk::PhysicalDevice gpu;
@@ -2169,6 +2380,25 @@ namespace pe
 
         m_stagingManager = new StagingManager();
     }
+#endif // PE_VULKAN
+
+#if !defined(PE_VULKAN)
+    // Vulkan instance extensions, layers and device extensions do not exist without the Vulkan backend.
+    bool RHI::IsInstanceExtensionValid(const char *)
+    {
+        return false;
+    }
+
+    bool RHI::IsInstanceLayerValid(const char *)
+    {
+        return false;
+    }
+
+    bool RHI::IsDeviceExtensionValid(const char *)
+    {
+        return false;
+    }
+#endif
 
     namespace
     {
@@ -2232,7 +2462,7 @@ namespace pe
 
         PE_ERROR_IF(!m_surface, "RHI::InitSwapchain requires a surface");
 
-        if (m_api == PE_GRAPHICS_API_DX12)
+        if (m_api == PE_GRAPHICS_API_DX12 || m_api == PE_GRAPHICS_API_WEBGPU)
         {
             int sdlW = 0;
             int sdlH = 0;
@@ -2241,7 +2471,8 @@ namespace pe
         }
 
         CreateSwapchain(m_surface);
-        Downsampler::Init();
+        if (m_api != PE_GRAPHICS_API_WEBGPU) // SPD is not used on the web (spec decision 10)
+            Downsampler::Init();
     }
 
     void RHI::CreateDescriptorPool(uint32_t maxDescriptorSets)
@@ -2273,13 +2504,15 @@ namespace pe
 
     ::PeFormat RHI::GetDepthFormat()
     {
-        // DX12 path: support a fixed widely-available depth format until a
-        // backend-virtual depth-format query lands.
-        if (GetApi() == PE_GRAPHICS_API_DX12)
-            return PE_FORMAT_D32_SFLOAT;
-        return FromVkFormat(GetVulkanDepthFormat());
+#if defined(PE_VULKAN)
+        if (GetApi() == PE_GRAPHICS_API_VULKAN)
+            return FromVkFormat(GetVulkanDepthFormat());
+#endif
+        // DX12 and WebGPU: a fixed widely-available depth format until a backend-virtual depth-format query lands.
+        return PE_FORMAT_D32_SFLOAT;
     }
 
+#if defined(PE_VULKAN)
     vk::Format GetVulkanDepthFormat()
     {
         static ::vk::Format depthFormat = ::vk::Format::eUndefined;
@@ -2309,6 +2542,7 @@ namespace pe
 
         return depthFormat;
     }
+#endif
 
     void RHI::WaitDeviceIdle()
     {
@@ -2446,6 +2680,7 @@ namespace pe
         return m_impl->GetGpuMemorySnapshot();
     }
 
+#if defined(PE_VULKAN)
     GpuMemorySnapshot VulkanRhiImpl::GetGpuMemorySnapshot()
     {
         GpuMemorySnapshot snap{};
@@ -2543,6 +2778,7 @@ namespace pe
 
         return snap;
     }
+#endif
 
     void RHI::ChangePresentMode(PePresentMode mode)
     {

@@ -16,7 +16,7 @@ namespace pe
     class Swapchain;
     struct GpuTimerInfo;
 
-#if PE_DEBUG_MODE
+#if PE_DEBUG_MODE && !defined(PE_WEB) // the browser build has no Vulkan or DX12 debug tooling
     class Debug
     {
     public:

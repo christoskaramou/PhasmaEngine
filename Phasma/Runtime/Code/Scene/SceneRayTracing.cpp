@@ -52,6 +52,7 @@ namespace pe
 
         uint64_t GetSceneRtScratchAlignment()
         {
+#if defined(PE_VULKAN)
             if (IsVulkanSceneRayTracing())
             {
                 vk::PhysicalDeviceAccelerationStructurePropertiesKHR asProps{};
@@ -60,6 +61,7 @@ namespace pe
                 VulkanRhi::Gpu().getProperties2(&props);
                 return asProps.minAccelerationStructureScratchOffsetAlignment;
             }
+#endif
 
 #if defined(PE_WIN32)
             if (IsDx12SceneRayTracing())
@@ -380,6 +382,7 @@ namespace pe
                 continue;
             }
 
+#if defined(PE_VULKAN)
             if (IsVulkanSceneRayTracing())
             {
                 req.geometry.geometryType = vk::GeometryTypeKHR::eTriangles;
@@ -410,6 +413,7 @@ namespace pe
                 req.resultSize = req.sizeInfo.accelerationStructureSize;
                 maxScratchSize = std::max<uint64_t>(maxScratchSize, req.sizeInfo.buildScratchSize);
             }
+#endif
 
 #if defined(PE_WIN32)
             if (IsDx12SceneRayTracing())
@@ -481,11 +485,13 @@ namespace pe
 
             std::string name = "BLAS_mesh" + std::to_string(req.meshIndex);
             req.createdBlas = new AccelerationStructure(name, m_blasMergedBuffer, currentOffset);
+#if defined(PE_VULKAN)
             if (IsVulkanSceneRayTracing())
             {
                 BuildVulkanBLAS(req.createdBlas, cmd, {req.geometry}, {req.range}, {req.range.primitiveCount},
                                 kBlasFlags, m_scratchBuffer->GetDeviceAddress());
             }
+#endif
 #if defined(PE_WIN32)
             else if (IsDx12SceneRayTracing())
             {
@@ -615,6 +621,7 @@ namespace pe
             PE_ACCELERATION_STRUCTURE_BUILD_PREFER_FAST_TRACE;
 
         uint64_t tlasScratch = 0;
+#if defined(PE_VULKAN)
         if (IsVulkanSceneRayTracing())
         {
             vk::AccelerationStructureGeometryKHR tlasGeom{};
@@ -634,7 +641,8 @@ namespace pe
                 vk::AccelerationStructureBuildTypeKHR::eDevice);
             tlasScratch = std::max<uint64_t>(tlasSizes.buildScratchSize, tlasSizes.updateScratchSize);
         }
-#if defined(PE_WIN32)
+#endif
+#if defined(PE_WIN32) // PE_WIN32 implies PE_VULKAN, so the else pairs with the Vulkan branch
         else if (IsDx12SceneRayTracing())
         {
             Dx12RtPrebuildInfo tlasSizes = GetDx12TlasPrebuildInfo(

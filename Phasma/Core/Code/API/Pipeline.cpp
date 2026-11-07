@@ -4,9 +4,14 @@
 #include "API/Descriptor.h"
 #include "API/RHI.h"
 #include "API/Pipeline_Internal.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanPipelineImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12PipelineImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuPipelineImpl.h"
 #endif
 #include "API/RenderPass.h"
 #include "API/Shader.h"
@@ -558,6 +563,21 @@ namespace pe
 #endif
         }
 
+        if (RHII.GetApi() == PE_GRAPHICS_API_WEBGPU)
+        {
+#if defined(PE_WEB)
+            return new WebGpuPipelineImpl(owner, info);
+#else
+            PE_ERROR("[Pipeline] WebGPU pipelines exist only in the browser build");
+            return nullptr;
+#endif
+        }
+
+#if defined(PE_VULKAN)
         return new VulkanPipelineImpl(owner, renderPass, info);
+#else
+        PE_ERROR("CreatePipelineImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
+        return nullptr;
+#endif
     }
 } // namespace pe

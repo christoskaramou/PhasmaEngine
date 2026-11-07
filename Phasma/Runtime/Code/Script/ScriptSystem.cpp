@@ -312,11 +312,17 @@ namespace pe
         const std::optional<std::string> bytecode = ReadGamePackAsset(path);
         if (bytecode)
         {
+#if defined(PE_LUAJIT)
+            constexpr sol::load_mode packedMode = sol::load_mode::binary;
+#else
+            // Lua 5.4 cannot load LuaJIT bytecode; the web export packs Lua source (spec decision 12).
+            constexpr sol::load_mode packedMode = sol::load_mode::text;
+#endif
             return lua.safe_script(sol::string_view(bytecode->data(), bytecode->size()),
                                    environment,
                                    sol::script_pass_on_error,
                                    "@" + path,
-                                   sol::load_mode::binary);
+                                   packedMode);
         }
 
         return lua.safe_script("error('packed script is missing')",

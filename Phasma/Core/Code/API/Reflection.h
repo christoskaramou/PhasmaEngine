@@ -90,6 +90,7 @@ namespace pe
         size_t bufferSize = 0;
         uint32_t structuredStride = 0;
         PeBufferKind kind = PeBufferKind::StorageRW;
+        WebGpuBindingFacts webgpu{};
     };
 
     struct ImageReflection
@@ -101,6 +102,7 @@ namespace pe
         int dxSpace = INT32_MIN;
         uint32_t count = 1;
         bool bindless = false; // an unbounded array, sized at runtime
+        WebGpuBindingFacts webgpu{};
     };
 
     struct SamplerReflection
@@ -111,6 +113,7 @@ namespace pe
         int dxRegister = INT32_MIN;
         int dxSpace = INT32_MIN;
         uint32_t count = 1;
+        WebGpuBindingFacts webgpu{};
     };
 
     struct CombinedImageSamplerReflection
@@ -121,6 +124,7 @@ namespace pe
         int dxRegister = INT32_MIN;
         int dxSpace = INT32_MIN;
         uint32_t count = 1;
+        WebGpuBindingFacts webgpu{};
     };
 
     struct AccelerationStructureReflection
@@ -164,6 +168,9 @@ namespace pe
 
     private:
         friend void PopulateReflectionFromSpirv(Reflection &refl, Shader *shader);
+#if defined(PE_WEB)
+        friend void ApplyWebGpuBindingSidecar(Reflection &refl, Shader *shader);
+#endif
 #if defined(PE_WIN32)
         friend void PopulateReflectionFromDxil(Reflection &refl, Shader *shader);
 #endif

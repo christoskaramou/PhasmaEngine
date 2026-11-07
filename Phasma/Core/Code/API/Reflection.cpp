@@ -2,8 +2,15 @@
 #include "API/Descriptor.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanDescriptorImpl.h"
-#include "API/Vulkan/VulkanReflection.h"
+#endif
+#if defined(PE_VULKAN) || defined(PE_WEB)
+#include "API/SpirvReflection.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuShaderImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ShaderImpl.h"
 #endif
@@ -17,9 +24,17 @@ namespace pe
             const PeGraphicsApi api = RHII.GetApi();
             switch (api)
             {
+#if defined(PE_VULKAN)
             case PE_GRAPHICS_API_VULKAN:
                 PopulateReflectionFromSpirv(reflection, shader);
                 return;
+#endif
+#if defined(PE_WEB)
+            case PE_GRAPHICS_API_WEBGPU:
+                PopulateReflectionFromSpirv(reflection, shader);
+                ApplyWebGpuBindingSidecar(reflection, shader);
+                return;
+#endif
             case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
                 PopulateReflectionFromDxil(reflection, shader);
@@ -33,11 +48,25 @@ namespace pe
             }
         }
 
+        // Reflection may report one combined binding as two halves; the kept half takes the dropped half's WebGPU facts.
+        void KeepWebGpuFacts(DescriptorBindingInfo &kept, const DescriptorBindingInfo &dropped)
+        {
+#if defined(PE_WEB)
+            kept.webgpu = MergeWebGpuBindingFacts(kept.webgpu, dropped.webgpu, kept.name);
+#else
+            (void)kept;
+            (void)dropped;
+#endif
+        }
+
+        // The backend-only parts of a binding: DX12's register and space, WebGPU's layout facts.
         template <typename T>
-        void FillDxRegisterInfo(DescriptorBindingInfo &info, const T &desc)
+        void FillBackendInfo(DescriptorBindingInfo &info, const T &desc)
         {
             info.dxRegister = desc.dxRegister == INT32_MIN ? static_cast<uint32_t>(desc.binding) : static_cast<uint32_t>(desc.dxRegister);
             info.dxSpace = desc.dxSpace == INT32_MIN ? static_cast<uint32_t>(desc.set) : static_cast<uint32_t>(desc.dxSpace);
+            if constexpr (requires { desc.webgpu; })
+                info.webgpu = desc.webgpu;
         }
     } // namespace
 
@@ -143,7 +172,7 @@ namespace pe
             info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             info.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
             info.name = desc.name;
-            FillDxRegisterInfo(info, desc);
+            FillBackendInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -154,7 +183,7 @@ namespace pe
             info.count = desc.count;
             info.type = PE_DESCRIPTOR_TYPE_SAMPLER;
             info.name = desc.name;
-            FillDxRegisterInfo(info, desc);
+            FillBackendInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -171,7 +200,7 @@ namespace pe
             info.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
             info.type = PE_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
             info.name = desc.name;
-            FillDxRegisterInfo(info, desc);
+            FillBackendInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -183,7 +212,7 @@ namespace pe
             info.imageLayout = PE_IMAGE_LAYOUT_GENERAL;
             info.type = PE_DESCRIPTOR_TYPE_STORAGE_IMAGE;
             info.name = desc.name;
-            FillDxRegisterInfo(info, desc);
+            FillBackendInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -194,7 +223,7 @@ namespace pe
             info.count = desc.count;
             info.type = PE_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             info.name = desc.name;
-            FillDxRegisterInfo(info, desc);
+            FillBackendInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -218,7 +247,7 @@ namespace pe
                 break;
             }
             info.name = desc.name;
-            FillDxRegisterInfo(info, desc);
+            FillBackendInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -229,7 +258,7 @@ namespace pe
             info.count = desc.count;
             info.type = PE_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE;
             info.name = desc.name;
-            FillDxRegisterInfo(info, desc);
+            FillBackendInfo(info, desc);
             setInfos[desc.set].push_back(info);
         }
 
@@ -255,11 +284,13 @@ namespace pe
 
                         if (a.type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER && b.type == PE_DESCRIPTOR_TYPE_SAMPLER)
                         {
+                            KeepWebGpuFacts(a, b);
                             setInfo.erase(setInfo.begin() + i + 1);
                             continue;
                         }
                         if (a.type == PE_DESCRIPTOR_TYPE_SAMPLER && b.type == PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER)
                         {
+                            KeepWebGpuFacts(b, a);
                             setInfo.erase(setInfo.begin() + i);
                             continue;
                         }
@@ -271,6 +302,7 @@ namespace pe
                                         "Combined image/sampler binding has mismatched DX12 registers");
                             a.type = PE_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
                             a.imageLayout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                            KeepWebGpuFacts(a, b);
                             setInfo.erase(setInfo.begin() + i + 1);
                             continue;
                         }

@@ -30,9 +30,11 @@ static bool ConnectInProgress(int err)
 }
 #else
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <netinet/in.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <unistd.h>
 using SocketFd = int;
 static constexpr SocketFd kInvalidSocket = -1;
 static int CloseSocketFd(SocketFd fd)
@@ -123,6 +125,11 @@ namespace pe
 
     bool ProfilerStreamServer::Start(int port)
     {
+#if defined(PE_WEB)
+        // The browser has no listening sockets and the web build has no threads.
+        (void)port;
+        return false;
+#endif
         if (m_running.load())
             return true;
 

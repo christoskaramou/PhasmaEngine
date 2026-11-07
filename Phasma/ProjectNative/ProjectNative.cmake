@@ -32,8 +32,8 @@ function(pe_project_native_add_library)
     list(APPEND PE_PROJECT_NATIVE_SOURCES ${discovered_sources} "${PE_PROJECT_NATIVE_ROOT}/Module.cpp")
     list(REMOVE_DUPLICATES PE_PROJECT_NATIVE_SOURCES)
     pe_project_native_name_sources(${PE_PROJECT_NATIVE_SOURCES})
-    if(CMAKE_SYSTEM_NAME STREQUAL "Android")
-        # Its objects archive into PhasmaRuntime, which the player links whole, so the module's registration survives
+    if(CMAKE_SYSTEM_NAME STREQUAL "Android" OR CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+        # No dynamic loading on Android's player path or in the browser (no SDL_LoadObject). Its objects archive into PhasmaRuntime, which the player links whole, so the module's registration survives
         # without whole-archive flags: on the NDK's CMake 3.22 the hand-written pair lost its closing flag once CMake
         # merged link items, and -lunwind landed inside --whole-archive (duplicate unwinder symbols).
         add_library(PhasmaProjectNative OBJECT ${PE_PROJECT_NATIVE_SOURCES})
@@ -49,7 +49,7 @@ function(pe_project_native_add_library)
         CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN ON)
     target_include_directories(PhasmaProjectNative PRIVATE
         "${PE_PROJECT_NATIVE_ROOT}/Api" ${PE_PROJECT_NATIVE_INCLUDE_DIRS})
-    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+    if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android" AND NOT CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
         file(GENERATE OUTPUT "${CMAKE_BINARY_DIR}/$<CONFIG>/NativeScripts.json" CONTENT
             "{\"cmake\":\"${CMAKE_COMMAND}\",\"build\":\"${CMAKE_BINARY_DIR}\",\"config\":\"$<CONFIG>\",\"sources\":\"${native_dir}\"}\n")
     endif()

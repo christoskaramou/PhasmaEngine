@@ -1,8 +1,13 @@
 #include "API/ImageView_Internal.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanImageViewImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12ImageViewImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuImageImpl.h"
 #endif
 
 namespace pe
@@ -13,7 +18,16 @@ namespace pe
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             return new Dx12ImageViewImpl(owner, desc, Dx12ImageViewKind::Srv);
 #endif
+#if defined(PE_WEB)
+        if (RHII.GetApi() == PE_GRAPHICS_API_WEBGPU)
+            return new WebGpuImageViewImpl(owner, desc);
+#endif
+#if defined(PE_VULKAN)
         return new VulkanImageViewImpl(owner, desc);
+#else
+        PE_ERROR("%s: unsupported graphics api %u", __func__, static_cast<uint32_t>(RHII.GetApi()));
+        return nullptr;
+#endif
     }
 
     ImageView *ImageView::Create(Image *parent, const ImageViewDesc &desc, const std::string &name)

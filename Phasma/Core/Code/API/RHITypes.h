@@ -4,6 +4,7 @@ enum PeGraphicsApi : uint32_t
 {
     PE_GRAPHICS_API_VULKAN = 0,
     PE_GRAPHICS_API_DX12,
+    PE_GRAPHICS_API_WEBGPU, // browser builds only (PE_WEB)
     PE_GRAPHICS_API_COUNT
 };
 
@@ -20,6 +21,8 @@ constexpr const char *PeGraphicsApiName(PeGraphicsApi api)
         return "Vulkan";
     case PE_GRAPHICS_API_DX12:
         return "DX12";
+    case PE_GRAPHICS_API_WEBGPU:
+        return "WebGPU";
     default:
         return "Unknown";
     }
@@ -628,6 +631,19 @@ namespace pe
         Offset3D srcOffsets[2]{};
         ImageSubresourceLayers dstSubresource{};
         Offset3D dstOffsets[2]{};
+    };
+
+    // WebGPU only: what a bind group layout entry needs beyond the engine binding type, from the shader's binding
+    // sidecar (WebGPU RHI spec decision 7), like dxRegister for DX12. Raw webgpu.h enum values; 0 means "not given".
+    struct WebGpuBindingFacts
+    {
+        uint32_t buffer = 0;        // WGPUBufferBindingType
+        uint32_t sampleType = 0;    // WGPUTextureSampleType
+        uint32_t viewDimension = 0; // WGPUTextureViewDimension
+        uint32_t storageFormat = 0; // WGPUTextureFormat
+        uint32_t storageAccess = 0; // WGPUStorageTextureAccess
+        uint32_t sampler = 0;       // WGPUSamplerBindingType: a sampler, or a combined binding's sampler half
+        bool multisampled = false;
     };
 } // namespace pe
 

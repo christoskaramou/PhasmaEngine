@@ -7,6 +7,7 @@
 [[vk::binding(2, 0)]] Texture2D<float> TransparentDepth;
 [[vk::image_format("rgba16f")]][[vk::binding(3, 0)]] RWTexture2D<float4> Packed;
 [[vk::image_format("r32f")]][[vk::binding(4, 0)]] RWTexture2D<float> Tiles;
+[[vk::binding(5, 0)]] Texture2D<float> OpaqueDepth;
 
 [[vk::push_constant]] ConstantBuffer<DOFParams> pc;
 
@@ -25,9 +26,13 @@ float InverseDepth(uint2 pixel, float2 frameSize)
 {
     float d = Depth.Load(int3(DepthTexel(Depth, pixel, frameSize), 0));
 
-    // A transparent surface that hides what is behind it writes no depth: the forward pass leaves it here.
+    // The forward pass writes depth for its own surfaces, faint panes included: when it ran, take the scene depth
+    // from before it, and the transparent surfaces that hide what is behind them, which it leaves in TransparentDepth.
     if ((pc.flags & DOF_TRANSPARENT_DEPTH) != 0u)
-        d = max(d, TransparentDepth.Load(int3(DepthTexel(TransparentDepth, pixel, frameSize), 0)));
+    {
+        const float opaque = OpaqueDepth.Load(int3(DepthTexel(OpaqueDepth, pixel, frameSize), 0));
+        d = max(opaque, TransparentDepth.Load(int3(DepthTexel(TransparentDepth, pixel, frameSize), 0)));
+    }
 
     return d / pc.nearPlane;
 }

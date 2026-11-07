@@ -5,6 +5,7 @@
 #include "Scene/MeshLod.h"
 #include "Scene/OpenPBRMaterial.h"
 #include "Scene/SceneRuntimeHooks.h"
+#include "Render/SceneRenderTargets.h"
 #include "Render/SceneSky.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Camera/Camera.h"
@@ -232,6 +233,7 @@ namespace pe
     Scene::~Scene()
     {
         DestroyAllNodeEntities();
+        DestroyMaterialSets();
 
         // Free all NodeId allocations
         for (NodeId *id : m_nodeIds)
@@ -631,6 +633,7 @@ namespace pe
         const uint32_t frameCounter = RHII.GetFrameCounter();
         const bool advanceTime = frameCounter != m_timeAdvanceFrame;
         m_timeAdvanceFrame = frameCounter;
+        ApplyWebProfileSettings(); // before this frame's readers see a GUI or Lua change
 
         {
             PE_PROFILE_SCOPE("Camera Update");
@@ -699,6 +702,7 @@ namespace pe
         Queue *queue = RHII.GetMainQueue();
         CommandBuffer *cmd = queue->AcquireCommandBuffer();
         cmd->Begin();
+        ModelAsset::GetDefaultResources(cmd);
         UpdateImageViews();
         CreateMaterialTable();
         CreateMeshConstants(cmd);
@@ -1542,19 +1546,23 @@ namespace pe
             set = sets[0];
             set->SetBuffer(0, m_indirectAll);
             set->SetBuffer(1, GetMeshConstants());
-            set->SetBuffer(2, m_cullingCountersBuffers[frame]);
             set->SetBuffer(3, m_indirectOpaqueSS[frame]);
-            set->SetBuffer(4, m_indirectAlphaCutSS[frame]);
-            set->SetBuffer(5, m_indirectAlphaBlend[frame]);
-            set->SetBuffer(6, m_indirectTransmission[frame]);
-            set->SetBuffer(7, m_indirectSelected[frame]);
-            set->SetBuffer(8, m_indirectOpaqueDS[frame]);
-            set->SetBuffer(9, m_indirectAlphaCutDS[frame]);
-            set->SetBuffer(10, m_sortKeysAlphaBlend[frame]);
-            set->SetBuffer(11, m_sortKeysTransmission[frame]);
             set->SetBuffer(12, GetUniforms(frame));
-            set->SetBuffer(19, m_drawInstanceIds[frame]);
-            set->SetBuffer(20, m_clusterBuffer);
+            if (!SceneUsesWebProfile()) // the web variant writes every draw to binding 3 (spec decision 9)
+            {
+                set->SetBuffer(2, m_cullingCountersBuffers[frame]);
+                set->SetBuffer(4, m_indirectAlphaCutSS[frame]);
+                set->SetBuffer(5, m_indirectAlphaBlend[frame]);
+                set->SetBuffer(6, m_indirectTransmission[frame]);
+                set->SetBuffer(7, m_indirectSelected[frame]);
+                set->SetBuffer(8, m_indirectOpaqueDS[frame]);
+                set->SetBuffer(9, m_indirectAlphaCutDS[frame]);
+                set->SetBuffer(10, m_sortKeysAlphaBlend[frame]);
+                set->SetBuffer(11, m_sortKeysTransmission[frame]);
+                set->SetBuffer(19, m_drawInstanceIds[frame]);
+                set->SetBuffer(20, m_clusterBuffer);
+            }
+
             if (set->HasBinding(17))
                 set->SetBuffer(17, m_indirectVoxels[frame]);
             if (set->HasBinding(18))
@@ -1666,7 +1674,8 @@ namespace pe
                                      size);
         };
 
-        if (hasTransparentMeshes && sortPassInfo)
+        // The web profile sorts transparent meshes on the CPU (BuildWebDraws): no compacted lists to sort.
+        if (hasTransparentMeshes && sortPassInfo && !SceneUsesWebProfile())
         {
             {
                 PE_PROFILE_SCOPE("Culling Sort Prep Barriers");
@@ -1805,6 +1814,101 @@ namespace pe
                                              PE_STAGE_VERTEX_INPUT,
                                              PE_ACCESS_VERTEX_ATTRIBUTE_READ,
                                              m_drawInstanceIds[frame]->Size()));
+    }
+
+    // The bucket (counter index) CullingCS gives a standard mesh, or UINT32_MAX for meshes other draws own.
+    static uint32_t WebDrawBucket(const Mesh &mesh)
+    {
+        const bool doubleSided = mesh.material && mesh.material->doubleSided;
+        if (mesh.material && mesh.material->terrain)
+            return UINT32_MAX;
+
+        switch (mesh.renderType)
+        {
+        case RenderType::Opaque:
+            return doubleSided ? 5u : 0u;
+        case RenderType::AlphaCut:
+            return doubleSided ? 6u : 1u;
+        case RenderType::AlphaBlend:
+            return 2u;
+        case RenderType::Transmission:
+            return 3u;
+        default:
+            return UINT32_MAX;
+        }
+    }
+
+    void Scene::BuildWebDraws()
+    {
+        const uint32_t frame = RHII.GetFrameCounter();
+        if (frame == m_webDrawsFrame)
+            return;
+
+        m_webDrawsFrame = frame;
+        for (std::vector<WebDraw> &draws : m_webDraws)
+            draws.clear();
+
+        // ponytail: voxels and terrain have their own pipelines and cull buckets, which the web profile does not
+        // draw yet; per-mesh draws for them are the upgrade.
+        static bool warned = false;
+        if (!warned && (HasArenaVoxels() || HasTerrain()))
+            PE_WARN("[Scene] the web profile does not draw voxels or terrain yet");
+        warned = warned || HasArenaVoxels() || HasTerrain();
+
+        const vec3 camera = m_cameras.empty() ? vec3(0.f) : m_cameras[0]->GetPosition();
+        for (uint32_t i = 0; i < GetNodeCount(); i++)
+        {
+            const NodeRuntime &node = m_nodeRuntime[i];
+            if (node.gpuData.renderVisible == 0u) // hidden nodes, such as pooled ones, cost no draw
+                continue;
+
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            const size_t count = std::min(refs.size(), node.meshRefIndirect.size());
+            for (size_t ref = 0; ref < count; ref++)
+            {
+                const uint32_t slot = node.meshRefIndirect[ref];
+                if (slot == UINT32_MAX)
+                    continue;
+
+                const Mesh &mesh = m_meshes[refs[ref]];
+                const uint32_t bucket = WebDrawBucket(mesh);
+                if (bucket == UINT32_MAX)
+                    continue;
+
+                const AABB box = TransformAabb(mesh.boundingBox, node.gpuData.worldMatrix);
+                const float distance = glm::distance(camera, (box.min + box.max) * 0.5f);
+                m_webDraws[bucket].push_back({slot, m_meshRuntimes[refs[ref]].materialSet, distance});
+            }
+        }
+
+        // Back to front, as the GPU sort keys ordered them.
+        for (const uint32_t bucket : {2u, 3u})
+        {
+            auto farther = [](const WebDraw &a, const WebDraw &b)
+            {
+                return a.distance > b.distance;
+            };
+            std::sort(m_webDraws[bucket].begin(), m_webDraws[bucket].end(), farther);
+        }
+    }
+
+    void Scene::DrawBucket(CommandBuffer *cmd, Buffer *indirect, Buffer *counters, uint32_t bucket, uint32_t maxDrawCount)
+    {
+        if (!SceneUsesWebProfile())
+        {
+            cmd->DrawIndexedIndirectCount(indirect, 0, counters, bucket * sizeof(uint32_t), maxDrawCount);
+            return;
+        }
+
+        // CullingCS wrote each mesh's draw at its slot; a culled mesh's draw has zero instances.
+        BuildWebDraws();
+        Buffer *draws = m_indirectOpaqueSS[RHII.GetFrameIndex()];
+        for (const WebDraw &draw : m_webDraws[bucket])
+        {
+            Descriptor *sets[3] = {nullptr, nullptr, draw.materialSet};
+            cmd->BindDescriptors(3, sets);
+            cmd->DrawIndexedIndirect(draws, static_cast<size_t>(draw.slot) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE, 1);
+        }
     }
 
     void Scene::DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,

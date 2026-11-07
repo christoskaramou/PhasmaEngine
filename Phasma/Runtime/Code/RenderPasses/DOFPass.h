@@ -32,6 +32,7 @@ namespace pe
         Image *m_displayRT = nullptr;
         Image *m_depth = nullptr;
         Image *m_transparentDepth = nullptr;
+        Image *m_opaqueDepth = nullptr;
         Image *m_packed = nullptr;
         Image *m_tiles = nullptr;
         Image *m_reach = nullptr;

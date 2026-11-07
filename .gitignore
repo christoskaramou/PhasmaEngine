@@ -385,6 +385,9 @@ Projects/*/Assets/Agent/
 !/tools/jev_advise.py
 !/tools/perf_cycle.sh
 !/tools/bake_android_shaders.ps1
+!/tools/convert_web_shaders.py
+!/tools/query_webgpu_limits.py
+!/tools/bake_web_shaders.py
 !/tools/run_player_monitored.ps1
 !/tools/cook_model.py
 !/tools/new_game.py

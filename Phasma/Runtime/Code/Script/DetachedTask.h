@@ -18,8 +18,8 @@ namespace pe
         void Start(F &&work)
         {
             auto state = std::make_shared<State>();
-            std::thread([state, work = std::forward<F>(work)]() mutable
-                        {
+            auto run = [state, work = std::forward<F>(work)]() mutable
+            {
                 std::optional<T> value;
                 std::exception_ptr error;
                 try
@@ -33,8 +33,15 @@ namespace pe
                 std::lock_guard lock(state->mutex);
                 state->value = std::move(value);
                 state->error = error;
-                state->done = true; })
-                .detach();
+                state->done = true;
+            };
+// Same condition as PE_THREADPOOL_INLINE (Base/ThreadPool.h), kept here because project native code compiles
+// this header without the Core include path.
+#if defined(PE_WEB) && !defined(__EMSCRIPTEN_PTHREADS__)
+            run(); // no threads in the browser build: finish before returning
+#else
+            std::thread(std::move(run)).detach();
+#endif
             m_state = std::move(state);
         }
 

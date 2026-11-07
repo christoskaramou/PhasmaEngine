@@ -29,8 +29,21 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Android")
     set(PE_DEFS
         PE_ANDROID
     )
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    message(STATUS "CMAKE_SYSTEM_NAME = ${CMAKE_SYSTEM_NAME}")
+    set(PE_DEFS
+        PE_WEB
+    )
 else()
     message(FATAL_ERROR "Unsupported operating system: ${CMAKE_SYSTEM_NAME}")
+endif()
+
+# Vulkan code is compiled everywhere except the browser, whose only API is WebGPU.
+set(PE_CORE_WEB OFF)
+if(CMAKE_SYSTEM_NAME STREQUAL "Emscripten")
+    set(PE_CORE_WEB ON)
+else()
+    list(APPEND PE_DEFS PE_VULKAN)
 endif()
 
 if(NOT DEFINED PE_ENABLE_RUNTIME_SHADER_COMPILER)
@@ -48,7 +61,7 @@ if(NOT DEFINED PE_SLANG_VALIDATION)
 endif()
 
 set(PE_HAS_DXC ON)
-if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+if(CMAKE_SYSTEM_NAME STREQUAL "Android" OR PE_CORE_WEB)
     set(PE_HAS_DXC OFF)
 endif()
 
@@ -67,9 +80,17 @@ file(GLOB_RECURSE ECS_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Cod
 file(GLOB_RECURSE API_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/Code/API/*.cpp")
 list(FILTER API_SOURCES EXCLUDE REGEX "/Code/API/DX12/") # Windows-only — added below under if(WIN32)
 file(GLOB_RECURSE VMA_SOURCES CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/third_party/vma/*.cpp")
+if(PE_CORE_WEB)
+    list(FILTER API_SOURCES EXCLUDE REGEX "/Code/API/Vulkan/")
+    set(VMA_SOURCES)
+    set(PE_CORE_LIBRARY_TYPE STATIC) # no wasm dynamic linking
+else()
+    list(FILTER API_SOURCES EXCLUDE REGEX "/Code/API/WebGPU/")
+    set(PE_CORE_LIBRARY_TYPE SHARED)
+endif()
 
-# Build PhasmaCore as a shared library for runtime host loading.
-add_library(PhasmaCore SHARED
+# Build PhasmaCore as a shared library for runtime host loading (static in the browser).
+add_library(PhasmaCore ${PE_CORE_LIBRARY_TYPE}
         ${BASE_SOURCES}
         ${ECS_SOURCES}
         ${API_SOURCES}
@@ -143,7 +164,7 @@ if(WIN32)
     target_link_libraries(PhasmaCore PRIVATE d3d12.lib dxgi.lib dxguid.lib)
 endif()
 
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android" AND NOT PE_CORE_WEB)
     target_link_directories(PhasmaCore PRIVATE
         "${CMAKE_CURRENT_SOURCE_DIR}/Libs/dx"
         "${CMAKE_CURRENT_SOURCE_DIR}/Libs/SDL2"
@@ -233,7 +254,9 @@ elseif(PE_SLANG_VALIDATION)
 endif()
 
 # Libraries
-if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
+if(PE_CORE_WEB)
+    set(LIB_FILES spirv-cross-core) # SDL2 and WebGPU come from Emscripten ports at link time
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set(LIB_FILES
         $<$<CONFIG:Debug>:spirv-cross-cored>
         $<$<CONFIG:Release>:spirv-cross-core>
@@ -251,16 +274,24 @@ endif()
 if(PE_HAS_DXC)
     list(APPEND LIB_FILES dxcompiler)
 endif()
-list(APPEND LIB_FILES SDL2 vulkan)
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
-    list(APPEND LIB_FILES SDL2main)
-else()
+if(NOT PE_CORE_WEB)
+    list(APPEND LIB_FILES SDL2 vulkan)
+endif()
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
     list(APPEND LIB_FILES log) # Log.cpp mirrors every line to logcat
+elseif(NOT PE_CORE_WEB)
+    list(APPEND LIB_FILES SDL2main)
 endif()
 if(WIN32)
     list(APPEND LIB_FILES ws2_32)
 endif()
 target_link_libraries(PhasmaCore PRIVATE ${LIB_FILES})
+
+if(PE_CORE_WEB)
+    # Emscripten's browser WebGPU port supplies webgpu.h and the JS glue for every target linking PhasmaCore.
+    target_compile_options(PhasmaCore PUBLIC --use-port=emdawnwebgpu)
+    target_link_options(PhasmaCore PUBLIC --use-port=emdawnwebgpu)
+endif()
 
 # Tracy profiler (linked when PE_TRACY is set in the root CMakeLists.txt)
 if(TARGET TracyClient)

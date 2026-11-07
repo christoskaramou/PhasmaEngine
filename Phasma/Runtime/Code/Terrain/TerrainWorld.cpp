@@ -1333,26 +1333,36 @@ namespace pe::terrain
                 batch.swap(m_meshInput);
                 m_meshProcessing = static_cast<int>(batch.size());
             }
-            std::vector<TileMesh> results(batch.size());
-            auto meshTile = [this](const TileJob &j)
-            { return MeshTile(j); };
-#if defined(__cpp_lib_parallel_algorithm)
-            std::transform(std::execution::par, batch.begin(), batch.end(), results.begin(), meshTile);
-#else
-            std::transform(batch.begin(), batch.end(), results.begin(), meshTile);
-#endif
-            {
-                std::lock_guard<std::mutex> lk(m_meshMutex);
-                for (TileMesh &r : results)
-                    m_meshOutput.push_back(std::move(r));
-                m_meshProcessing = 0;
-            }
-            m_meshCv.notify_all(); // wake a DrainMeshWorker waiter
+
+            MeshBatch(batch);
         }
+    }
+
+    // Meshes one batch and publishes the results; the worker thread's loop body, or inline in the browser build.
+    void TerrainWorld::MeshBatch(std::vector<TileJob> &batch)
+    {
+        std::vector<TileMesh> results(batch.size());
+        auto meshTile = [this](const TileJob &j)
+        { return MeshTile(j); };
+#if defined(__cpp_lib_parallel_algorithm)
+        std::transform(std::execution::par, batch.begin(), batch.end(), results.begin(), meshTile);
+#else
+        std::transform(batch.begin(), batch.end(), results.begin(), meshTile);
+#endif
+        {
+            std::lock_guard<std::mutex> lk(m_meshMutex);
+            for (TileMesh &r : results)
+                m_meshOutput.push_back(std::move(r));
+            m_meshProcessing = 0;
+        }
+        m_meshCv.notify_all(); // wake a DrainMeshWorker waiter
     }
 
     void TerrainWorld::StartMeshWorker()
     {
+#if PE_THREADPOOL_INLINE
+        return; // no threads in the browser build: Update meshes inline
+#endif
         if (m_meshThread.joinable())
             return;
         m_meshStop = false;
@@ -1361,6 +1371,12 @@ namespace pe::terrain
 
     void TerrainWorld::StopMeshWorker()
     {
+#if PE_THREADPOOL_INLINE
+        m_meshInput.clear();
+        m_meshOutput.clear(); // uncommitted results dropped (world is being rebuilt / torn down)
+        m_meshProcessing = 0;
+        return;
+#endif
         if (!m_meshThread.joinable())
             return;
         {
@@ -1377,7 +1393,7 @@ namespace pe::terrain
 
     void TerrainWorld::DrainMeshWorker()
     {
-        if (!m_meshThread.joinable())
+        if (!m_meshThread.joinable() && !PE_THREADPOOL_INLINE)
             return;
         std::unique_lock<std::mutex> lk(m_meshMutex);
         m_meshCv.wait(lk, [this]
@@ -1465,6 +1481,12 @@ namespace pe::terrain
                     m_meshInput.push_back(j);
             }
             m_meshCv.notify_all();
+#if PE_THREADPOOL_INLINE
+            std::vector<TileJob> batch;
+            batch.swap(m_meshInput);
+            m_meshProcessing = static_cast<int>(batch.size());
+            MeshBatch(batch); // committed by the next Update, as the worker's results would be
+#endif
         }
 
         // 3. Upload the tiles committed above (staged, submitted-not-waited on the main queue).

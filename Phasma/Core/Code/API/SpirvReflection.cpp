@@ -1,7 +1,12 @@
-#include "API/Vulkan/VulkanReflection.h"
-#include "API/Vulkan/VulkanShaderImpl.h"
+#include "API/SpirvReflection.h"
 #include "API/RHI.h"
 #include "API/Shader.h"
+#if defined(PE_VULKAN)
+#include "API/Vulkan/VulkanShaderImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuShaderImpl.h"
+#endif
 
 namespace pe
 {
@@ -237,16 +242,38 @@ namespace pe
         return members;
     }
 
+    std::span<const uint32_t> GetShaderSpirv(const Shader *shader)
+    {
+        switch (RHII.GetApi())
+        {
+#if defined(PE_VULKAN)
+        case PE_GRAPHICS_API_VULKAN:
+            return {GetVulkanShaderSpirv(shader), GetVulkanShaderSpirvSizeWords(shader)};
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+        {
+            const WebGpuShaderImpl *impl = WebGpuShaderImpl::TryFrom(shader);
+            if (!impl)
+                return {};
+
+            return impl->m_spirv;
+        }
+#endif
+        default:
+            return {};
+        }
+    }
+
     void PopulateReflectionFromSpirv(Reflection &refl, Shader *shader)
     {
         refl.m_shader = shader;
 
-        const uint32_t *spirvData = GetVulkanShaderSpirv(shader);
-        const size_t spirvWords = GetVulkanShaderSpirvSizeWords(shader);
-        if (!spirvData || spirvWords == 0)
+        const std::span<const uint32_t> spirv = GetShaderSpirv(shader);
+        if (spirv.empty())
             return;
 
-        spirv_cross::Compiler compiler{spirvData, spirvWords};
+        spirv_cross::Compiler compiler{spirv.data(), spirv.size()};
 
         if (!shader->GetEntryName().empty())
         {

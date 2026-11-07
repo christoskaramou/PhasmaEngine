@@ -10,14 +10,14 @@ namespace pe
         // backend-agnostic — same HLSL source produces the same key whether compiled to SPIR-V or DXIL.
         // Callers are responsible for folding any other compile-time inputs that affect output bytecode
         // (such as shader stage) into `definesHash` before calling Init — `Shader::Create` does so for stage.
-        void Init(const std::string &sourcePath, const std::string &entryPoint, size_t definesHash = 0);
+        void Init(const std::string &sourcePath, const std::string &entryPoint, uint64_t definesHash = 0);
         void InitFromBytecode(std::string_view bytecode, const std::string &entryPoint, PeShaderStageFlags stage);
         bool ShaderNeedsCompile();
         inline const std::string &GetSourcePath() { return m_sourcePath; }
         inline const std::string &GetShaderCode() { return m_code; }
         // Every file Init() inlined, as FileWatcher keys it (weakly_canonical, generic separators).
         inline const std::vector<std::string> &GetIncludes() const { return m_includes; }
-        size_t GetHash() { return m_hash; }
+        uint64_t GetHash() { return m_hash.Value(); }
         std::vector<uint8_t> ReadBytecodeFile();
         void WriteBytecodeToFile(const std::vector<uint8_t> &bytecode);
         std::vector<uint32_t> ReadSpvFile();

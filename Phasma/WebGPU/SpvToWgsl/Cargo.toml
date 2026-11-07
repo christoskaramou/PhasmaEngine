@@ -1,0 +1,11 @@
+[package]
+name = "spv-to-wgsl"
+version = "0.1.0"
+edition = "2021"
+
+# Bake-time only (WebGPU RHI spec decision 7): engine SPIR-V to WGSL plus a binding sidecar. Same naga as WgslBridge.
+[dependencies]
+naga = { version = "=29.0.1", features = ["spv-in", "wgsl-out"] }
+
+[profile.release]
+opt-level = 3

@@ -55,6 +55,7 @@ namespace pe
         friend class Dx12RhiImpl;
         friend class Dx12SwapchainImpl;
 #endif
+        friend struct WebGpuSwapchainImpl;
 
         Swapchain(const SwapchainDesc &desc);
         ~Swapchain();

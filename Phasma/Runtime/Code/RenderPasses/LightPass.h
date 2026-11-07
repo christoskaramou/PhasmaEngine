@@ -177,6 +177,7 @@ namespace pe
         Image *m_depthStencilRT = nullptr;
         Image *m_velocityRT = nullptr;
         Image *m_transparentDepthRT = nullptr;
+        Image *m_opaqueDepthRT = nullptr;              // the scene depth before the forward draws, for depth of field
         uint64_t m_transparentDepthFrame = UINT64_MAX; // SceneRendererHost::GetRenderedFrames() when last written
     };
 } // namespace pe

@@ -2,7 +2,9 @@
 
 #include "API/Buffer.h"
 #include "API/RHI.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/AccelerationStructure.h"
+#endif
 
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12AccelerationStructure.h"
@@ -21,7 +23,9 @@ namespace pe
     {
         if (m_apiHandle && RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
         {
+#if defined(PE_VULKAN)
             DestroyVulkanAccelerationStructure(this);
+#endif
         }
         else if (m_apiHandle)
         {
@@ -62,9 +66,11 @@ namespace pe
     {
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             BuildVulkanTLAS(this, cmd, instanceCount, instanceBuffer, flags, scratchAddress);
             return;
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             BuildDx12TLAS(this, cmd, instanceCount, instanceBuffer, flags, scratchAddress);
@@ -86,9 +92,11 @@ namespace pe
     {
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             UpdateVulkanTLAS(this, cmd, instanceCount, instanceBuffer, scratchAddress);
             return;
+#endif
         case PE_GRAPHICS_API_DX12:
 #if defined(PE_WIN32)
             UpdateDx12TLAS(this, cmd, instanceCount, instanceBuffer, scratchAddress);

@@ -41,6 +41,7 @@ namespace pe
     private:
         friend struct VulkanDescriptorPoolImpl;
         friend struct Dx12DescriptorPoolImpl;
+        friend struct WebGpuDescriptorPoolImpl;
 
         DescriptorPool(const DescriptorPoolDesc &desc, const std::string &name);
         ~DescriptorPool();
@@ -61,6 +62,7 @@ namespace pe
         uint32_t structuredStride = 0;
         bool bindless = false;
         std::string name{};
+        WebGpuBindingFacts webgpu{};
     };
 
     struct DescriptorUpdateInfo
@@ -110,6 +112,13 @@ namespace pe
                 hash.Combine(static_cast<uint32_t>(info.type));
                 hash.Combine(info.structuredStride);
                 hash.Combine(info.bindless);
+                hash.Combine(info.webgpu.buffer);
+                hash.Combine(info.webgpu.sampleType);
+                hash.Combine(info.webgpu.viewDimension);
+                hash.Combine(info.webgpu.storageFormat);
+                hash.Combine(info.webgpu.storageAccess);
+                hash.Combine(info.webgpu.sampler);
+                hash.Combine(info.webgpu.multisampled);
             }
 
             return hash;
@@ -146,6 +155,7 @@ namespace pe
     private:
         friend struct VulkanDescriptorLayoutImpl;
         friend struct Dx12DescriptorLayoutImpl;
+        friend struct WebGpuDescriptorLayoutImpl;
 
         DescriptorLayout(const std::vector<DescriptorBindingInfo> &bindingInfos,
                          PeShaderStageFlags stage,
@@ -237,6 +247,7 @@ namespace pe
         friend class RHI;
         friend struct VulkanDescriptorImpl;
         friend struct Dx12DescriptorImpl;
+        friend struct WebGpuDescriptorImpl;
 
         Descriptor(const std::vector<DescriptorBindingInfo> &bindingInfos,
                    PeShaderStageFlags stage,

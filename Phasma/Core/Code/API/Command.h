@@ -197,6 +197,7 @@ namespace pe
         friend class Queue;
         friend struct VulkanCommandBufferImpl;
         friend struct Dx12CommandBufferImpl;
+        friend struct WebGpuCommandBufferImpl;
 
         void ClearBoundGraphicsState()
         {

@@ -149,6 +149,9 @@ namespace pe
         friend struct Dx12CommandBufferImpl;
         friend struct Dx12ImageImpl;
         friend class Dx12SwapchainImpl;
+        friend struct WebGpuCommandBufferImpl;
+        friend struct WebGpuImageImpl;
+        friend struct WebGpuSwapchainImpl;
 
         Image(const ImageDesc &desc);
         static void Barrier(CommandBuffer *cmd, const ImageBarrierInfo &info);

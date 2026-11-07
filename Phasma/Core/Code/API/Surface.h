@@ -38,6 +38,7 @@ namespace pe
         friend class Dx12SwapchainImpl;
         friend struct Dx12SurfaceImpl;
 #endif
+        friend struct WebGpuSurfaceImpl;
 
         Impl *m_impl{};
         Rect2Du m_actualExtent{};

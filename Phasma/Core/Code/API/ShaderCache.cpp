@@ -95,7 +95,7 @@ namespace pe
         return code;
     }
 
-    void ShaderCache::Init(const std::string &sourcePath, const std::string &entryPoint, size_t definesHash)
+    void ShaderCache::Init(const std::string &sourcePath, const std::string &entryPoint, uint64_t definesHash)
     {
         m_sourcePath = sourcePath;
         m_includes.clear();
@@ -104,11 +104,19 @@ namespace pe
         m_hash = StringHash(m_code);
         m_hash.CombineString(entryPoint);
         m_hash.Combine(definesHash);
+#if defined(PE_WEB)
+        // The browser reads the desktop Vulkan bake (spec decision 7): key every module the way that bake does,
+        // as Vulkan at PHASMA_SPIRV_TARGET=1.2.
+        constexpr uint32_t kBakeSpirvTarget = (1u << 22) | (2u << 12); // VK_API_VERSION_1_2
+        m_hash.CombineValue(static_cast<uint32_t>(PE_GRAPHICS_API_VULKAN));
+        m_hash.CombineValue(kBakeSpirvTarget);
+#else
         m_hash.CombineValue(static_cast<uint32_t>(RHII.GetApi()));
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
             m_hash.CombineValue(RHII.GetCaps().spirvTargetVulkanVersion);
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             m_hash.CombineValue(12u); // DX12 cache embeds readable source in a private DXIL container part.
+#endif
         if (Shader::UsesSlang(m_sourcePath))
             m_hash.CombineString("slang-compiler"); // never reuse the other compiler's bytecode
 #if defined(PE_SLANG_VALIDATION)
@@ -119,7 +127,7 @@ namespace pe
         m_tempFilePath = Path::Root;
         m_tempFilePath += "ShaderCache/";
         m_tempFilePath += (RHII.GetApi() == PE_GRAPHICS_API_DX12) ? "_dxil/" : "_spv/";
-        m_tempFilePath += std::to_string(m_hash);
+        m_tempFilePath += std::to_string(m_hash.Value());
     }
 
     void ShaderCache::InitFromBytecode(std::string_view bytecode, const std::string &entryPoint, PeShaderStageFlags stage)

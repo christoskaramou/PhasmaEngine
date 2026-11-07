@@ -2,10 +2,15 @@
 #include "API/Command.h"
 #include "API/RHI.h"
 #include "API/StagingManager.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanBufferImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12BufferImpl.h"
 #include "API/DX12/Dx12CommandBufferImpl.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuBufferImpl.h"
 #endif
 
 namespace pe
@@ -14,11 +19,17 @@ namespace pe
     {
         switch (RHII.GetApi())
         {
+#if defined(PE_VULKAN)
         case PE_GRAPHICS_API_VULKAN:
             return new VulkanBufferImpl(owner, desc);
+#endif
 #if defined(PE_WIN32)
         case PE_GRAPHICS_API_DX12:
             return new Dx12BufferImpl(owner, desc);
+#endif
+#if defined(PE_WEB)
+        case PE_GRAPHICS_API_WEBGPU:
+            return new WebGpuBufferImpl(owner, desc);
 #endif
         default:
             PE_ERROR("CreateBufferImpl: unsupported graphics api %u", static_cast<uint32_t>(RHII.GetApi()));
@@ -36,7 +47,12 @@ namespace pe
             return;
         }
 #endif
+#if defined(PE_VULKAN)
         Buffer_Barrier_Vulkan(cmd, info);
+#else
+        (void)cmd; // WebGPU tracks usage itself; barriers are no-ops (spec decision 5)
+        (void)info;
+#endif
     }
 
     void Buffer_Barriers_Backend(CommandBuffer *cmd, const std::vector<BufferBarrierInfo> &infos)
@@ -49,7 +65,12 @@ namespace pe
             return;
         }
 #endif
+#if defined(PE_VULKAN)
         Buffer_Barriers_Vulkan(cmd, infos);
+#else
+        (void)cmd;
+        (void)infos;
+#endif
     }
 
     Buffer *Buffer::Create(const BufferDesc &desc)

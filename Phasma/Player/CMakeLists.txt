@@ -13,8 +13,12 @@ set(PHASMAPLAYER_RUNTIME_UI_SOURCES
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_tables.cpp"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_widgets.cpp"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_impl_sdl2.cpp"
-    "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_vulkan.cpp"
 )
+if(NOT PE_WEB)
+    list(APPEND PHASMAPLAYER_RUNTIME_UI_SOURCES
+        "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_vulkan.cpp"
+    )
+endif()
 
 if(WIN32)
     list(APPEND PHASMAPLAYER_RUNTIME_UI_SOURCES
@@ -56,8 +60,26 @@ elseif(MSVC)
 else()
     target_link_libraries(PhasmaPlayer PRIVATE -Wl,--whole-archive PhasmaRuntime -Wl,--no-whole-archive)
 endif()
-target_link_libraries(PhasmaPlayer PRIVATE vulkan SDL2)
-if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android")
+if(PE_WEB)
+    # PhasmaPlayer.html/.js/.wasm. JSPI keeps startup's adapter and device waits synchronous (spec decision 4).
+    set_target_properties(PhasmaPlayer PROPERTIES SUFFIX ".html")
+    target_link_options(PhasmaPlayer PRIVATE
+        -sJSPI
+        -sALLOW_MEMORY_GROWTH=1
+        -sSTACK_SIZE=4MB
+        -sEXIT_RUNTIME=0
+    )
+
+    # Engine runtime assets go into MEMFS at /RuntimeAssets, where Path looks under the web root (spec decision 13).
+    # Emscripten writes them to PhasmaPlayer.data, which the page downloads before main.
+    # ponytail: everything downloads before start; fetch on demand once the asset set grows.
+    file(GLOB_RECURSE PE_WEB_RUNTIME_ASSETS CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
+    target_link_options(PhasmaPlayer PRIVATE "SHELL:--preload-file ${PE_RUNTIME_ASSETS_SOURCE_DIR}@/RuntimeAssets")
+    set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_RUNTIME_ASSETS})
+else()
+    target_link_libraries(PhasmaPlayer PRIVATE vulkan SDL2)
+endif()
+if(NOT CMAKE_SYSTEM_NAME STREQUAL "Android" AND NOT PE_WEB)
     target_link_libraries(PhasmaPlayer PRIVATE SDL2main)
 endif()
 

@@ -268,6 +268,7 @@ namespace pe::terrain
         void StopMeshWorker();  // signal stop + join; drop uncommitted results (rebuild/teardown)
         void DrainMeshWorker(); // block until in-flight meshing finishes; drop + re-dirty pending
         void MeshWorkerLoop();
+        void MeshBatch(std::vector<TileJob> &batch);
         void UpdateColliderRing();  // budgeted per-tile Jolt body add/remove/re-cook
         void GrowOverflowedTiles(); // any overflow doubles its whole ring's budgets (one flush, rare)
         void RemoveTileBody(Tile &tile);

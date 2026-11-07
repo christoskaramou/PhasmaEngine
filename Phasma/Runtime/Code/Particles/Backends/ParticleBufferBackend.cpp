@@ -10,7 +10,8 @@ namespace pe
     {
         PeMemoryUsage ParticleBufferMemoryUsage()
         {
-            return RHII.GetApi() == PE_GRAPHICS_API_DX12 ? PE_MEMORY_USAGE_GPU_ONLY : PE_MEMORY_USAGE_CPU_TO_GPU;
+            // DX12 and WebGPU: ParticleCS writes it, and WebGPU host-visible buffers are never GPU-written.
+            return RHII.GetApi() != PE_GRAPHICS_API_VULKAN ? PE_MEMORY_USAGE_GPU_ONLY : PE_MEMORY_USAGE_CPU_TO_GPU;
         }
 
         void ZeroParticleBuffer(Buffer *buffer)
@@ -18,7 +19,7 @@ namespace pe
             if (!buffer)
                 return;
 
-            if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
+            if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
             {
                 Queue *queue = RHII.GetMainQueue();
                 CommandBuffer *cmd = queue->AcquireCommandBuffer();

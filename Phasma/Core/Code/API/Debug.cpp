@@ -10,6 +10,7 @@
 #include "API/RHI.h"
 #include "API/Semaphore.h"
 #include "API/Swapchain.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/VulkanBufferImpl.h"
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
@@ -23,6 +24,7 @@
 #include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanSemaphoreImpl.h"
 #include "API/Vulkan/VulkanSwapchainImpl.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12BufferImpl.h"
 #include "API/DX12/Dx12CommandBufferImpl.h"
@@ -34,7 +36,9 @@
 #ifdef PE_TRACY
 #include <tracy/TracyVulkan.hpp>
 #endif
+#if !defined(PE_WEB) // RenderDoc has no browser build
 #include "renderdoc_app.h"
+#endif
 
 #ifndef PE_RENDER_DOC
 #define PE_RENDER_DOC 0
@@ -93,7 +97,8 @@ namespace pe
 #endif
     }
 
-#if PE_DEBUG_MODE
+// The browser build has no Vulkan or DX12 debug tooling and uses the no-op Debug in Debug.h.
+#if PE_DEBUG_MODE && !defined(PE_WEB)
     // Frame Capture
     void *capture_module = nullptr;
     RENDERDOC_API_1_5_0 *capture_api = nullptr;
@@ -785,6 +790,7 @@ namespace pe
 #endif
     }
 
+#if PE_DEBUG_MODE && !defined(PE_WEB)
     void Debug::SetGpuTimingEnabled(bool enabled)
     {
         g_gpuTimingEnabled.store(enabled, std::memory_order_relaxed);
@@ -794,4 +800,5 @@ namespace pe
     {
         return g_gpuTimingEnabled.load(std::memory_order_relaxed);
     }
+#endif
 } // namespace pe

@@ -9,7 +9,7 @@ namespace JPH
 {
     class PhysicsSystem;
     class TempAllocatorImpl;
-    class JobSystemThreadPool;
+    class JobSystem;
     class Body;
     class BodyID;
     class Shape;
@@ -187,7 +187,7 @@ namespace pe
 
         // Jolt subsystems (raw pointers — created in Init, destroyed in Destroy)
         JPH::TempAllocatorImpl *m_tempAllocator = nullptr;
-        JPH::JobSystemThreadPool *m_jobSystem = nullptr;
+        JPH::JobSystem *m_jobSystem = nullptr; // a thread pool, or single-threaded in the browser build
         JPH::PhysicsSystem *m_joltSystem = nullptr;
         TriggerContactListener *m_contactListener = nullptr;
 

@@ -1,5 +1,12 @@
 #pragma once
 
+// The browser build runs on one thread (spec decision 3): pools start no workers and run each task inline.
+#if defined(PE_WEB) && !defined(__EMSCRIPTEN_PTHREADS__)
+#define PE_THREADPOOL_INLINE 1
+#else
+#define PE_THREADPOOL_INLINE 0
+#endif
+
 namespace pe
 {
     class PE_API ThreadPool
@@ -52,6 +59,10 @@ namespace pe
             });
 
         std::shared_future<return_type> future = task_ptr->get_future().share();
+#if PE_THREADPOOL_INLINE
+        (*task_ptr)(); // ponytail: one core; to lift it, build with -pthread and COOP/COEP headers
+        return future;
+#endif
         {
             std::unique_lock<std::mutex> lock(m_queue_mutex);
             if (m_stop)

@@ -1234,6 +1234,7 @@ namespace pe
         m_depthStencilRT = rs->GetDepthStencilTarget("depthStencil");
         m_velocityRT = rs->GetRenderTarget("velocity");
         m_transparentDepthRT = rs->GetRenderTarget("transparentDepth");
+        m_opaqueDepthRT = rs->GetRenderTarget("opaqueDepth");
         m_boundFrames.assign(RHII.GetSwapchainImageCount(), false);
 
         // Colours first (viewport, velocity for TAA, transparent depth for DOF, when the targets exist), depth last.
@@ -1340,7 +1341,6 @@ namespace pe
         Scene *scene = GetActiveScene();
         Camera *camera = scene ? scene->GetActiveCamera() : nullptr;
         const uint32_t frame = RHII.GetFrameIndex();
-        m_transparentDepthFrame = RequireActiveSceneRendererHost().GetRenderedFrames();
         const std::vector<Scene::OpenPBRForwardDraw> draws =
             camera && frame < m_boundFrames.size() && m_boundFrames[frame] ? scene->GetOpenPBRForwardDraws(camera->GetPosition())
                                                                            : std::vector<Scene::OpenPBRForwardDraw>{};
@@ -1350,6 +1350,11 @@ namespace pe
                 cmd->ClearColors({m_transparentDepthRT});
             return;
         }
+
+        // These draws write depth, faint panes included, so depth of field reads the scene depth from before them.
+        m_transparentDepthFrame = RequireActiveSceneRendererHost().GetRenderedFrames();
+        if (m_opaqueDepthRT && ActivePostProcessProfile().dof)
+            cmd->CopyImage(m_depthStencilRT, m_opaqueDepthRT);
 
         SetLightingPushConstants(cmd, m_viewportRT, 1u);
         const int envSamples = std::clamp(Settings::Get<SceneSettings>().openpbr_env_samples, 1, 512);
@@ -1362,9 +1367,13 @@ namespace pe
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
 
+        const bool dofDepth = m_transparentDepthRT && ActivePostProcessProfile().dof;
         uint32_t boundModule = UINT32_MAX;
         for (const Scene::OpenPBRForwardDraw &draw : draws)
         {
+            if (draw.dofOnly && !dofDepth)
+                continue;
+
             const auto info = m_modulePassInfos.find(draw.module);
             if (info == m_modulePassInfos.end())
                 continue;
@@ -1378,6 +1387,15 @@ namespace pe
                 cmd->SetConstantAt(23, GetOpenPBRShapeSlot(GetOpenPBRModule(draw.module))); // shape
                 cmd->PushConstants();
                 boundModule = draw.module;
+            }
+
+            // Traced in Hybrid: one draw that writes only the depth-of-field depth (max-blended, so order is moot).
+            if (draw.dofOnly)
+            {
+                cmd->SetConstantAt(28, 2u); // depth_only: depth of field only
+                cmd->PushConstants();
+                cmd->DrawIndexed(draw.indexCount, 1, draw.firstIndex, draw.vertexOffset, draw.slot);
+                continue;
             }
 
             // Depth first, then shading: a thick-walled bottle's far inner wall also faces the camera, and drawn after
@@ -1404,6 +1422,6 @@ namespace pe
     {
         MaterialShadePass::Destroy();
         m_attachments.clear();
-        m_depthStencilRT = m_transparentDepthRT = nullptr;
+        m_depthStencilRT = m_transparentDepthRT = m_opaqueDepthRT = nullptr;
     }
 } // namespace pe

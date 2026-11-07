@@ -85,6 +85,28 @@ namespace pe
         return SceneUsesOpenPBR() && Settings::Get<SceneSettings>().openpbr_debug;
     }
 
+    bool SceneUsesWebProfile()
+    {
+        return RHII.GetCaps().maxBindlessTextures == 0;
+    }
+
+    void ApplyWebProfileSettings()
+    {
+        if (!SceneUsesWebProfile())
+            return;
+
+        // Each of these emits draws per cluster or batch, not per mesh (WebGPU RHI spec decision 9).
+        auto &settings = Settings::Get<SceneSettings>();
+        settings.occlusion_culling = false;
+        settings.cluster_geometry = false;
+        settings.skinned_instancing = false;
+
+        // LightingPS samples 9 textures plus a shadow and a tint map per cascade (spec decision 10).
+        const uint32_t sampled = RHII.GetGpuLimits().maxSampledTexturesPerShaderStage;
+        const uint32_t cascades = sampled > 11 ? (sampled - 9) / 2 : 1;
+        settings.num_cascades = std::min(settings.num_cascades, cascades);
+    }
+
     vec3 SceneColor(const vec3 &srgb)
     {
         if (!SceneUsesLinearColor())
@@ -105,10 +127,21 @@ namespace pe
     }
 
     // The MaterialX forward pass's surface depth (reverse-Z, MAX-blended; 0 = none) where a transparent surface hides
-    // what is behind it: depth of field reads it, since that pass writes no depth. R16F blends on every device.
+    // what is behind it, and the scene depth as it was before that pass. The pass writes depth for its own nearest
+    // surface test, faint panes included, so depth of field reads the copy with this. R16F blends on every device.
     static void CreateTransparentDepthTarget(SceneRenderTargetMap &renderTargets)
     {
-        CreateSceneRenderTarget(renderTargets, "transparentDepth", PE_FORMAT_R16_SFLOAT, PE_IMAGE_USAGE_TRANSFER_DST, true, false, Color::Black);
+        CreateSceneDepthStencilTarget(renderTargets, "opaqueDepth", RHII.GetDepthFormat());
+
+        // Rendered, cleared and sampled only; r16float is not a core WebGPU storage format.
+        CreateSceneRenderTarget(renderTargets,
+                                "transparentDepth",
+                                PE_FORMAT_R16_SFLOAT,
+                                PE_IMAGE_USAGE_TRANSFER_DST,
+                                true,
+                                false,
+                                Color::Black,
+                                false);
     }
 
     bool SceneNeedsVelocityRT(bool hasRayTracingGeometry)
@@ -149,6 +182,20 @@ namespace pe
         return PE_FORMAT_R16G16_SFLOAT;
     }
 
+    // Velocity is only rendered and sampled, never a storage image. WebGPU allows rg16float as storage only with the
+    // optional "texture-formats-tier1" feature, so asking for it there fails texture creation.
+    static void CreateVelocityRT(SceneRenderTargetMap &renderTargets, ::PeFormat format)
+    {
+        CreateSceneRenderTarget(renderTargets,
+                                "velocity",
+                                format,
+                                PE_IMAGE_USAGE_NONE,
+                                true,
+                                false,
+                                Color::Transparent,
+                                false);
+    }
+
     void DestroySceneRenderTargets(SceneRenderTargetMap &renderTargets, SceneRenderTargetMap &depthStencilTargets)
     {
         for (auto &rt : renderTargets)
@@ -172,7 +219,8 @@ namespace pe
                                    PeImageUsageFlags usage,
                                    bool useRenderTargetScale,
                                    bool useMips,
-                                   vec4 clearColor)
+                                   vec4 clearColor,
+                                   bool storage)
     {
         if (auto existing = renderTargets.find(StringHash(name)); existing != renderTargets.end())
             return existing->second;
@@ -187,8 +235,11 @@ namespace pe
         desc.width = width;
         desc.height = height;
         // TRANSFER_SRC: every scene target can be read back (MCP capture_image_resource, pool tests) on Vulkan too.
-        desc.usage = usage | PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE |
-                     PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST;
+        desc.usage = usage | PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_SRC |
+                     PE_IMAGE_USAGE_TRANSFER_DST;
+        if (storage)
+            desc.usage |= PE_IMAGE_USAGE_STORAGE;
+
         if (useMips)
             desc.mipLevels = static_cast<uint32_t>(std::floor(std::log2(width > height ? width : height))) + 1;
         desc.clearColor = clearColor;
@@ -198,7 +249,8 @@ namespace pe
 
         rt->CreateRTV();
         rt->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
-        rt->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
+        if (storage)
+            rt->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
 
         SamplerDesc samplerInfo = Sampler::CreateInfoInit();
         samplerInfo.anisotropyEnable = false;
@@ -329,7 +381,10 @@ namespace pe
         SceneRenderTargets targets{};
         const ::PeFormat sceneColorFormat = SceneUsesHDR() ? PE_FORMAT_R16G16B16A16_SFLOAT : kDisplayColorFormat;
         targets.depthStencil =
-            CreateSceneDepthStencilTarget(depthStencilTargets, "depthStencil", RHII.GetDepthFormat(), PE_IMAGE_USAGE_TRANSFER_DST);
+            CreateSceneDepthStencilTarget(depthStencilTargets,
+                                          "depthStencil",
+                                          RHII.GetDepthFormat(),
+                                          PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
         targets.viewport =
             CreateSceneRenderTarget(renderTargets, "viewport", sceneColorFormat, PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST);
         if (SceneUsesHDR())
@@ -349,9 +404,18 @@ namespace pe
         CreateSceneRenderTarget(renderTargets, "albedo", kDisplayColorFormat);
         CreateSceneRenderTarget(renderTargets, "srm", kDisplayColorFormat);
         if (SceneNeedsVelocityRT(hasRayTracingGeometry))
-            CreateSceneRenderTarget(renderTargets, "velocity", SceneVelocityRTFormat());
+            CreateVelocityRT(renderTargets, SceneVelocityRTFormat());
         CreateSceneRenderTarget(renderTargets, "emissive", sceneColorFormat);
-        CreateSceneRenderTarget(renderTargets, "transparency", PE_FORMAT_R8_UNORM, PE_IMAGE_USAGE_NONE, true, false, Color::Black);
+
+        // Rendered and sampled only; r8unorm, like rg16float, is not a core WebGPU storage format.
+        CreateSceneRenderTarget(renderTargets,
+                                "transparency",
+                                PE_FORMAT_R8_UNORM,
+                                PE_IMAGE_USAGE_NONE,
+                                true,
+                                false,
+                                Color::Black,
+                                false);
 
         if (SceneUsesOpenPBR())
         {
@@ -387,7 +451,7 @@ namespace pe
             if (velocity)
                 DestroySceneRenderTarget(renderTargets, "velocity");
             if (needVelocity)
-                CreateSceneRenderTarget(renderTargets, "velocity", velocityFormat);
+                CreateVelocityRT(renderTargets, velocityFormat);
         }
 
         if (normalChanged)
@@ -403,6 +467,7 @@ namespace pe
             {
                 DestroySceneRenderTarget(renderTargets, "visibility");
                 DestroySceneRenderTarget(renderTargets, "transparentDepth");
+                DestroySceneRenderTarget(renderTargets, "opaqueDepth");
             }
             else
             {

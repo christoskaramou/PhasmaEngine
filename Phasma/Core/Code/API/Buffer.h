@@ -61,6 +61,8 @@ namespace pe
         friend struct VulkanBufferImpl;
         friend struct Dx12CommandBufferImpl;
         friend struct Dx12BufferImpl;
+        friend struct WebGpuCommandBufferImpl;
+        friend struct WebGpuBufferImpl;
 
         Buffer(const BufferDesc &desc);
         ~Buffer();

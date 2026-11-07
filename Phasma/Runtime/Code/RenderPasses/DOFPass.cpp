@@ -132,6 +132,7 @@ namespace pe
         m_displayRT = rs->GetRenderTarget("hdrDisplay");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
         m_transparentDepth = rs->GetRenderTarget("transparentDepth"); // OpenPBR scenes only
+        m_opaqueDepth = rs->GetRenderTarget("opaqueDepth");           // with it: the depth before the forward draws
         m_frameImage = rs->CreateFSSampledImage(m_displayRT);
 
         // Pass-owned, at the display's size: the frame packed with inverse depth, and each tile's largest blur before
@@ -189,6 +190,7 @@ namespace pe
             return;
 
         Image *transparentDepth = m_transparentDepth ? m_transparentDepth : m_depth;
+        Image *opaqueDepth = m_opaqueDepth ? m_opaqueDepth : m_depth;
         for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
         {
             Descriptor *prepass = m_prepassInfo->GetDescriptors(i)[0];
@@ -197,6 +199,7 @@ namespace pe
             prepass->SetImageView(2, transparentDepth->GetSRV());
             prepass->SetImageView(3, m_packed->GetUAV(0));
             prepass->SetImageView(4, m_tiles->GetUAV(0));
+            prepass->SetImageView(5, opaqueDepth->GetSRV());
             prepass->Update();
 
             Descriptor *dilate = m_dilateInfo->GetDescriptors(i)[0];
@@ -230,6 +233,8 @@ namespace pe
         ReadBarrier(cmd, m_frameImage, PE_STAGE_COMPUTE_SHADER);
         if (m_transparentDepth)
             ReadBarrier(cmd, m_transparentDepth, PE_STAGE_COMPUTE_SHADER);
+        if (m_opaqueDepth)
+            ReadBarrier(cmd, m_opaqueDepth, PE_STAGE_COMPUTE_SHADER);
 
         WriteBarrier(cmd, m_packed);
         WriteBarrier(cmd, m_tiles);

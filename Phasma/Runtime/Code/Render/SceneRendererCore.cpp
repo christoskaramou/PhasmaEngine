@@ -184,6 +184,7 @@ namespace pe
     void SceneRendererCore::CreateRenderPassComponents(bool includeRayTracingPass, CommandBuffer *cmd)
     {
         (void)cmd;
+        ApplyWebProfileSettings(); // the passes size themselves from num_cascades
         CreateSceneRenderGraphPassComponents(m_renderPassComponents, includeRayTracingPass);
     }
 

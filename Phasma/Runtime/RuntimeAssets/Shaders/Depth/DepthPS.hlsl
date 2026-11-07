@@ -4,6 +4,9 @@
 
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
 [[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
+#ifdef PE_WEB_PROFILE
+#include "../Common/WebMaterialTextures.hlsl"
+#else
 [[vk::binding(0, 2)]] Texture2D pe_textures[] : register(t0, space100);
 
 float4 SampleArray(float2 uv, uint index)
@@ -17,6 +20,7 @@ float4 GetBaseColor(uint id, float2 uv)
 {
     return SampleArray(uv, constants[id].meshImageIndex[0]);
 }
+#endif
 
 void mainPS(PS_INPUT_Position_Uv_ID input)
 {
