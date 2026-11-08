@@ -23,7 +23,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (sampleBudget == 1 || blend == 0.0f || pc.strength <= 0.0f)
         return output;
 
-    float depth = depthTex.SampleLevel(sampler_depthTex, input.uv, 0).x;
+    float depth = DepthAt(depthTex, sampler_depthTex, input.uv);
     float2 velocity;
     if (depth == 0.0f)
     {
@@ -44,7 +44,9 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     velocity       *= pc.strength;
 
     float lengthPixels = length(velocity / texelSize);
-    if (!isfinite(lengthPixels) || lengthPixels <= 1.0f)
+    // A bit test, not isfinite: WGSL has no isnan or isinf. An all-ones exponent is an infinity or a NaN.
+    const bool finite = (asuint(lengthPixels) & 0x7F800000u) != 0x7F800000u;
+    if (!finite || lengthPixels <= 1.0f)
         return output;
 
     // ponytail: keep adjacent taps at most one pixel apart. Longer blur needs a reconstruction

@@ -9,6 +9,7 @@ namespace pe
     inline constexpr const char *kProjectPathSettingsKey = "project_path";
     inline constexpr const char *kStartupSceneSettingsKey = "startup_scene";
     inline constexpr const char *kAudioMutedSettingsKey = "audio_muted";
+    inline constexpr const char *kBakeGiSettingsKey = "bake_gi";
 
     enum class ProjectSelectionSource : uint8_t
     {
@@ -39,6 +40,7 @@ namespace pe
                                                   std::string *warning = nullptr);
     // "audio_muted": true starts every run from these settings silent (test and review launches).
     [[nodiscard]] bool ReadRuntimeAudioMuted(const std::filesystem::path &settingsPath = {});
+    [[nodiscard]] bool ReadRuntimeBakeGi();
     [[nodiscard]] bool WriteProjectSelection(const std::filesystem::path &settingsPath,
                                              const ProjectConfig &project,
                                              std::string *error = nullptr);

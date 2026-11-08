@@ -25,6 +25,8 @@ namespace pe
 
     using PhysicsTriggerCallback = std::function<void(NodeId *trigger, NodeId *other)>;
     using PhysicsJointBreakCallback = std::function<void(NodeId *node)>;
+    // A new contact between this body and a solid (non-sensor) one: speed = closing speed along the normal (m/s).
+    using PhysicsContactCallback = std::function<void(NodeId *self, NodeId *other, float speed, const vec3 &point)>;
 
     struct PhysicsNodeState
     {
@@ -38,6 +40,7 @@ namespace pe
         PhysicsTriggerCallback triggerEnterCallback;
         PhysicsTriggerCallback triggerExitCallback;
         PhysicsJointBreakCallback jointBreakCallback;
+        PhysicsContactCallback contactCallback;
     };
 
     struct RaycastResult
@@ -112,10 +115,22 @@ namespace pe
         void ClearTriggerCallbacks(NodeId *node);
         void ClearAllTriggerCallbacks();
 
+        // Solid-contact callback (main thread, after the step); nullptr clears it. Cleared with the trigger ones.
+        void SetContactCallback(NodeId *node, PhysicsContactCallback callback);
+        // Switch a body between Dynamic and Kinematic, live if it is in the world (frozen piece -> falling piece).
+        // Static bodies cannot switch; returns false then.
+        bool SetBodyType(NodeId *node, PhysicsBodyType type);
+        // Drive a kinematic body to this world pose over the next physics step (Jolt MoveKinematic), so it pushes
+        // dynamic bodies it sweeps through. The pose holds for every step until the next call.
+        void MoveKinematic(NodeId *node, const vec3 &pos, const quat &rot);
+        // World gravity (m/s^2); games at a toy or giant scale set their own.
+        void SetGravity(const vec3 &g);
+
         // Simulation control
         void StartSimulation(Scene &scene);
         void StopSimulation();
         void SetPaused(bool paused) { m_paused = paused; }
+        void SetTimeScale(float scale) { m_timeScale = scale; }
         bool IsSimulating() const { return m_simulating; }
 
     private:
@@ -132,6 +147,9 @@ namespace pe
         void DrainTriggerContacts(Scene &scene);
         void ClearTriggerContactState();
         void ClearTriggerContactStateForBody(uint32_t bodyRaw);
+        void QueueSolidContact(uint32_t body1Raw, uint32_t body2Raw, float speed, const vec3 &point);
+        void DrainSolidContacts(Scene &scene);
+        void ApplyKinematicTargets(float step);
 
         friend class TriggerContactListener;
 
@@ -195,9 +213,28 @@ namespace pe
         std::vector<QueuedTriggerContact> m_queuedTriggerContacts;
         std::unordered_set<TriggerPairKey, TriggerPairKeyHash> m_activeTriggerPairs;
 
+        struct QueuedSolidContact
+        {
+            uint32_t body1Raw = 0xFFFFFFFF;
+            uint32_t body2Raw = 0xFFFFFFFF;
+            float speed = 0.f;
+            vec3 point = vec3(0.f);
+        };
+        std::vector<QueuedSolidContact> m_queuedSolidContacts; // under m_triggerContactMutex
+        // Bodies with a contact callback, by Jolt id: written on the main thread only, read by the contact
+        // listener during the step (no writes then).
+        std::unordered_set<uint32_t> m_contactBodies;
+        struct KinematicTarget
+        {
+            vec3 pos;
+            quat rot;
+        };
+        std::unordered_map<uint32_t, KinematicTarget> m_kinematicTargets; // by Jolt id
+
         bool m_simulating = false;
         bool m_paused = false;
         float m_accumulator = 0.0f;
+        float m_timeScale = 1.0f;
 
         // A long frame catches up at most this much physics time (2 steps at the default 30 Hz); the rest is dropped.
         static constexpr float MAX_CATCHUP_SECONDS = 2.0f / 30.0f;

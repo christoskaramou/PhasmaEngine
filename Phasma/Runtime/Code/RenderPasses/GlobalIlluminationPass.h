@@ -42,6 +42,22 @@ namespace pe
             uint32_t tracedVisibility = 1; // ProbeVolume.hlsl GI_TRACED_VISIBILITY: 0 keeps the distance moments alone
         };
         static_assert(sizeof(ProbeUniforms) == kUniformBytes);
+        // A <scene>.pegi file: this header, then kBakedWidth x kBakedHeight rgba16f texels (bilinear 32-bit float is
+        // optional on WebGPU). It keeps the live atlas layout: irradiance and the probe offsets in cascade 0's band,
+        // distance as mean and deviation in cascade 1's. Written with "bake_gi" in phasma_settings.json, read by the
+        // web profile's lighting.
+        static constexpr uint32_t kBakedVersion = 1;
+        static constexpr uint32_t kBakedWidth = 65;
+        static constexpr uint32_t kBakedHeight = 512 * kCascades;
+        struct BakedProbesHeader
+        {
+            char magic[4] = {'P', 'E', 'G', 'I'};
+            uint32_t version = kBakedVersion;
+            uint32_t width = kBakedWidth;
+            uint32_t height = kBakedHeight;
+            ProbeUniforms uniforms{};
+        };
+
         const ProbeUniforms &GetProbeData() const { return m_probeData; } // the probe grid the last Update uploaded
         uint32_t GetProbeCount() const
         {
@@ -49,7 +65,11 @@ namespace pe
         }
 
     private:
+        void BakeProbes(Scene *scene);
+
         static constexpr uint32_t kCascadeProbes = 512;
+        static constexpr uint32_t kBakeFrames = 1024; // frames of unbroken history before "bake_gi" saves
+        uint32_t m_bakeFrames = 0;
         ProbeUniforms m_probeData{};
         std::vector<Buffer *> m_probeUniforms;
         Image *m_irradiance = nullptr;

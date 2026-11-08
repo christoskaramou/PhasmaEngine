@@ -1,6 +1,8 @@
 #pragma once
 
+#include "GlobalIlluminationPass.h"
 #include "RenderPasses/ModulePipelines.h"
+#include <filesystem>
 
 namespace pe
 {
@@ -46,9 +48,16 @@ namespace pe
         void Resize(uint32_t width, uint32_t height) override;
         void Destroy() override;
 
+        // Web profile: the active scene's <scene>.pegi (null without one), loaded when the scene changes.
+        Image *LoadBakedProbes();
+        const GlobalIlluminationPass::ProbeUniforms &GetBakedUniforms() const { return m_bakedUniforms; }
+
     private:
         friend class MaterialShadePass; // reads m_uniforms (written only in Init)
 
+        Image *m_bakedProbes = nullptr;
+        GlobalIlluminationPass::ProbeUniforms m_bakedUniforms{};
+        std::filesystem::path m_bakedPath;
         std::vector<Buffer *> m_uniforms;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;

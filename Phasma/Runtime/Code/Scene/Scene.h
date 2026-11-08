@@ -524,6 +524,9 @@ namespace pe
         // 3 transmission, 5/6 opaque/alpha-cut double-sided): the compacted list through the count buffer, or under
         // the web profile one draw per mesh with that mesh's material set (WebGPU RHI spec decision 9).
         void DrawBucket(CommandBuffer *cmd, Buffer *indirect, Buffer *counters, uint32_t bucket, uint32_t maxDrawCount);
+        // Web profile: one indirect draw per shadow caster slot ShadowCullCS wrote for the current cascade, the
+        // Transmission casters for the tint maps or every other standard mesh for the depth maps.
+        void DrawWebShadowCasters(CommandBuffer *cmd, bool tints);
         Buffer *GetCullingCountersBuffer(uint32_t frame) const { return m_cullingCountersBuffers[frame]; }
         Buffer *GetIndirectOpaqueSS(uint32_t frame) const { return m_indirectOpaqueSS[frame]; }
         Buffer *GetIndirectAlphaCutSS(uint32_t frame) const { return m_indirectAlphaCutSS[frame]; }

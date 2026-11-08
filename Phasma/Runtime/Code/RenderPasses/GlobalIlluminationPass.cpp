@@ -4,16 +4,58 @@
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
+#include "Project/ProjectSelection.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
+#include <filesystem>
+#include <fstream>
+#include <glm/gtc/packing.hpp>
 
 namespace pe
 {
+    namespace
+    {
+        // ponytail: assumes tightly packed rows, which holds on Vulkan (the bake tool's backend); DX12 aligns rows to
+        // 256 bytes, so honour the row pitch before baking there.
+        std::vector<float> ReadProbeAtlas(Image *atlas)
+        {
+            const size_t size = size_t(atlas->GetWidth()) * atlas->GetHeight() * 4 * sizeof(float);
+            Buffer *staging = Buffer::Create({
+                .size = size,
+                .usage = PE_BUFFER_USAGE_TRANSFER_DST,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_TO_CPU,
+                .name = "GI_BakeReadback",
+            });
+
+            Queue *queue = RHII.GetMainQueue();
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+            cmd->CopyImageToBuffer(atlas, staging, 0, 0, 1);
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            queue->ReturnCommandBuffer(cmd);
+
+            std::vector<float> texels(size / sizeof(float));
+            staging->Map();
+            std::memcpy(texels.data(), staging->Data(), size);
+            staging->Unmap();
+            Buffer::Destroy(staging);
+            return texels;
+        }
+
+        uint16_t PackBakedChannel(float value)
+        {
+            return glm::packHalf1x16(std::isfinite(value) ? std::clamp(value, -65000.f, 65000.f) : 0.f);
+        }
+    } // namespace
+
     GlobalIlluminationPass::GlobalIlluminationPass()
         : m_updatePass(std::make_shared<PassInfo>()),
           m_samplePass(std::make_shared<PassInfo>()),
@@ -198,6 +240,14 @@ namespace pe
             inputs.Combine(value);
         const bool changed = static_cast<size_t>(inputs) != m_historyInputs;
         m_historyInputs = static_cast<size_t>(inputs);
+        static const bool bakeRequested = ReadRuntimeBakeGi();
+        if (bakeRequested)
+        {
+            m_bakeFrames = reset ? 0 : m_bakeFrames + 1;
+            if (m_bakeFrames == kBakeFrames)
+                BakeProbes(scene);
+        }
+
         m_probeData.reset = (reset ? 1u : 0u) | (changed ? 2u : 0u); // bit 0: discard history, bit 1: known change
         m_probeData.frame = RHII.GetFrameCounter();
         m_traceHeight = kCascadeProbes * m_probeData.cascadeCount; // one row of rays per probe
@@ -205,6 +255,65 @@ namespace pe
         range.data = &m_probeData;
         range.size = sizeof(m_probeData);
         m_probeUniforms[RHII.GetFrameIndex()]->Copy(1, &range, false);
+    }
+
+    void GlobalIlluminationPass::BakeProbes(Scene *scene)
+    {
+        const bool fitted = m_probeData.cascadeCount == 1 && m_probeData.spacing[0].w == 0.f;
+        if (!fitted || scene->GetScenePath().empty())
+        {
+            PE_WARN("[GI bake] failed: the scene needs a saved path and a volume fitted to it (a camera-following volume "
+                    "has no fixed probes to bake; raise gi_probe_spacing)");
+            return;
+        }
+
+        RHII.WaitDeviceIdle();
+        const std::vector<float> irradiance = ReadProbeAtlas(m_irradianceHistory);
+        const std::vector<float> distance = ReadProbeAtlas(m_distanceHistory);
+        std::vector<uint16_t> texels(size_t(kBakedWidth) * kBakedHeight * 4);
+        for (size_t y = 0; y < kCascadeProbes; ++y)
+        {
+            for (size_t x = 0; x < kBakedWidth; ++x)
+            {
+                const size_t source = (y * kBakedWidth + x) * 4;
+                for (size_t channel = 0; channel < 4; ++channel)
+                    texels[source + channel] = PackBakedChannel(irradiance[source + channel]);
+
+                const float mean = distance[source];
+                uint16_t *moments = &texels[((y + kCascadeProbes) * kBakedWidth + x) * 4];
+                moments[0] = PackBakedChannel(mean);
+                moments[1] = PackBakedChannel(std::sqrt(std::max(distance[source + 1] - mean * mean, 0.f)));
+            }
+        }
+
+        BakedProbesHeader header{};
+        header.uniforms = m_probeData;
+        header.uniforms.reset = 0;
+        header.uniforms.tracedVisibility = 0;
+        std::filesystem::path path = scene->GetScenePath();
+        path.replace_extension(".pegi");
+        std::filesystem::path temporary = path;
+        temporary += ".tmp";
+        {
+            std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char *>(&header), sizeof(header));
+            out.write(reinterpret_cast<const char *>(texels.data()), static_cast<std::streamsize>(texels.size() * sizeof(uint16_t)));
+            if (!out.good())
+            {
+                PE_WARN("[GI bake] failed: cannot write %s", temporary.string().c_str());
+                return;
+            }
+        }
+
+        std::error_code error;
+        std::filesystem::rename(temporary, path, error);
+        if (error)
+        {
+            PE_WARN("[GI bake] failed: cannot replace %s", path.string().c_str());
+            return;
+        }
+
+        PE_INFO("[GI bake] wrote %s", path.string().c_str());
     }
 
     void GlobalIlluminationPass::DeclareInputs(RGBuilder &builder)

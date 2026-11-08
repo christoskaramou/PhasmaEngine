@@ -90,6 +90,33 @@ namespace pe
         return RHII.GetCaps().maxBindlessTextures == 0;
     }
 
+    // Core WebGPU's storage texture formats (spec section 26.1.1); the rest need "texture-formats-tier1".
+    static bool IsWebGpuStorageFormat(::PeFormat format)
+    {
+        switch (format)
+        {
+        case PE_FORMAT_R8G8B8A8_UNORM:
+        case PE_FORMAT_R8G8B8A8_SNORM:
+        case PE_FORMAT_R8G8B8A8_UINT:
+        case PE_FORMAT_R8G8B8A8_SINT:
+        case PE_FORMAT_R16G16B16A16_UINT:
+        case PE_FORMAT_R16G16B16A16_SINT:
+        case PE_FORMAT_R16G16B16A16_SFLOAT:
+        case PE_FORMAT_R32_UINT:
+        case PE_FORMAT_R32_SINT:
+        case PE_FORMAT_R32_SFLOAT:
+        case PE_FORMAT_R32G32_UINT:
+        case PE_FORMAT_R32G32_SINT:
+        case PE_FORMAT_R32G32_SFLOAT:
+        case PE_FORMAT_R32G32B32A32_UINT:
+        case PE_FORMAT_R32G32B32A32_SINT:
+        case PE_FORMAT_R32G32B32A32_SFLOAT:
+            return true;
+        default:
+            return false;
+        }
+    }
+
     void ApplyWebProfileSettings()
     {
         if (!SceneUsesWebProfile())
@@ -104,7 +131,8 @@ namespace pe
         // LightingPS samples 9 textures plus a shadow and a tint map per cascade (spec decision 10).
         const uint32_t sampled = RHII.GetGpuLimits().maxSampledTexturesPerShaderStage;
         const uint32_t cascades = sampled > 11 ? (sampled - 9) / 2 : 1;
-        settings.num_cascades = std::min(settings.num_cascades, cascades);
+        // Lighting.hlsl's web variant declares a depth and a tint map binding for up to 4 cascades.
+        settings.num_cascades = std::min({settings.num_cascades, cascades, 4u});
     }
 
     vec3 SceneColor(const vec3 &srgb)
@@ -237,7 +265,9 @@ namespace pe
         // TRANSFER_SRC: every scene target can be read back (MCP capture_image_resource, pool tests) on Vulkan too.
         desc.usage = usage | PE_IMAGE_USAGE_COLOR_ATTACHMENT | PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_SRC |
                      PE_IMAGE_USAGE_TRANSFER_DST;
-        if (storage)
+        // Under the web profile a target asks for storage only in a format WebGPU allows it for, and gets no UAV
+        // otherwise: a pass that writes one there must pick such a format (SSAOPass uses r32f).
+        if (storage && (!SceneUsesWebProfile() || IsWebGpuStorageFormat(format)))
             desc.usage |= PE_IMAGE_USAGE_STORAGE;
 
         if (useMips)
@@ -249,7 +279,7 @@ namespace pe
 
         rt->CreateRTV();
         rt->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
-        if (storage)
+        if (desc.usage & PE_IMAGE_USAGE_STORAGE)
             rt->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, 0);
 
         SamplerDesc samplerInfo = Sampler::CreateInfoInit();

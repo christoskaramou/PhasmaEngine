@@ -135,6 +135,18 @@ float2 TexelSize(uint mip, TextureCube tex)
     return 1.0f / TextureSize(mip, tex).xy;
 }
 
+// WebGPU binds a depth texture only to depth or unfilterable-float bindings, so the web profile loads the texel.
+float DepthAt(Texture2D tex, SamplerState sampler_tex, float2 uv)
+{
+#ifdef PE_WEB_PROFILE
+    uint width, height;
+    tex.GetDimensions(width, height);
+    return tex.Load(int3(uv * float2(width, height), 0)).r;
+#else
+    return tex.SampleLevel(sampler_tex, uv, 0).r;
+#endif
+}
+
 // Returns the closest depth in a 3X3 pixel grid
 float DilateDepth3X3_UV(Texture2D tex, SamplerState sampler_tex, float2 uv, out float2 outUv)
 {
@@ -148,7 +160,7 @@ float DilateDepth3X3_UV(Texture2D tex, SamplerState sampler_tex, float2 uv, out 
         for (int x = -1; x <= 1; ++x)
         {
             float2 offset = float2(x, y) * texelSize;
-            float depth = tex.Sample(sampler_tex, uv + offset).r;
+            float depth = DepthAt(tex, sampler_tex, uv + offset);
             if (depth > outDepth)
             {
                 outDepth = depth;

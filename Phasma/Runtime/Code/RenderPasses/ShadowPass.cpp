@@ -15,6 +15,16 @@
 
 namespace pe
 {
+    namespace
+    {
+        // Generated-mask casters need bindless material textures and counted draws, which the web profile has neither
+        // of: there alpha-cut casters cast as opaque. ponytail: per-slot mask draws are the upgrade.
+        bool ShadowMasksEnabled()
+        {
+            return SceneUsesOpenPBR() && !SceneUsesWebProfile();
+        }
+    } // namespace
+
     void ShadowPass::Init()
     {
         m_textures.resize(Settings::Get<SceneSettings>().num_cascades);
@@ -76,7 +86,7 @@ namespace pe
 
     void ShadowPass::UpdatePassInfo()
     {
-        m_maskEnabled = SceneUsesOpenPBR();
+        m_maskEnabled = ShadowMasksEnabled();
         const std::vector<Define> defines = m_maskEnabled ? std::vector<Define>{{"PE_GENERATED_MASK", "1"}}
                                                           : std::vector<Define>{};
         m_passInfo->name = "shadows_pipeline";
@@ -222,7 +232,11 @@ namespace pe
         m_scene->BindDrawIdBuffer(cmd);
 
         // ShadowCullCS lists Transmission casters apart (counter 4); without the cull, the VS drops every other caster.
-        if (shadowCull)
+        if (shadowCull && SceneUsesWebProfile())
+        {
+            m_scene->DrawWebShadowCasters(cmd, true);
+        }
+        else if (shadowCull)
         {
             const uint32_t frame = RHII.GetFrameIndex();
             cmd->DrawIndexedIndirectCount(m_scene->GetShadowIndirectTint(frame),
@@ -268,7 +282,7 @@ namespace pe
         }
 
         // Shadow resize can keep its images while the effective generated route changes.
-        if (m_maskEnabled != SceneUsesOpenPBR())
+        if (m_maskEnabled != ShadowMasksEnabled())
         {
             for (PassInfo *info : GetPassInfos())
             {
@@ -417,6 +431,8 @@ namespace pe
         float nearClip = camera->GetNearPlane();
         float farClip = std::max(gSettings.shadow_distance, nearClip + 1.0f);
         float clipRange = farClip - nearClip;
+        // Fixed bounds: one shadow map over a world-space sphere (cascade 0; the rest are not drawn or sampled).
+        const bool fixedBounds = gSettings.shadow_fixed_bounds && gSettings.shadow_bounds_radius > 0.0f;
 
         float minZ = nearClip;
         float maxZ = nearClip + clipRange;
@@ -498,6 +514,11 @@ namespace pe
                 radius = max(radius, distance);
             }
             radius = std::ceil(radius * 16.0f) / 16.0f;
+            if (fixedBounds)
+            {
+                frustumCenter = vec3(gSettings.shadow_bounds_x, gSettings.shadow_bounds_y, gSettings.shadow_bounds_z);
+                radius = std::ceil(gSettings.shadow_bounds_radius * 16.0f) / 16.0f;
+            }
 
             vec3 maxExtents = vec3(radius);
             vec3 minExtents = -maxExtents;
@@ -523,12 +544,15 @@ namespace pe
             frustumCenter = vec3(inverse(lightRotation) * centerLightSpace);
 
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, lightUp);
-            mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -clipRange);
+            // Casters up to clipRange toward the light are kept (at least the sphere's diameter in fixed mode).
+            const float casterRange = fixedBounds ? std::max(clipRange, 2.0f * radius) : clipRange;
+            mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -casterRange);
 
             // Store split distance and matrix in cascade
             m_cascades[i] = lightOrthoMatrix * lightViewMatrix;
             m_cascadePlanes[i] = ExtractFrustumPlanes(m_cascades[i]);
-            m_viewZ[i] = camera->GetNearPlane() + splitDist * clipRange;
+            // Fixed bounds: every receiver takes cascade 0 (and never blends into the next).
+            m_viewZ[i] = fixedBounds ? (i == 0 ? 1e30f : 0.0f) : camera->GetNearPlane() + splitDist * clipRange;
             m_texelSizeWorld[i] = texelSizeWorld;
 
             lastSplitDist = cascadeSplits[i];
@@ -565,7 +589,8 @@ namespace pe
             keepAll.fill(vec4(0.f, 0.f, 0.f, 1.f));
 
             const uint32_t arenaBase = m_scene->GetArenaSlotBase();
-            const bool hasVoxels = m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
+            const bool web = SceneUsesWebProfile(); // per-slot caster draws (WebGPU RHI spec decision 9), no voxels yet
+            const bool hasVoxels = !web && m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
                                    m_scene->GetVoxelIndexBuffer() && m_voxelPassInfo &&
                                    m_voxelPassInfo->pVertShader;
             const uint32_t meshCount = m_scene->GetMeshCount();
@@ -575,8 +600,11 @@ namespace pe
             m_masks.Prepare(cmd, *m_scene);
 
             uint32_t cascades = Settings::Get<SceneSettings>().num_cascades;
+            const bool fixedBounds = gSettings.shadow_fixed_bounds && gSettings.shadow_bounds_radius > 0.0f;
             for (uint32_t i = 0; i < cascades; i++)
             {
+                if (fixedBounds && i > 0)
+                    break; // one map over the fixed bounds; lighting never samples the others
                 if (shadowCull)
                 {
                     const vec4 *planes = gSettings.frustum_culling ? m_cascadePlanes[i].data() : keepAll.data();
@@ -606,7 +634,9 @@ namespace pe
                     cmd->BindIndexBuffer(m_scene->GetBuffer(), 0);
                     cmd->BindVertexBuffer(m_scene->GetBuffer(), m_scene->GetPositionsOffset());
                     m_scene->BindDrawIdBuffer(cmd);
-                    if (regularCount > 0)
+                    if (web)
+                        m_scene->DrawWebShadowCasters(cmd, false);
+                    else if (regularCount > 0)
                         cmd->DrawIndexedIndirectCount(regularIndirect, 0, counters, 0, regularCount);
 
                     if (hasVoxels && voxelCount > 0)
@@ -650,7 +680,7 @@ namespace pe
                                                   : m_scene->GetIndirectAll();
                 Buffer *maskCounters = shadowCull ? m_scene->GetShadowCullCounters(frame) : nullptr;
                 const uint32_t maskCounter = 3u;
-                if (regularCount > 0)
+                if (regularCount > 0 && !web)
                 {
                     DrawFallback(cmd, pushConstants, maskIndirect, maskCounters, maskCounter, regularCount);
                     m_masks.Draw(cmd, *m_scene, maskIndirect, maskCounters, maskCounter, regularCount, true, &m_cascades[i]);

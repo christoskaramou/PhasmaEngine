@@ -5,6 +5,41 @@
 #define GI_AFTER_UPDATE 1 // traced after GlobalIlluminationPass: its atlases already hold this frame
 #endif
 // Literal bindings let the DX12 source reflector recover register spaces.
+#if defined(GI_LIGHTING) && defined(PE_WEB_PROFILE)
+// The web profile's lighting reads a static bake from the desktop (GlobalIlluminationPass::BakeProbes): set 3 is push
+// constants there, and one rgba16f atlas holds both maps, so GI costs one of WebGPU's guaranteed 16 textures.
+[[vk::binding(14, 0)]] cbuffer ProbeBakedVolume
+{
+    float4 gi_originSpacing[4];
+    float4 gi_historyOriginSpacing[4];
+    float4 gi_spacing[4];
+    uint gi_gridSize;
+    uint gi_rayCount;
+    uint gi_frame;
+    uint gi_reset;
+    uint gi_cascadeCount;
+    float gi_intensity;
+    float gi_hysteresis;
+    uint gi_tracedVisibility;
+};
+[[vk::binding(15, 0)]] Texture2D<float4> gi_irradiance;
+[[vk::binding(16, 0)]] SamplerState gi_sampler;
+#define gi_distance gi_irradiance
+#define GI_DISTANCE_PROBE ProbeCascadeProbes() // distance fills the band one cascade below irradiance
+#define GI_VARIANCE(moments) ((moments).y * (moments).y) // mean and deviation: 16-bit moments cannot subtract
+
+float4 ScreenProbeIrradianceAt(float2 uv)
+{
+    return 0.0.xxxx;
+}
+
+float4 ScreenReflectionsAt(float2 uv)
+{
+    return 0.0.xxxx;
+}
+#else
+#define GI_DISTANCE_PROBE 0
+#define GI_VARIANCE(moments) ((moments).y - (moments).x * (moments).x)
 #ifdef GI_LIGHTING
 [[vk::binding(0, 3)]] cbuffer ProbeLightingVolume
 {
@@ -28,6 +63,23 @@
 #define gi_irradiance gi_lightingIrradiance
 #define gi_distance gi_lightingDistance
 #define gi_sampler gi_lightingSampler
+
+float4 ScreenTexelAt(Texture2D<float4> image, float2 uv)
+{
+    uint width, height;
+    image.GetDimensions(width, height);
+    return image.Load(int3(uv * float2(width, height), 0));
+}
+
+float4 ScreenProbeIrradianceAt(float2 uv)
+{
+    return ScreenTexelAt(gi_screenIrradiance, uv);
+}
+
+float4 ScreenReflectionsAt(float2 uv)
+{
+    return ScreenTexelAt(gi_reflections, uv);
+}
 #elif defined(GI_PROBES) || defined(GI_SHADING)
 [[vk::binding(0, 2)]] cbuffer ProbeTraceVolume
 {
@@ -73,6 +125,7 @@
 [[vk::binding(1, 0)]] Texture2D<float4> gi_irradiance;
 [[vk::binding(2, 0)]] Texture2D<float4> gi_distance;
 [[vk::binding(9, 0)]] SamplerState gi_sampler;
+#endif
 #endif
 
 // Probes are numbered across cascades: cascade x gridSize^3 + the probe's cell in that cascade. The atlases stack the
@@ -312,8 +365,8 @@ float4 ProbeCascadeIrradiance(uint cascade, float3 position, float3 normal, bool
         float3 toSurface = biased - (origin + float3(cell) * spacing + ProbeOffset(probe));
         float distance = length(toSurface);
         float3 direction = distance > 0.0001 ? toSurface / distance : normal;
-        float2 moments = ProbeSample(gi_distance, probe, direction).xy;
-        float variance = max(moments.y - moments.x * moments.x, 0.0001);
+        float2 moments = ProbeSample(gi_distance, probe + GI_DISTANCE_PROBE, direction).xy;
+        float variance = max(GI_VARIANCE(moments), 0.0001);
         float delta = max(distance - moments.x, 0.0);
         float visibility = variance / (variance + delta * delta);
         visibility = visibility * visibility * visibility;

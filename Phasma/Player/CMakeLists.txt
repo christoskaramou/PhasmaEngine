@@ -76,6 +76,38 @@ if(PE_WEB)
     file(GLOB_RECURSE PE_WEB_RUNTIME_ASSETS CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
     target_link_options(PhasmaPlayer PRIVATE "SHELL:--preload-file ${PE_RUNTIME_ASSETS_SOURCE_DIR}@/RuntimeAssets")
     set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_RUNTIME_ASSETS})
+
+    # The baked shader cache (tools/bake_web_shaders.py) goes into MEMFS at /ShaderCache as loose files, where the WebGPU
+    # shader Impl reads _spv, _wgsl and the binding sidecars (spec decisions 7 and 13). Without it, the first shader is
+    # an error naming its key. Reconfigure after the first bake so the folder is picked up.
+    set(PE_WEB_SHADER_CACHE "${CMAKE_BINARY_DIR}/web-shader-cache/ShaderCache" CACHE PATH "Baked browser shader cache")
+    if(EXISTS "${PE_WEB_SHADER_CACHE}/_wgsl")
+        file(GLOB_RECURSE PE_WEB_SHADER_FILES CONFIGURE_DEPENDS "${PE_WEB_SHADER_CACHE}/*")
+        target_link_options(PhasmaPlayer PRIVATE "SHELL:--preload-file ${PE_WEB_SHADER_CACHE}@/ShaderCache")
+        set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_SHADER_FILES})
+    else()
+        message(STATUS "[Web] no baked shader cache at ${PE_WEB_SHADER_CACHE}: run tools/bake_web_shaders.py")
+    endif()
+
+    # The project the browser player opens (spec decision 13): a folder with phasma_project.json, preloaded at /Project,
+    # and a phasma_settings.json at the web root that points the player at its manifest. Bake the shaders with the same
+    # project (tools/bake_web_shaders.py --project). Empty: the player starts with no project.
+    # ponytail: loose files, not a game pack; everything downloads before start.
+    set(PE_WEB_PROJECT "" CACHE PATH "Project folder (with phasma_project.json) the browser player opens")
+    if(PE_WEB_PROJECT)
+        if(NOT EXISTS "${PE_WEB_PROJECT}/phasma_project.json")
+            message(FATAL_ERROR "PE_WEB_PROJECT has no phasma_project.json: ${PE_WEB_PROJECT}")
+        endif()
+
+        set(PE_WEB_SETTINGS "${CMAKE_BINARY_DIR}/web-settings/phasma_settings.json")
+        file(WRITE "${PE_WEB_SETTINGS}" "{\"project_manifest\": \"/Project/phasma_project.json\"}\n")
+        file(GLOB_RECURSE PE_WEB_PROJECT_FILES CONFIGURE_DEPENDS "${PE_WEB_PROJECT}/*")
+        target_link_options(PhasmaPlayer PRIVATE
+            "SHELL:--preload-file ${PE_WEB_PROJECT}@/Project"
+            "SHELL:--preload-file ${PE_WEB_SETTINGS}@/phasma_settings.json"
+        )
+        set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_PROJECT_FILES} ${PE_WEB_SETTINGS})
+    endif()
 else()
     target_link_libraries(PhasmaPlayer PRIVATE vulkan SDL2)
 endif()

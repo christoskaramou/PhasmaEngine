@@ -176,6 +176,14 @@ namespace pe
         float shadow_cascade_lambda = 0.85f;
         float shadow_normal_bias = 1.5f;
         float shadow_fade_fraction = 0.15f;
+        // Fixed shadow bounds: the directional shadow map covers this world-space sphere instead of following the
+        // camera's frustum. Cascade 0 alone is used (the rest are not drawn), so a small, enclosed scene keeps one
+        // stable shadow map wherever the camera goes. Off by default.
+        bool shadow_fixed_bounds = false;
+        float shadow_bounds_x = 0.0f;
+        float shadow_bounds_y = 0.0f;
+        float shadow_bounds_z = 0.0f;
+        float shadow_bounds_radius = 0.0f;
         float shadow_filter_radius = 0.75f;
         float sun_angular_diameter = 0.53f; // degrees: ray-traced sun shadows sample the sun's disk (0 = hard)
         // Multiplies the camera-distance LOD selection for shadow casters (ShadowCullCS). 1.0 = shadows

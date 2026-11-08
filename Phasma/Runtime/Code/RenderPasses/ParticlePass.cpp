@@ -86,7 +86,17 @@ namespace pe
                 std::vector<ImageView *> views;
                 for (auto *img : textures)
                     views.push_back(img->GetSRV());
-                descriptors[1]->SetImageViews(0, views);
+                // One array at binding 0, or on the web (ParticlePS.hlsl) texture k at binding 20 + k.
+                if (descriptors[1]->HasBinding(0))
+                {
+                    descriptors[1]->SetImageViews(0, views);
+                }
+                else
+                {
+                    for (size_t k = 0; k < views.size(); k++)
+                        descriptors[1]->SetImageView(static_cast<uint32_t>(20 + k), views[k]);
+                }
+
                 descriptors[1]->SetSampler(1, pm->GetSampler());
                 if (Image *depth = rs->GetDepthStencilTarget("depthStencil"))
                     descriptors[1]->SetImageView(16, depth->GetSRV());

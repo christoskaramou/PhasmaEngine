@@ -1911,6 +1911,23 @@ namespace pe
         }
     }
 
+    void Scene::DrawWebShadowCasters(CommandBuffer *cmd, bool tints)
+    {
+        // The buckets WebDrawBucket gives: Transmission casters tint, the rest (opaque, alpha-cut, alpha-blend) cast.
+        static constexpr uint32_t kCasterBuckets[] = {0u, 1u, 2u, 5u, 6u};
+        static constexpr uint32_t kTintBuckets[] = {3u};
+
+        BuildWebDraws();
+        Buffer *draws = m_shadowIndirectRegular[RHII.GetFrameIndex()];
+        const std::span<const uint32_t> buckets = tints ? std::span<const uint32_t>(kTintBuckets)
+                                                        : std::span<const uint32_t>(kCasterBuckets);
+        for (const uint32_t bucket : buckets)
+        {
+            for (const WebDraw &draw : m_webDraws[bucket])
+                cmd->DrawIndexedIndirect(draws, static_cast<size_t>(draw.slot) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE, 1);
+        }
+    }
+
     void Scene::DispatchCullingPhase(CommandBuffer *cmd, PassInfo *passInfo, CullPhase phase,
                                      Image *hiZPyramid, Buffer *occlusionData)
     {
@@ -2176,13 +2193,19 @@ namespace pe
             set = sets[0];
             set->SetBuffer(0, m_indirectAll);
             set->SetBuffer(1, GetMeshConstants());
-            set->SetBuffer(2, m_shadowCullCounters[frame]);
             set->SetBuffer(3, m_shadowIndirectRegular[frame]);
-            set->SetBuffer(4, m_shadowIndirectVoxels[frame]);
-            set->SetBuffer(5, m_shadowIndirectMask[frame]);
-            set->SetBuffer(6, m_shadowIndirectTint[frame]);
+            // The web variant has one output, written per slot (WebGPU RHI spec decision 9).
+            if (set->HasBinding(2))
+            {
+                set->SetBuffer(2, m_shadowCullCounters[frame]);
+                set->SetBuffer(4, m_shadowIndirectVoxels[frame]);
+                set->SetBuffer(5, m_shadowIndirectMask[frame]);
+                set->SetBuffer(6, m_shadowIndirectTint[frame]);
+            }
+
             set->SetBuffer(12, GetUniforms(frame));
-            set->SetBuffer(19, m_drawInstanceIds[frame]);
+            if (set->HasBinding(19)) // instance batching, off on the web
+                set->SetBuffer(19, m_drawInstanceIds[frame]);
             // LOD params (binding 16) so shadow casters pick the same distance-based LOD as the main pass.
             if (Buffer *lodUbo = UpdateLodUniforms(frame); lodUbo && set->HasBinding(16))
                 set->SetBuffer(16, lodUbo);

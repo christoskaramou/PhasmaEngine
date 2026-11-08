@@ -7,7 +7,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (pc.passType && Transparency.Sample(sampler_Transparency, input.uv).x < 0.5f)
         discard;
 
-    float depth = Depth.Sample(sampler_Depth, input.uv).x;
+    float depth = DepthAt(Depth, sampler_Depth, input.uv);
 
     // if the depth is near zero it hits the skybox (use epsilon for robustness)
     if (depth == 0.0)
@@ -164,9 +164,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (cb_screenProbes != 0 && pc.passType == 0)
     {
         // Screen probes replace world probes where they cover the pixel.
-        uint width, height;
-        gi_screenIrradiance.GetDimensions(width, height);
-        float4 screen = gi_screenIrradiance.Load(int3(input.uv * float2(width, height), 0));
+        float4 screen = ScreenProbeIrradianceAt(input.uv);
         float weight = lerp(indirect.a, 1.0, screen.a);
         indirect.rgb = weight > 0.0 ? lerp(indirect.rgb * indirect.a, screen.rgb, screen.a) / weight : 0.0.xxx;
         indirect.a = weight;
@@ -184,9 +182,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float cubeSpecular = 1.0;
     if (cb_reflections != 0 && pc.passType == 0)
     {
-        uint width, height;
-        gi_reflections.GetDimensions(width, height);
-        float4 reflection = gi_reflections.Load(int3(input.uv * float2(width, height), 0));
+        float4 reflection = ScreenReflectionsAt(input.uv);
         if (reflection.a > 0.0)
         {
             fragColor += reflection.rgb * (material.F0 * envBRDF.x + envBRDF.y) * energyCompensation * occlusion;

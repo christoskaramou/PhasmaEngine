@@ -199,10 +199,21 @@ namespace pe
         explicit TriggerContactListener(PhysicsSystem &owner) : m_owner(owner) {}
 
         void OnContactAdded(const JPH::Body &body1, const JPH::Body &body2,
-                            const JPH::ContactManifold &, JPH::ContactSettings &) override
+                            const JPH::ContactManifold &manifold, JPH::ContactSettings &) override
         {
             if (!body1.IsSensor() && !body2.IsSensor())
+            {
+                const uint32_t raw1 = body1.GetID().GetIndexAndSequenceNumber();
+                const uint32_t raw2 = body2.GetID().GetIndexAndSequenceNumber();
+                if (!m_owner.m_contactBodies.count(raw1) && !m_owner.m_contactBodies.count(raw2))
+                    return;
+                const JPH::RVec3 p = manifold.GetWorldSpaceContactPointOn1(0);
+                const JPH::Vec3 rel = body1.GetPointVelocity(p) - body2.GetPointVelocity(p);
+                const float speed = std::abs(rel.Dot(manifold.mWorldSpaceNormal));
+                m_owner.QueueSolidContact(raw1, raw2, speed,
+                                          vec3(float(p.GetX()), float(p.GetY()), float(p.GetZ())));
                 return;
+            }
 
             m_owner.QueueTriggerContact(body1.GetID().GetIndexAndSequenceNumber(),
                                         body2.GetID().GetIndexAndSequenceNumber(), true);
@@ -283,7 +294,7 @@ namespace pe
         const float rawDt = static_cast<float>(FrameTimer::Instance().GetDelta());
         {
             PE_PROFILE_SCOPE("Physics Frame Budget");
-            m_accumulator += std::min(rawDt, step * maxSteps);
+            m_accumulator += std::min(rawDt * m_timeScale, step * maxSteps);
         }
 
         int steps = 0;
@@ -292,6 +303,7 @@ namespace pe
             while (m_accumulator >= step && steps < maxSteps)
             {
                 PE_PROFILE_SCOPE("Physics Step");
+                ApplyKinematicTargets(step);
                 m_joltSystem->Update(step, 1, m_tempAllocator, m_jobSystem);
                 m_accumulator -= step;
                 steps++;
@@ -306,6 +318,7 @@ namespace pe
             PE_PROFILE_SCOPE("Physics Sync Transforms");
             SyncTransformsFromJolt(*scene);
             DrainTriggerContacts(*scene);
+            DrainSolidContacts(*scene);
         }
     }
 
@@ -698,6 +711,129 @@ namespace pe
             state.triggerEnterCallback = nullptr;
             state.triggerExitCallback = nullptr;
             state.jointBreakCallback = nullptr;
+            state.contactCallback = nullptr;
+        }
+        m_contactBodies.clear();
+    }
+
+    void PhysicsSystem::SetContactCallback(NodeId *node, PhysicsContactCallback callback)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        PhysicsNodeState &state = m_bodies[it->second];
+        state.contactCallback = std::move(callback);
+        if (state.inWorld)
+        {
+            if (state.contactCallback)
+                m_contactBodies.insert(state.joltBodyIdRaw);
+            else
+                m_contactBodies.erase(state.joltBodyIdRaw);
+        }
+    }
+
+    bool PhysicsSystem::SetBodyType(NodeId *node, PhysicsBodyType type)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return false;
+        PhysicsNodeState &state = m_bodies[it->second];
+        if (type == PhysicsBodyType::Static || state.desc.bodyType == PhysicsBodyType::Static)
+            return false;
+        state.desc.bodyType = type;
+        if (state.inWorld && m_joltSystem)
+        {
+            m_kinematicTargets.erase(state.joltBodyIdRaw);
+            m_joltSystem->GetBodyInterface().SetMotionType(
+                JPH::BodyID(state.joltBodyIdRaw),
+                type == PhysicsBodyType::Kinematic ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic,
+                JPH::EActivation::Activate);
+        }
+        return true;
+    }
+
+    void PhysicsSystem::MoveKinematic(NodeId *node, const vec3 &pos, const quat &rot)
+    {
+        auto it = m_nodeToIndex.find(node);
+        if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
+            return;
+        const PhysicsNodeState &state = m_bodies[it->second];
+        if (state.inWorld && state.desc.bodyType == PhysicsBodyType::Kinematic)
+            m_kinematicTargets[state.joltBodyIdRaw] = {pos, glm::normalize(rot)};
+    }
+
+    // Each step drives every target body to its pose; once there, MoveKinematic leaves it at rest (zero velocity).
+    void PhysicsSystem::ApplyKinematicTargets(float step)
+    {
+        if (m_kinematicTargets.empty())
+            return;
+        JPH::BodyInterface &bi = m_joltSystem->GetBodyInterface();
+        for (const auto &entry : m_kinematicTargets)
+        {
+            const KinematicTarget &t = entry.second;
+            bi.MoveKinematic(JPH::BodyID(entry.first), JPH::RVec3(t.pos.x, t.pos.y, t.pos.z),
+                             JPH::Quat(t.rot.x, t.rot.y, t.rot.z, t.rot.w), step);
+        }
+    }
+
+    void PhysicsSystem::SetGravity(const vec3 &g)
+    {
+        if (m_joltSystem)
+            m_joltSystem->SetGravity(JPH::Vec3(g.x, g.y, g.z));
+    }
+
+    void PhysicsSystem::QueueSolidContact(uint32_t body1Raw, uint32_t body2Raw, float speed, const vec3 &point)
+    {
+        std::lock_guard<std::mutex> lock(m_triggerContactMutex);
+        m_queuedSolidContacts.push_back({body1Raw, body2Raw, speed, point});
+    }
+
+    void PhysicsSystem::DrainSolidContacts(Scene &scene)
+    {
+        std::vector<QueuedSolidContact> contacts;
+        {
+            std::lock_guard<std::mutex> lock(m_triggerContactMutex);
+            contacts.swap(m_queuedSolidContacts);
+        }
+        if (contacts.empty())
+            return;
+        struct Ready
+        {
+            PhysicsContactCallback callback;
+            NodeId *self = nullptr;
+            uint32_t selfRevision = 0;
+            NodeId *other = nullptr;
+            uint32_t otherRevision = 0;
+            float speed = 0.f;
+            vec3 point = vec3(0.f);
+        };
+        std::vector<Ready> ready;
+        auto resolve = [this, &scene](uint32_t raw) -> PhysicsNodeState *
+        {
+            auto it = m_bodyIdToIndex.find(raw);
+            if (it == m_bodyIdToIndex.end() || it->second >= m_bodies.size())
+                return nullptr;
+            PhysicsNodeState &st = m_bodies[it->second];
+            return st.inWorld && st.joltBodyIdRaw == raw && IsLivePhysicsState(st, scene) ? &st : nullptr;
+        };
+        for (const QueuedSolidContact &c : contacts)
+        {
+            PhysicsNodeState *a = resolve(c.body1Raw);
+            PhysicsNodeState *b = resolve(c.body2Raw);
+            if (!a || !b)
+                continue;
+            if (a->contactCallback)
+                ready.push_back({a->contactCallback, a->nodeId, a->nodeRevision, b->nodeId, b->nodeRevision, c.speed, c.point});
+            if (b->contactCallback)
+                ready.push_back({b->contactCallback, b->nodeId, b->nodeRevision, a->nodeId, a->nodeRevision, c.speed, c.point});
+        }
+        // Callbacks may add or remove bodies, so they run after the walk, each re-checked.
+        for (const Ready &r : ready)
+        {
+            if (!scene.IsNodeAlive(r.self) || !scene.IsNodeAlive(r.other) ||
+                r.self->revision != r.selfRevision || r.other->revision != r.otherRevision)
+                continue;
+            r.callback(r.self, r.other, r.speed, r.point);
         }
     }
 
@@ -1362,7 +1498,8 @@ namespace pe
             JPH::Quat(rot.x, rot.y, rot.z, rot.w),
             motionType, layer);
 
-        if (desc.bodyType == PhysicsBodyType::Dynamic)
+        // Kinematic gets the same mass and sweep as dynamic so SetBodyType can turn it into a falling body.
+        if (desc.bodyType == PhysicsBodyType::Dynamic || desc.bodyType == PhysicsBodyType::Kinematic)
         {
             bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
             bodySettings.mMassPropertiesOverride.mMass = std::max(desc.mass, 0.001f);
@@ -1397,6 +1534,8 @@ namespace pe
         state.joltBodyIdRaw = bodyId.GetIndexAndSequenceNumber();
         state.inWorld = true;
         m_bodyIdToIndex[state.joltBodyIdRaw] = bodyIndex;
+        if (state.contactCallback)
+            m_contactBodies.insert(state.joltBodyIdRaw);
     }
 
     void PhysicsSystem::DestroyJoltBody(PhysicsNodeState &state, bool releaseShape)
@@ -1412,6 +1551,8 @@ namespace pe
         bi.DestroyBody(bodyId);
 
         m_bodyIdToIndex.erase(bodyRaw);
+        m_contactBodies.erase(bodyRaw);
+        m_kinematicTargets.erase(bodyRaw);
         ClearTriggerContactStateForBody(bodyRaw);
 
         state.inWorld = false;
@@ -1607,8 +1748,10 @@ namespace pe
         {
             std::lock_guard<std::mutex> lock(m_triggerContactMutex);
             m_queuedTriggerContacts.clear();
+            m_queuedSolidContacts.clear();
         }
         m_activeTriggerPairs.clear();
+        m_kinematicTargets.clear();
     }
 
     void PhysicsSystem::ClearTriggerContactStateForBody(uint32_t bodyRaw)

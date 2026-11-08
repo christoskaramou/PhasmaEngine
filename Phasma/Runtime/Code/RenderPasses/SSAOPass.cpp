@@ -9,6 +9,7 @@
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Render/SceneRendererHost.h"
+#include "Render/SceneRenderTargets.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
 
@@ -51,7 +52,7 @@ namespace pe
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
         m_ssaoRT = rs->GetRenderTarget("ssao");
         if (!m_ssaoRT)
-            m_ssaoRT = rs->CreateRenderTarget("ssao", PE_FORMAT_R8_UNORM);
+            m_ssaoRT = rs->CreateRenderTarget("ssao", SceneUsesWebProfile() ? PE_FORMAT_R32_SFLOAT : PE_FORMAT_R8_UNORM);
 
         m_normalRT = rs->GetRenderTarget("normal");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
@@ -82,7 +83,8 @@ namespace pe
         auto createHalf = [&](const char *name) -> Image *
         {
             ImageDesc desc{};
-            desc.format = PE_FORMAT_R16_SFLOAT;
+            // Core WebGPU has no r8 or r16f storage textures (texture-formats-tier1); SSAOCS.hlsl declares r32f there.
+            desc.format = SceneUsesWebProfile() ? PE_FORMAT_R32_SFLOAT : PE_FORMAT_R16_SFLOAT;
             desc.width = halfW;
             desc.height = halfH;
             desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE | PE_IMAGE_USAGE_TRANSFER_DST;

@@ -75,6 +75,8 @@ namespace pe
                         desc.shapeType = PhysicsShapeType::Capsule;
                     else if (shapeType == "convex")
                         desc.shapeType = PhysicsShapeType::ConvexHull;
+                    else if (shapeType == "mesh") // static/kinematic only: Jolt mesh shapes can't back a dynamic body
+                        desc.shapeType = PhysicsShapeType::Mesh;
                     else
                         desc.shapeType = PhysicsShapeType::Box;
 
@@ -282,6 +284,59 @@ namespace pe
                     Scene *scene = GetActiveScene();
                     if (ps && scene && h.IsValid(*scene))
                         ps->ClearTriggerCallbacks(h.nodeId);
+                });
+
+                // on_contact(node, fn(other, speed, x, y, z) | nil): a new contact with a solid body, after the step.
+                physics.set_function("on_contact", [](SceneNodeHandle &h, sol::object callback) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    Scene *scene = GetActiveScene();
+                    if (!ps || !scene || !h.IsValid(*scene))
+                        return;
+                    if (callback.get_type() != sol::type::function)
+                    {
+                        ps->SetContactCallback(h.nodeId, nullptr);
+                        return;
+                    }
+                    sol::function fn = callback.as<sol::function>();
+                    ps->SetContactCallback(h.nodeId, [fn = std::move(fn)](NodeId *self, NodeId *other, float speed, const vec3 &p) {
+                        Scene *s = GetActiveScene();
+                        if (!s || !s->IsNodeAlive(self) || !s->IsNodeAlive(other))
+                            return;
+                        sol::protected_function pf(fn);
+                        sol::protected_function_result r = pf(s->MakeHandle(other), speed, p.x, p.y, p.z);
+                        if (!r.valid())
+                        {
+                            sol::error err = r;
+                            Log::Error(PeFormat("[Lua] physics.on_contact callback error: %s", err.what()));
+                        }
+                    });
+                });
+
+                // Scales the time the 3D simulation advances each frame (slow motion); 1 is real time.
+                physics.set_function("set_time_scale", [](float scale) {
+                    if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                        ps->SetTimeScale(std::max(scale, 0.0f));
+                });
+
+                physics.set_function("set_gravity", [](float x, float y, float z) {
+                    if (auto *ps = GetGlobalSystem<PhysicsSystem>())
+                        ps->SetGravity(vec3(x, y, z));
+                });
+
+                // set_body_type(node, "dynamic" | "kinematic") -> bool: switch live; static bodies cannot switch.
+                physics.set_function("set_body_type", [](SceneNodeHandle &h, const std::string &type) -> bool {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    if (!ps || !h.nodeId || (type != "dynamic" && type != "kinematic"))
+                        return false;
+                    return ps->SetBodyType(h.nodeId, type == "kinematic" ? PhysicsBodyType::Kinematic : PhysicsBodyType::Dynamic);
+                });
+
+                // move_kinematic(node, x, y, z, qx, qy, qz, qw): drive a kinematic body to this world pose each step.
+                physics.set_function("move_kinematic", [](SceneNodeHandle &h, float x, float y, float z,
+                                                          float qx, float qy, float qz, float qw) {
+                    auto *ps = GetGlobalSystem<PhysicsSystem>();
+                    if (ps && h.nodeId)
+                        ps->MoveKinematic(h.nodeId, vec3(x, y, z), quat(qw, qx, qy, qz));
                 });
 
                 physics.set_function("has_body", [](SceneNodeHandle &h) -> bool {

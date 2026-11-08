@@ -42,6 +42,16 @@
 #include <jni.h>
 #endif
 
+#if defined(PE_WEB)
+#include <emscripten.h>
+
+// The browser presents the canvas only once the page yields (WebGPU RHI spec decision 4): suspend through JSPI until
+// the next animation frame. The body is JavaScript; clang-format would split its => into "= >".
+// clang-format off
+EM_ASYNC_JS(void, PeAwaitAnimationFrame, (), { await new Promise((resolve) => requestAnimationFrame(resolve)); });
+// clang-format on
+#endif
+
 namespace pe
 {
     namespace
@@ -629,6 +639,11 @@ namespace pe
                 while (Frame())
                 {
                     FrameTimer::Instance().EndFrame();
+#if defined(PE_WEB)
+                    // ponytail: P1's JSPI-await loop, which paced like the rAF callback loop (5.9 ms median at 170 Hz)
+                    // but may present one frame later. To lift it: decision 4's emscripten_set_main_loop_arg host.
+                    PeAwaitAnimationFrame();
+#endif
                 }
             }
 

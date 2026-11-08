@@ -28,7 +28,14 @@ OP_TYPE_STRUCT = 30
 OP_COMPOSITE_CONSTRUCT = 80
 OP_COMPOSITE_EXTRACT = 81
 OP_COPY_LOGICAL = 400
-NON_AGGREGATE_TYPES = {20, 21, 22, 23}  # OpTypeBool, OpTypeInt, OpTypeFloat, OpTypeVector
+OP_SAMPLED_IMAGE = 86
+OP_IMAGE = 100
+# Image operations whose words are [opcode, result type, result id, image, ...]: fetch, read and the size queries.
+IMAGE_OPERAND_OPS = {95, 98, 103, 104, 106, 107}
+OP_TYPE_ARRAY = 28
+OP_CONSTANT = 43
+# Instructions whose words are [opcode, result type, result id, ...]: what an OpCopyLogical source can come from.
+VALUE_OPS = {55, 57, 61, 80, 81, 83, 169, 245, 400}
 
 
 def read_instructions(data):
@@ -53,11 +60,52 @@ def write_instructions(header, instructions):
 
 
 def lower_copy_logical(header, instructions):
-    """naga has no OpCopyLogical. Rewrite copies of flat structs (scalar or vector members) as one OpCompositeExtract
-    per member plus an OpCompositeConstruct. Returns how many copies were left (they fail the conversion)."""
-    type_op = {inst[1]: inst[0] & 0xFFFF for inst in instructions if 19 <= (inst[0] & 0xFFFF) <= 39}
+    """naga has no OpCopyLogical. It copies between two struct (or array) types that are laid out alike but declared
+    apart, so rewrite each copy as OpCompositeExtract per member plus OpCompositeConstruct of the result type, one level
+    at a time: a member whose types match is extracted as is, a nested struct or array is rebuilt the same way.
+    Returns how many copies were left (they fail the conversion)."""
     structs = {inst[1]: inst[2:] for inst in instructions if inst[0] & 0xFFFF == OP_TYPE_STRUCT}
+    arrays = {inst[1]: (inst[2], inst[3]) for inst in instructions if inst[0] & 0xFFFF == OP_TYPE_ARRAY}
+    constants = {inst[2]: inst[3] for inst in instructions if inst[0] & 0xFFFF == OP_CONSTANT and len(inst) == 4}
+    value_types = {inst[2]: inst[1] for inst in instructions if inst[0] & 0xFFFF in VALUE_OPS}
     bound = header[3]
+
+    def members(type_id):
+        if type_id in structs:
+            return list(structs[type_id])
+
+        if type_id in arrays and arrays[type_id][1] in constants:
+            element, length = arrays[type_id]
+            return [element] * constants[length]
+
+        return None
+
+    def rebuild(out, value, from_type, to_type):
+        """Emits a value of to_type from one of the alike from_type; None when they are not alike aggregates."""
+        nonlocal bound
+        if from_type == to_type:
+            return value
+
+        source_members, result_members = members(from_type), members(to_type)
+        if source_members is None or result_members is None or len(source_members) != len(result_members):
+            return None
+
+        parts = []
+        for index, (source_member, result_member) in enumerate(zip(source_members, result_members)):
+            out.append([(5 << 16) | OP_COMPOSITE_EXTRACT, source_member, bound, value, index])
+            extracted = bound
+            bound += 1
+            part = rebuild(out, extracted, source_member, result_member)
+            if part is None:
+                return None
+
+            parts.append(part)
+
+        result = bound
+        bound += 1
+        out.append([((3 + len(parts)) << 16) | OP_COMPOSITE_CONSTRUCT, to_type, result, *parts])
+        return result
+
     out = []
     left = 0
     for inst in instructions:
@@ -66,23 +114,45 @@ def lower_copy_logical(header, instructions):
             continue
 
         result_type, result, source = inst[1], inst[2], inst[3]
-        members = structs.get(result_type)
-        flat = members and all(type_op.get(m) in NON_AGGREGATE_TYPES for m in members)
-        if not flat:
+        emitted = []
+        value = rebuild(emitted, source, value_types.get(source), result_type) if source in value_types else None
+        if value is None:
             out.append(inst)
             left += 1
             continue
 
-        parts = []
-        for index, member_type in enumerate(members):
-            out.append([(5 << 16) | OP_COMPOSITE_EXTRACT, member_type, bound, source, index])
-            parts.append(bound)
-            bound += 1
+        # Identical types copy as OpCopyObject; else the last construct has the copy's result type and takes its id.
+        if not emitted:
+            out.append([(4 << 16) | 83, result_type, result, source])
+            continue
 
-        out.append([((3 + len(parts)) << 16) | OP_COMPOSITE_CONSTRUCT, result_type, result, *parts])
+        emitted[-1][2] = result
+        out.extend(emitted)
 
     header = header[:3] + [bound] + header[4:]
     return header, out, left
+
+
+def unwrap_sampled_images(instructions):
+    """naga has no OpImage. Splitting combined samplers turns a query such as TextureCube.GetDimensions into
+    OpImage(OpSampledImage(image, sampler)): point the image operations that read it at the image itself, which naga
+    traces back to its global. Returns the instructions and how many OpImage were left."""
+    sources = {inst[2]: inst[3] for inst in instructions if inst[0] & 0xFFFF == OP_SAMPLED_IMAGE}
+    unwrapped = {inst[2]: sources[inst[3]] for inst in instructions
+                 if inst[0] & 0xFFFF == OP_IMAGE and inst[3] in sources}
+    out = []
+    for inst in instructions:
+        op = inst[0] & 0xFFFF
+        if op == OP_IMAGE and inst[2] in unwrapped:
+            continue
+
+        if op in IMAGE_OPERAND_OPS and inst[3] in unwrapped:
+            inst = inst[:3] + [unwrapped[inst[3]]] + inst[4:]
+
+        out.append(inst)
+
+    left = sum(1 for inst in out if inst[0] & 0xFFFF == OP_IMAGE)
+    return out, left
 
 
 def find_spirv_opt():
@@ -123,6 +193,12 @@ def convert(spv, out_dir, spirv_opt, scratch):
     if code != 0:
         return f"spirv-opt: {message}"
 
+    header, instructions = read_instructions(legal.read_bytes())
+    instructions, left = unwrap_sampled_images(instructions)
+    if left:
+        return f"{left} OpImage of a value that is not an OpSampledImage (naga cannot read them)"
+
+    legal.write_bytes(write_instructions(header, instructions))
     code, message = run([str(CONVERTER), str(legal), str(out_dir / key), str(out_dir / f"{key}.bindings")])
     if code != 0:
         return f"spv-to-wgsl exit {code}: {message}"

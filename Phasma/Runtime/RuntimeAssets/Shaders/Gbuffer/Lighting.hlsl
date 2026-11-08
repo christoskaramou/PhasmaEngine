@@ -68,7 +68,26 @@ TexSamplerDecl(9, 0, LutIBL)
 
 // Set 1
 [[vk::binding(0, 1)]] cbuffer shadow_buffer {float4x4 cb_cascades[SHADOWMAP_CASCADES];};
+#ifdef PE_WEB_PROFILE
+// Decision 10: WebGPU has no texture arrays here, so each cascade's depth and tint maps get their own binding: depth maps
+// at set-1 bindings 3-6, tint maps at 7-10 (LightPass binds them; ApplyWebProfileSettings caps the cascades at 4).
+[[vk::binding(3, 1)]] Texture2D ShadowDepth0;
+[[vk::binding(7, 1)]] Texture2D ShadowTint0;
+#if SHADOWMAP_CASCADES > 1
+[[vk::binding(4, 1)]] Texture2D ShadowDepth1;
+[[vk::binding(8, 1)]] Texture2D ShadowTint1;
+#endif
+#if SHADOWMAP_CASCADES > 2
+[[vk::binding(5, 1)]] Texture2D ShadowDepth2;
+[[vk::binding(9, 1)]] Texture2D ShadowTint2;
+#endif
+#if SHADOWMAP_CASCADES > 3
+[[vk::binding(6, 1)]] Texture2D ShadowDepth3;
+[[vk::binding(10, 1)]] Texture2D ShadowTint3;
+#endif
+#else
 [[vk::binding(1, 1)]] Texture2D Shadow[SHADOWMAP_CASCADES * 2]; // depth maps, then ShadowPass's tint maps
+#endif
 [[vk::binding(2, 1)]] SamplerComparisonState sampler_Shadow;
 
  // Set 2
@@ -234,6 +253,43 @@ float3 ShadowCascadeDebugColor(int cascade)
     return float3(1.00f, 0.85f, 0.15f);
 }
 
+#ifdef PE_WEB_PROFILE
+// The cascade's own bindings (decision 10): a texture cannot be indexed at runtime without an array.
+float ShadowPCF(int i, float4 coords)
+{
+#if SHADOWMAP_CASCADES > 3
+    if (i == 3)
+        return FilterPCF(coords, ShadowDepth3, sampler_Shadow);
+#endif
+#if SHADOWMAP_CASCADES > 2
+    if (i == 2)
+        return FilterPCF(coords, ShadowDepth2, sampler_Shadow);
+#endif
+#if SHADOWMAP_CASCADES > 1
+    if (i == 1)
+        return FilterPCF(coords, ShadowDepth1, sampler_Shadow);
+#endif
+    return FilterPCF(coords, ShadowDepth0, sampler_Shadow);
+}
+
+float4 LoadShadowTint(int i, int2 texel)
+{
+#if SHADOWMAP_CASCADES > 3
+    if (i == 3)
+        return ShadowTint3.Load(int3(texel, 0));
+#endif
+#if SHADOWMAP_CASCADES > 2
+    if (i == 2)
+        return ShadowTint2.Load(int3(texel, 0));
+#endif
+#if SHADOWMAP_CASCADES > 1
+    if (i == 1)
+        return ShadowTint1.Load(int3(texel, 0));
+#endif
+    return ShadowTint0.Load(int3(texel, 0));
+}
+#endif
+
 // Transmittance of the Transmission casters between the light and coords: ShadowPass's half-size tint map of cascade i,
 // bilinear over 2x2 texels, each tinting only receivers behind its surface nearest the light (alpha, reverse-Z).
 float3 SampleShadowTint(int i, float4 coords)
@@ -247,7 +303,11 @@ float3 SampleShadowTint(int i, float4 coords)
     for (int t = 0; t < 4; t++)
     {
         const int2 texel = clamp(base + int2(t & 1, t >> 1), 0, int(size) - 1);
+#ifdef PE_WEB_PROFILE
+        const float4 tint = LoadShadowTint(i, texel);
+#else
         const float4 tint = Shadow[NonUniformResourceIndex(SHADOWMAP_CASCADES + i)].Load(int3(texel, 0));
+#endif
         taps[t] = coords.z < tint.a ? tint.rgb : 1.0f;
     }
 
@@ -268,6 +328,9 @@ float SampleShadowMap(int i, float zBias, float3 worldPos, float3 normal, float 
     if (pc.shadow_tint != 0u)
         tint = SampleShadowTint(i, coords);
 
+#ifdef PE_WEB_PROFILE
+    return ShadowPCF(i, coords);
+#else
     // TOTO: fix this annoying looking code snippet
     // Randomly figured how to fix a bug, possibly in the Vulkan or AMD driver (or there is something in my code that other GPU drivers are forgiving)
     // that causes the cascades to be sampled incorrectly, square like artifacts in between cascades and in the middle of the view
@@ -279,6 +342,7 @@ float SampleShadowMap(int i, float zBias, float3 worldPos, float3 normal, float 
         return FilterPCF(coords, Shadow[i], sampler_Shadow);
     else
         return FilterPCF(coords, Shadow[i], sampler_Shadow);
+#endif
 }
 
 // The first directional light's visibility from the depth maps; tint is the light's colour through Transmission casters.

@@ -165,15 +165,24 @@ namespace pe
         return true;
     }
 
-    bool ReadRuntimeAudioMuted(const std::filesystem::path &settingsPath)
+    static bool ReadRuntimeFlag(const char *key, const std::filesystem::path &settingsPath)
     {
         rapidjson::Document document;
         std::string warning;
         project_detail::TryLoadJsonObject(
             settingsPath.empty() ? DefaultProjectSettingsPath() : project_detail::NormalizeAbsolute(settingsPath),
             document, warning);
-        return document.HasMember(kAudioMutedSettingsKey) && document[kAudioMutedSettingsKey].IsBool() &&
-               document[kAudioMutedSettingsKey].GetBool();
+        return document.HasMember(key) && document[key].IsBool() && document[key].GetBool();
+    }
+
+    bool ReadRuntimeAudioMuted(const std::filesystem::path &settingsPath)
+    {
+        return ReadRuntimeFlag(kAudioMutedSettingsKey, settingsPath);
+    }
+
+    bool ReadRuntimeBakeGi()
+    {
+        return ReadRuntimeFlag(kBakeGiSettingsKey, {});
     }
 
     bool WriteProjectSelection(const std::filesystem::path &settingsPath, const ProjectConfig &project, std::string *error)

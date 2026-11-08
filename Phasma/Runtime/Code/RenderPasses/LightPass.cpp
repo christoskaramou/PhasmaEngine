@@ -9,6 +9,7 @@
 #include "API/Descriptor.h"
 #include "API/Image.h"
 #include "API/Pipeline.h"
+#include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/RenderPass.h"
@@ -49,12 +50,51 @@ namespace pe
             return ActiveScreenIrradiance(frame) && reflections ? reflections->GetSpecular() : nullptr;
         }
 
+        constexpr uint32_t kBakedVolumeBinding = 14; // ProbeVolume.hlsl's web profile block; the atlas and sampler follow
+
+        // The web profile's probes, from the bake beside the scene. Without one, or with global_illumination off, the
+        // zeroed volume adds no light.
+        void BindBakedProbes(Descriptor *set, Buffer *uniform, bool force)
+        {
+            if (!set->HasBinding(kBakedVolumeBinding))
+                return;
+
+            auto *opaque = GetGlobalComponent<LightOpaquePass>();
+            Image *baked = opaque->LoadBakedProbes();
+            auto *fallback = RequireActiveSceneRendererHost().GetIBL_LUT();
+            ImageView *view = baked ? baked->GetSRV() : fallback->GetSRV();
+            const auto &bound = set->GetBoundResources();
+            const bool current = std::any_of(bound.begin(), bound.end(), [view](const auto &info)
+                                             { return info.binding == kBakedVolumeBinding + 1 && !info.views.empty() && info.views[0] == view; });
+            if (current && !force)
+                return;
+
+            const size_t offset = RHII.AlignUniform(sizeof(LightPassUBO));
+            BufferRange range{};
+            range.data = const_cast<GlobalIlluminationPass::ProbeUniforms *>(&opaque->GetBakedUniforms());
+            range.size = sizeof(GlobalIlluminationPass::ProbeUniforms);
+            range.offset = offset;
+            uniform->Copy(1, &range, false);
+
+            set->SetBuffer(kBakedVolumeBinding, uniform, offset, GlobalIlluminationPass::kUniformBytes);
+            set->SetImageView(kBakedVolumeBinding + 1, view);
+            set->SetSampler(kBakedVolumeBinding + 2, fallback->GetSampler());
+            set->Update();
+        }
+
         void BindProbeLighting(PassInfo &pass, Buffer *fallbackUniform, uint32_t frame, bool force = false, Image *screen = nullptr,
                                Image *reflections = nullptr)
         {
             const auto &sets = pass.GetDescriptors(frame);
             if (sets.size() < 4)
+            {
+                // No set 3 is the web profile's layout. Desktop MaterialShade uses set-0 bindings 14-16 for its own data.
+                if (!sets.empty() && sets[0])
+                    BindBakedProbes(sets[0], fallbackUniform, force);
+
                 return;
+            }
+
             auto *gi = GetGlobalComponent<GlobalIlluminationPass>();
             const bool active = ProbeLightingActive(frame);
             auto *fallback = RequireActiveSceneRendererHost().GetIBL_LUT();
@@ -237,6 +277,24 @@ namespace pe
         std::vector<ImageView *> GetLiveShadowViews(const ShadowPass &shadows)
         {
             return shadows.GetTextureViews();
+        }
+
+        // Depth maps, then tint maps: one array at binding 1, or on the web (Lighting.hlsl, decision 10) each cascade's
+        // depth map at binding 3 + k and its tint map at 7 + k.
+        void BindShadowViews(Descriptor *set, const std::vector<ImageView *> &views)
+        {
+            if (set->HasBinding(1))
+            {
+                set->SetImageViews(1, views, {});
+                return;
+            }
+
+            const size_t cascades = views.size() / 2;
+            for (size_t k = 0; k < cascades; k++)
+            {
+                set->SetImageView(static_cast<uint32_t>(3 + k), views[k]);
+                set->SetImageView(static_cast<uint32_t>(7 + k), views[cascades + k]);
+            }
         }
 
         bool SetForwardPlusDescriptors(Descriptor *set,
@@ -488,12 +546,15 @@ namespace pe
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
             DSet->Update();
 
-            auto *DSetShadows = sets[1];
-            Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
-            DSetShadows->SetBuffer(0, shadowUniform);
-            DSetShadows->SetImageViews(1, shadowViews, {});
-            DSetShadows->SetSampler(2, shadowSampler);
-            DSetShadows->Update();
+            // The web profile compiles shadows out of LightingPS (shadows are off there), which leaves set 1 empty.
+            if (auto *DSetShadows = sets[1])
+            {
+                Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
+                DSetShadows->SetBuffer(0, shadowUniform);
+                BindShadowViews(DSetShadows, shadowViews);
+                DSetShadows->SetSampler(2, shadowSampler);
+                DSetShadows->Update();
+            }
 
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
@@ -608,8 +669,78 @@ namespace pe
         UpdateDescriptorSets();
     }
 
+    Image *LightOpaquePass::LoadBakedProbes()
+    {
+        Scene *scene = GetActiveScene();
+        const bool giEnabled = scene && Settings::Get<SceneSettings>().global_illumination;
+        std::filesystem::path path = giEnabled ? scene->GetScenePath() : std::filesystem::path{};
+        path.replace_extension(".pegi");
+        if (path == m_bakedPath)
+            return m_bakedProbes;
+
+        m_bakedPath = path;
+        if (m_bakedProbes)
+        {
+            RHII.WaitDeviceIdle();
+            Image::Destroy(m_bakedProbes);
+            m_bakedProbes = nullptr;
+        }
+
+        m_bakedUniforms = {};
+        m_bakedUniforms.gridSize = 0;
+        m_bakedUniforms.cascadeCount = 0;
+        m_bakedUniforms.intensity = 0.f;
+
+        using Baked = GlobalIlluminationPass;
+        std::ifstream file(path, std::ios::binary);
+        Baked::BakedProbesHeader header{};
+        std::vector<uint16_t> texels(size_t(Baked::kBakedWidth) * Baked::kBakedHeight * 4);
+        file.read(reinterpret_cast<char *>(&header), sizeof(header));
+        file.read(reinterpret_cast<char *>(texels.data()), static_cast<std::streamsize>(texels.size() * sizeof(uint16_t)));
+        if (!file.good())
+            return nullptr;
+
+        const bool valid = std::memcmp(header.magic, "PEGI", 4) == 0 &&
+                           header.version == Baked::kBakedVersion &&
+                           header.width == Baked::kBakedWidth &&
+                           header.height == Baked::kBakedHeight &&
+                           header.uniforms.gridSize == 8 &&
+                           header.uniforms.cascadeCount == 1;
+        if (!valid)
+        {
+            PE_WARN("[GI] ignoring %s: not a bake this build reads", path.string().c_str());
+            return nullptr;
+        }
+
+        ImageDesc desc{};
+        desc.width = Baked::kBakedWidth;
+        desc.height = Baked::kBakedHeight;
+        desc.format = PE_FORMAT_R16G16B16A16_SFLOAT;
+        desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
+        desc.name = "GI_BakedProbes";
+        m_bakedProbes = Image::Create(desc);
+        m_bakedProbes->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+
+        Queue *queue = RHII.GetMainQueue();
+        CommandBuffer *cmd = queue->AcquireCommandBuffer();
+        cmd->Begin();
+        cmd->CopyDataToImageStaged(m_bakedProbes, texels.data(), texels.size() * sizeof(uint16_t));
+        cmd->ImageBarrier({.image = m_bakedProbes, .layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .stageFlags = PE_STAGE_FRAGMENT_SHADER, .accessMask = PE_ACCESS_SHADER_SAMPLED_READ});
+        cmd->End();
+        queue->Submit(1, &cmd, nullptr, nullptr);
+        cmd->Wait();
+        queue->ReturnCommandBuffer(cmd);
+
+        m_bakedUniforms = header.uniforms;
+        PE_INFO("[GI] loaded baked probes %s", path.string().c_str());
+        return m_bakedProbes;
+    }
+
     void LightOpaquePass::Destroy()
     {
+        Image::Destroy(m_bakedProbes);
+        m_bakedProbes = nullptr;
+        m_bakedPath.clear();
 
         for (auto &uniform : m_uniforms)
             Buffer::Destroy(uniform);
@@ -740,12 +871,15 @@ namespace pe
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
             DSet->Update();
 
-            auto *DSetShadows = sets[1];
-            Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
-            DSetShadows->SetBuffer(0, shadowUniform);
-            DSetShadows->SetImageViews(1, shadowViews);
-            DSetShadows->SetSampler(2, shadowSampler);
-            DSetShadows->Update();
+            // The web profile compiles shadows out of LightingPS (shadows are off there), which leaves set 1 empty.
+            if (auto *DSetShadows = sets[1])
+            {
+                Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
+                DSetShadows->SetBuffer(0, shadowUniform);
+                BindShadowViews(DSetShadows, shadowViews);
+                DSetShadows->SetSampler(2, shadowSampler);
+                DSetShadows->Update();
+            }
 
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
@@ -1014,12 +1148,11 @@ namespace pe
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool useShadows = ShadowsActive(shadows);
         const auto &sets = info.GetDescriptors(frame);
-        if (sets.size() > 1)
+        if (sets.size() > 1 && sets[1]) // set 1 is empty where the web profile compiles shadows out
         {
             Descriptor *set = sets[1];
             BindMaterialBuffer(set, 0, useShadows ? shadows.GetUniform(frame) : m_shadowFallbackUniforms[frame]);
-            if (set->HasBinding(1))
-                set->SetImageViews(1, useShadows ? GetLiveShadowViews(shadows) : m_shadowFallbackViews, {});
+            BindShadowViews(set, useShadows ? GetLiveShadowViews(shadows) : m_shadowFallbackViews);
 
             if (set->HasBinding(2))
                 set->SetSampler(2, useShadows ? shadows.GetSampler() : m_shadowFallbackSampler);

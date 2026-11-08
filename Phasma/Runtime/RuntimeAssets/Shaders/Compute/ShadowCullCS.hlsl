@@ -12,11 +12,15 @@ struct DrawIndexedIndirectCommand
 
 [[vk::binding(0, 0)]] StructuredBuffer<DrawIndexedIndirectCommand> IndirectCommandsIn;
 [[vk::binding(1, 0)]] StructuredBuffer<Mesh_Constants> MeshConstants;
+#ifndef PE_WEB_PROFILE // the web profile writes each caster's draw at its slot in binding 3 (WebGPU RHI spec decision 9)
 [[vk::binding(2, 0)]] RWStructuredBuffer<uint> Counters; // [regular, voxels, instance batches, generated masks, tints]
+#endif
 [[vk::binding(3, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectRegularOut;
+#ifndef PE_WEB_PROFILE
 [[vk::binding(4, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectVoxelsOut;
 [[vk::binding(5, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectMaskOut;
 [[vk::binding(6, 0)]] RWStructuredBuffer<DrawIndexedIndirectCommand> IndirectTintOut; // Transmission: ShadowPass tint maps
+#endif
 [[vk::binding(12, 0)]] ByteAddressBuffer NodeData;
 
 // Same LOD params buffer the main CullingCS consumes (Scene::UpdateLodUniforms, binding 16). Lets the
@@ -42,7 +46,9 @@ struct PushConstants
 };
 [[vk::push_constant]] PushConstants pc;
 
+#ifndef PE_WEB_PROFILE // instance batching is off on the web (spec decision 6)
 #include "InstanceBatch.hlsl"
+#endif
 
 float4x4 LoadMatrix(uint byteOffset)
 {
@@ -87,6 +93,7 @@ bool AABBInFrustum(float3 aabbMin, float3 aabbMax)
     return true;
 }
 
+#ifndef PE_WEB_PROFILE
 uint WaveAppend(uint counterIndex, bool emit)
 {
     uint laneSlot = WavePrefixCountBits(emit);
@@ -97,7 +104,55 @@ uint WaveAppend(uint counterIndex, bool emit)
     base = WaveReadLaneFirst(base);
     return base + laneSlot;
 }
+#endif
 
+#ifdef PE_WEB_PROFILE
+// Web profile (WebGPU RHI spec decision 9): every caster's draw goes to its own slot for this cascade, a culled one with
+// zero instances, so there are no counters, buckets, wave ops or zero fills. Scene::DrawWebShadowCasters picks the
+// slots of each list (regular casters, Transmission tint casters) on the CPU; the cascades cull and draw in turn.
+[numthreads(64, 1, 1)] void mainCS(uint3 DTid : SV_DispatchThreadID)
+{
+    uint idx = DTid.x;
+    if (idx >= pc.maxDrawCount)
+        return;
+
+    DrawIndexedIndirectCommand cmd = IndirectCommandsIn[idx];
+    Mesh_Constants constants = MeshConstants[idx];
+    uint2 nodeVisibility = NodeData.Load2(constants.meshDataOffset + 128u);
+    bool visible = cmd.indexCount != 0u && cmd.instanceCount != 0u && nodeVisibility.x != 0u;
+
+    float3 localMin = float3(constants.aabbMinX, constants.aabbMinY, constants.aabbMinZ);
+    float3 localMax = float3(constants.aabbMaxX, constants.aabbMaxY, constants.aabbMaxZ);
+    float3 aabbMin, aabbMax;
+    TransformAABB(localMin, localMax, LoadMatrix(constants.meshDataOffset), aabbMin, aabbMax);
+    if (nodeVisibility.y != 0u)
+    {
+        aabbMin = asfloat(NodeData.Load3(nodeVisibility.y));
+        aabbMax = asfloat(NodeData.Load3(nodeVisibility.y + 16u));
+    }
+
+    visible = visible && AABBInFrustum(aabbMin, aabbMax);
+    if (lodEnabled != 0u && constants.lodMeshEnabled != 0u && constants.lodCount > 1u && pc.shadowLodBias > 0.0)
+    {
+        float lodDist = distance(pc.cameraPos, clamp(pc.cameraPos, aabbMin, aabbMax)) * lodBias * constants.lodMeshBias *
+                        pc.shadowLodBias;
+        uint lod = 0u;
+        if (lodDist > lodDistances.x)
+            lod = 1u;
+        if (lodDist > lodDistances.y)
+            lod = 2u;
+        if (lodDist > lodDistances.z)
+            lod = 3u;
+        lod = min(lod + constants.lodShift, constants.lodCount - 1u);
+        cmd.firstIndex = constants.lodIndexOffset[lod];
+        cmd.indexCount = constants.lodIndexCount[lod];
+    }
+
+    cmd.instanceCount = visible ? cmd.instanceCount : 0u;
+    cmd.firstInstance = idx;
+    IndirectRegularOut[idx] = cmd;
+}
+#else
 [numthreads(64, 1, 1)] void mainCS(uint3 DTid : SV_DispatchThreadID)
 {
     uint idx = DTid.x;
@@ -175,3 +230,4 @@ uint WaveAppend(uint counterIndex, bool emit)
     if (emitTint)
         IndirectTintOut[slot] = cmd;
 }
+#endif
