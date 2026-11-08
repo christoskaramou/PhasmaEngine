@@ -128,9 +128,9 @@ namespace pe
         settings.cluster_geometry = false;
         settings.skinned_instancing = false;
 
-        // LightingPS samples 9 textures plus a shadow and a tint map per cascade (spec decision 10).
+        // LightingPS samples 10 textures (9 and the baked GI atlas) plus a shadow and a tint map per cascade (spec decision 10).
         const uint32_t sampled = RHII.GetGpuLimits().maxSampledTexturesPerShaderStage;
-        const uint32_t cascades = sampled > 11 ? (sampled - 9) / 2 : 1;
+        const uint32_t cascades = sampled > 12 ? (sampled - 10) / 2 : 1;
         // Lighting.hlsl's web variant declares a depth and a tint map binding for up to 4 cascades.
         settings.num_cascades = std::min({settings.num_cascades, cascades, 4u});
     }

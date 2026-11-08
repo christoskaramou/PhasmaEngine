@@ -50,6 +50,60 @@ namespace pe
             return ActiveScreenIrradiance(frame) && reflections ? reflections->GetSpecular() : nullptr;
         }
 
+        // False without a bake (the normal case) or for one this build cannot read.
+        bool ReadBakedProbes(const std::filesystem::path &path,
+                             GlobalIlluminationPass::BakedProbesHeader &header,
+                             std::vector<uint16_t> &texels)
+        {
+            using Baked = GlobalIlluminationPass;
+            texels.resize(size_t(Baked::kBakedWidth) * Baked::kBakedHeight * 4);
+            std::ifstream file(path, std::ios::binary);
+            file.read(reinterpret_cast<char *>(&header), sizeof(header));
+            file.read(reinterpret_cast<char *>(texels.data()),
+                      static_cast<std::streamsize>(texels.size() * sizeof(uint16_t)));
+            if (!file.good())
+                return false;
+
+            const bool valid = std::memcmp(header.magic, "PEGI", 4) == 0 &&
+                               header.version == Baked::kBakedVersion &&
+                               header.width == Baked::kBakedWidth &&
+                               header.height == Baked::kBakedHeight &&
+                               header.uniforms.gridSize == 8 &&
+                               header.uniforms.cascadeCount == 1;
+            if (!valid)
+                PE_WARN("[GI] ignoring %s: not a bake this build reads", path.string().c_str());
+
+            return valid;
+        }
+
+        Image *UploadBakedProbes(std::vector<uint16_t> &texels)
+        {
+            ImageDesc desc{};
+            desc.width = GlobalIlluminationPass::kBakedWidth;
+            desc.height = GlobalIlluminationPass::kBakedHeight;
+            desc.format = PE_FORMAT_R16G16B16A16_SFLOAT;
+            desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
+            desc.name = "GI_BakedProbes";
+            Image *image = Image::Create(desc);
+            image->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+
+            Queue *queue = RHII.GetMainQueue();
+            CommandBuffer *cmd = queue->AcquireCommandBuffer();
+            cmd->Begin();
+            cmd->CopyDataToImageStaged(image, texels.data(), texels.size() * sizeof(uint16_t));
+            cmd->ImageBarrier({
+                .image = image,
+                .layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                .stageFlags = PE_STAGE_FRAGMENT_SHADER,
+                .accessMask = PE_ACCESS_SHADER_SAMPLED_READ,
+            });
+            cmd->End();
+            queue->Submit(1, &cmd, nullptr, nullptr);
+            cmd->Wait();
+            queue->ReturnCommandBuffer(cmd);
+            return image;
+        }
+
         constexpr uint32_t kBakedVolumeBinding = 14; // ProbeVolume.hlsl's web profile block; the atlas and sampler follow
 
         // The web profile's probes, from the bake beside the scene. Without one, or with global_illumination off, the
@@ -63,9 +117,13 @@ namespace pe
             Image *baked = opaque->LoadBakedProbes();
             auto *fallback = RequireActiveSceneRendererHost().GetIBL_LUT();
             ImageView *view = baked ? baked->GetSRV() : fallback->GetSRV();
+            const auto holdsView = [view](const auto &info)
+            {
+                return info.binding == kBakedVolumeBinding + 1 && !info.views.empty() && info.views[0] == view;
+            };
+
             const auto &bound = set->GetBoundResources();
-            const bool current = std::any_of(bound.begin(), bound.end(), [view](const auto &info)
-                                             { return info.binding == kBakedVolumeBinding + 1 && !info.views.empty() && info.views[0] == view; });
+            const bool current = std::any_of(bound.begin(), bound.end(), holdsView);
             if (current && !force)
                 return;
 
@@ -546,7 +604,7 @@ namespace pe
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
             DSet->Update();
 
-            // The web profile compiles shadows out of LightingPS (shadows are off there), which leaves set 1 empty.
+            // Set 1 is null when the shader declares no shadow bindings.
             if (auto *DSetShadows = sets[1])
             {
                 Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
@@ -691,46 +749,12 @@ namespace pe
         m_bakedUniforms.cascadeCount = 0;
         m_bakedUniforms.intensity = 0.f;
 
-        using Baked = GlobalIlluminationPass;
-        std::ifstream file(path, std::ios::binary);
-        Baked::BakedProbesHeader header{};
-        std::vector<uint16_t> texels(size_t(Baked::kBakedWidth) * Baked::kBakedHeight * 4);
-        file.read(reinterpret_cast<char *>(&header), sizeof(header));
-        file.read(reinterpret_cast<char *>(texels.data()), static_cast<std::streamsize>(texels.size() * sizeof(uint16_t)));
-        if (!file.good())
+        GlobalIlluminationPass::BakedProbesHeader header{};
+        std::vector<uint16_t> texels;
+        if (!ReadBakedProbes(path, header, texels))
             return nullptr;
 
-        const bool valid = std::memcmp(header.magic, "PEGI", 4) == 0 &&
-                           header.version == Baked::kBakedVersion &&
-                           header.width == Baked::kBakedWidth &&
-                           header.height == Baked::kBakedHeight &&
-                           header.uniforms.gridSize == 8 &&
-                           header.uniforms.cascadeCount == 1;
-        if (!valid)
-        {
-            PE_WARN("[GI] ignoring %s: not a bake this build reads", path.string().c_str());
-            return nullptr;
-        }
-
-        ImageDesc desc{};
-        desc.width = Baked::kBakedWidth;
-        desc.height = Baked::kBakedHeight;
-        desc.format = PE_FORMAT_R16G16B16A16_SFLOAT;
-        desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
-        desc.name = "GI_BakedProbes";
-        m_bakedProbes = Image::Create(desc);
-        m_bakedProbes->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
-
-        Queue *queue = RHII.GetMainQueue();
-        CommandBuffer *cmd = queue->AcquireCommandBuffer();
-        cmd->Begin();
-        cmd->CopyDataToImageStaged(m_bakedProbes, texels.data(), texels.size() * sizeof(uint16_t));
-        cmd->ImageBarrier({.image = m_bakedProbes, .layout = PE_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, .stageFlags = PE_STAGE_FRAGMENT_SHADER, .accessMask = PE_ACCESS_SHADER_SAMPLED_READ});
-        cmd->End();
-        queue->Submit(1, &cmd, nullptr, nullptr);
-        cmd->Wait();
-        queue->ReturnCommandBuffer(cmd);
-
+        m_bakedProbes = UploadBakedProbes(texels);
         m_bakedUniforms = header.uniforms;
         PE_INFO("[GI] loaded baked probes %s", path.string().c_str());
         return m_bakedProbes;
@@ -871,7 +895,7 @@ namespace pe
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
             DSet->Update();
 
-            // The web profile compiles shadows out of LightingPS (shadows are off there), which leaves set 1 empty.
+            // Set 1 is null when the shader declares no shadow bindings.
             if (auto *DSetShadows = sets[1])
             {
                 Buffer *shadowUniform = useShadowResources ? shadows.GetUniform(i) : m_shadowFallbackUniforms[i];
@@ -1148,7 +1172,7 @@ namespace pe
         ShadowPass &shadows = *GetGlobalComponent<ShadowPass>();
         const bool useShadows = ShadowsActive(shadows);
         const auto &sets = info.GetDescriptors(frame);
-        if (sets.size() > 1 && sets[1]) // set 1 is empty where the web profile compiles shadows out
+        if (sets.size() > 1 && sets[1]) // set 1 is null when the shader declares no shadow bindings
         {
             Descriptor *set = sets[1];
             BindMaterialBuffer(set, 0, useShadows ? shadows.GetUniform(frame) : m_shadowFallbackUniforms[frame]);

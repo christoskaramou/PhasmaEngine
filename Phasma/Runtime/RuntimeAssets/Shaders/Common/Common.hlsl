@@ -135,6 +135,13 @@ float2 TexelSize(uint mip, TextureCube tex)
     return 1.0f / TextureSize(mip, tex).xy;
 }
 
+// The skybox images' storage format (Skybox.cpp SkyFloatFormat): WebGPU filters 32-bit float only with an optional feature.
+#ifdef PE_WEB_PROFILE
+#define PE_SKY_FORMAT "rgba16f"
+#else
+#define PE_SKY_FORMAT "rgba32f"
+#endif
+
 // WebGPU binds a depth texture only to depth or unfilterable-float bindings, so the web profile loads the texel.
 float DepthAt(Texture2D tex, SamplerState sampler_tex, float2 uv)
 {

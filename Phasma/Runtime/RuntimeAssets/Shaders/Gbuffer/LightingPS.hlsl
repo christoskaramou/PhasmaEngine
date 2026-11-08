@@ -60,7 +60,8 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
 
     // Ambient
     float materialAO = metRough.x;
-    float occlusion  = (cb_ssao ? Ssao.Sample(sampler_Ssao, input.uv).x : 1.0) * materialAO;
+    // DepthAt loads the texel on the web: Ssao is r32float there, and filtering that needs an optional WebGPU feature.
+    float occlusion  = (cb_ssao ? DepthAt(Ssao, sampler_Ssao, input.uv) : 1.0) * materialAO;
     float3 fragColor = 0.0;
 
     // Energy Compensation (Multi-Scattering)

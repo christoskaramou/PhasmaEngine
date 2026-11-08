@@ -54,6 +54,60 @@ namespace pe
         {
             return glm::packHalf1x16(std::isfinite(value) ? std::clamp(value, -65000.f, 65000.f) : 0.f);
         }
+
+        // The BakedProbesHeader layout: irradiance in cascade 0's band, distance as mean and deviation in cascade 1's.
+        std::vector<uint16_t> PackBakedTexels(const std::vector<float> &irradiance, const std::vector<float> &distance)
+        {
+            const size_t width = GlobalIlluminationPass::kBakedWidth;
+            const size_t band = GlobalIlluminationPass::kBakedHeight / GlobalIlluminationPass::kCascades;
+            std::vector<uint16_t> texels(width * GlobalIlluminationPass::kBakedHeight * 4);
+            for (size_t y = 0; y < band; ++y)
+            {
+                for (size_t x = 0; x < width; ++x)
+                {
+                    const size_t source = (y * width + x) * 4;
+                    for (size_t channel = 0; channel < 4; ++channel)
+                        texels[source + channel] = PackBakedChannel(irradiance[source + channel]);
+
+                    const float mean = distance[source];
+                    const float deviation = std::sqrt(std::max(distance[source + 1] - mean * mean, 0.f));
+                    uint16_t *moments = &texels[((y + band) * width + x) * 4];
+                    moments[0] = PackBakedChannel(mean);
+                    moments[1] = PackBakedChannel(deviation);
+                }
+            }
+
+            return texels;
+        }
+
+        // Through a temporary file, so a failed write leaves an existing bake intact.
+        bool WriteBakedFile(const std::filesystem::path &path,
+                            const GlobalIlluminationPass::BakedProbesHeader &header,
+                            const std::vector<uint16_t> &texels)
+        {
+            std::filesystem::path temporary = path;
+            temporary += ".tmp";
+            std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
+            out.write(reinterpret_cast<const char *>(&header), sizeof(header));
+            out.write(reinterpret_cast<const char *>(texels.data()),
+                      static_cast<std::streamsize>(texels.size() * sizeof(uint16_t)));
+            out.close(); // before the check: the final flush happens here
+            if (!out.good())
+            {
+                PE_WARN("[GI bake] failed: cannot write %s", temporary.string().c_str());
+                return false;
+            }
+
+            std::error_code error;
+            std::filesystem::rename(temporary, path, error);
+            if (error)
+            {
+                PE_WARN("[GI bake] failed: cannot replace %s", path.string().c_str());
+                return false;
+            }
+
+            return true;
+        }
     } // namespace
 
     GlobalIlluminationPass::GlobalIlluminationPass()
@@ -267,53 +321,26 @@ namespace pe
             return;
         }
 
+        if (RHII.GetApi() != PE_GRAPHICS_API_VULKAN)
+        {
+            PE_WARN("[GI bake] failed: run the bake on Vulkan (ReadProbeAtlas assumes tightly packed rows)");
+            return;
+        }
+
         RHII.WaitDeviceIdle();
         const std::vector<float> irradiance = ReadProbeAtlas(m_irradianceHistory);
         const std::vector<float> distance = ReadProbeAtlas(m_distanceHistory);
-        std::vector<uint16_t> texels(size_t(kBakedWidth) * kBakedHeight * 4);
-        for (size_t y = 0; y < kCascadeProbes; ++y)
-        {
-            for (size_t x = 0; x < kBakedWidth; ++x)
-            {
-                const size_t source = (y * kBakedWidth + x) * 4;
-                for (size_t channel = 0; channel < 4; ++channel)
-                    texels[source + channel] = PackBakedChannel(irradiance[source + channel]);
-
-                const float mean = distance[source];
-                uint16_t *moments = &texels[((y + kCascadeProbes) * kBakedWidth + x) * 4];
-                moments[0] = PackBakedChannel(mean);
-                moments[1] = PackBakedChannel(std::sqrt(std::max(distance[source + 1] - mean * mean, 0.f)));
-            }
-        }
+        const std::vector<uint16_t> texels = PackBakedTexels(irradiance, distance);
 
         BakedProbesHeader header{};
         header.uniforms = m_probeData;
         header.uniforms.reset = 0;
         header.uniforms.tracedVisibility = 0;
+
         std::filesystem::path path = scene->GetScenePath();
         path.replace_extension(".pegi");
-        std::filesystem::path temporary = path;
-        temporary += ".tmp";
-        {
-            std::ofstream out(temporary, std::ios::binary | std::ios::trunc);
-            out.write(reinterpret_cast<const char *>(&header), sizeof(header));
-            out.write(reinterpret_cast<const char *>(texels.data()), static_cast<std::streamsize>(texels.size() * sizeof(uint16_t)));
-            if (!out.good())
-            {
-                PE_WARN("[GI bake] failed: cannot write %s", temporary.string().c_str());
-                return;
-            }
-        }
-
-        std::error_code error;
-        std::filesystem::rename(temporary, path, error);
-        if (error)
-        {
-            PE_WARN("[GI bake] failed: cannot replace %s", path.string().c_str());
-            return;
-        }
-
-        PE_INFO("[GI bake] wrote %s", path.string().c_str());
+        if (WriteBakedFile(path, header, texels))
+            PE_INFO("[GI bake] wrote %s", path.string().c_str());
     }
 
     void GlobalIlluminationPass::DeclareInputs(RGBuilder &builder)

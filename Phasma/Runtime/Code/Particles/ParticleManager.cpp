@@ -5,6 +5,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "Particles/Backends/ParticleBufferBackend.h"
+#include "Render/SceneRenderTargets.h"
 
 namespace pe
 {
@@ -509,6 +510,14 @@ namespace pe
             for (uint32_t i = 0; i < m_textureNames.size(); ++i)
                 if (m_textureNames[i] == name)
                     return i;
+            // ponytail: the web's ParticlePS has 15 texture bindings (with the scene depth, WebGPU's guaranteed 16), so
+            // a 16th shares texture 0 there. To lift it: an atlas, which counts as one binding.
+            if (SceneUsesWebProfile() && m_textures.size() >= 15)
+            {
+                PE_WARN("[Particles] LoadTexture: %s uses texture 0; the web profile holds 15 particle textures", name.c_str());
+                return 0;
+            }
+
             // ParticlePS binds textures[16], then the scene depth at binding 16: a 17th texture would index past
             // the table (a DX12 device hang) and its descriptor write would overwrite the depth.
             if (m_textures.size() >= 16)

@@ -10,7 +10,7 @@ struct PushConstants
 
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
 
-[[vk::image_format("rgba32f")]][[vk::binding(0)]] RWTexture2D<float4> outIrradiance : register(u0);
+[[vk::image_format(PE_SKY_FORMAT)]][[vk::binding(0)]] RWTexture2D<float4> outIrradiance : register(u0);
 [[vk::binding(1)]] Texture2D<float4> inRadiance : register(t1);
 
 // The inverse of EquirectangularToCubemap.hlsl's SampleSphericalMap: u = atan2(z, x) / 2pi + 0.5, v = 0.5 - asin(y) / pi.

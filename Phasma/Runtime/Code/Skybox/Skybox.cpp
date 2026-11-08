@@ -8,11 +8,18 @@
 
 #include "API/RHI.h"
 #include "stb_image.h"
+#include <glm/gtc/packing.hpp>
 
 namespace pe
 {
     namespace
     {
+        // WebGPU filters 32-bit float only with an optional feature. Common.hlsl's PE_SKY_FORMAT matches this.
+        ::PeFormat SkyFloatFormat()
+        {
+            return SceneUsesWebProfile() ? PE_FORMAT_R16G16B16A16_SFLOAT : PE_FORMAT_R32G32B32A32_SFLOAT;
+        }
+
         Sampler *CreateSkyboxSampler(const std::string &name)
         {
             SamplerDesc samplerInfo = Sampler::CreateInfoInit();
@@ -121,7 +128,7 @@ namespace pe
                                              uint32_t mipLevels)
         {
             ImageDesc desc{};
-            desc.format = PE_FORMAT_R32G32B32A32_SFLOAT;
+            desc.format = SkyFloatFormat();
             desc.width = width;
             desc.height = height;
             desc.mipLevels = mipLevels;
@@ -325,7 +332,7 @@ namespace pe
         // 2. Create Cubemap
         ImageDesc desc{};
         desc.cubeCompatible = true;
-        desc.format = PE_FORMAT_R32G32B32A32_SFLOAT;
+        desc.format = SkyFloatFormat();
         desc.width = cubemapSize;
         desc.height = cubemapSize;
         desc.arrayLayers = 6;
@@ -402,7 +409,7 @@ namespace pe
 
         ImageDesc desc{};
         desc.cubeCompatible = true;
-        desc.format = PE_FORMAT_R32G32B32A32_SFLOAT;
+        desc.format = SkyFloatFormat();
         desc.width = 1;
         desc.height = 1;
         desc.arrayLayers = 6;
@@ -421,6 +428,14 @@ namespace pe
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
         {
             cmd->ClearColors({m_cubeMap});
+        }
+        else if (SceneUsesWebProfile())
+        {
+            std::array<uint16_t, 24> pixels{};
+            for (size_t i = 0; i < pixels.size(); ++i)
+                pixels[i] = glm::packHalf1x16(color[static_cast<int>(i % 4)]);
+
+            cmd->CopyDataToImageStaged(m_cubeMap, pixels.data(), sizeof(pixels), 0, 6);
         }
         else
         {

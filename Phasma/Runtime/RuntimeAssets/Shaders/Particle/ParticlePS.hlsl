@@ -4,7 +4,8 @@
 
 #ifdef PE_WEB_PROFILE
 // The web profile removes texture arrays (spec decision 6): each particle texture gets its own binding, 20 + k, which
-// ParticlePass fills when binding 0 is absent.
+// ParticlePass fills when binding 0 is absent. 15 of them plus sceneDepth fit WebGPU's guaranteed 16 sampled textures
+// (ParticleManager::LoadTexture keeps to that).
 [[vk::binding(20, 1)]] Texture2D particleTexture0;
 [[vk::binding(21, 1)]] Texture2D particleTexture1;
 [[vk::binding(22, 1)]] Texture2D particleTexture2;
@@ -20,7 +21,6 @@
 [[vk::binding(32, 1)]] Texture2D particleTexture12;
 [[vk::binding(33, 1)]] Texture2D particleTexture13;
 [[vk::binding(34, 1)]] Texture2D particleTexture14;
-[[vk::binding(35, 1)]] Texture2D particleTexture15;
 #else
 [[vk::binding(0, 1)]] Texture2D textures[16];
 #endif
@@ -33,8 +33,6 @@ float4 SampleParticleTexture(uint id, float2 uv)
 {
     const float2 dx = ddx(uv);
     const float2 dy = ddy(uv);
-    if (id == 15u)
-        return particleTexture15.SampleGrad(samplerState, uv, dx, dy);
     if (id == 14u)
         return particleTexture14.SampleGrad(samplerState, uv, dx, dy);
     if (id == 13u)

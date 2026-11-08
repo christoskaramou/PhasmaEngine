@@ -9,7 +9,7 @@ struct PushConstants
 
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
 
-[[vk::image_format("rgba32f")]][[vk::binding(0)]] RWTexture2D<float4> outMips[13] : register(u0);
+[[vk::image_format(PE_SKY_FORMAT)]][[vk::binding(0)]] RWTexture2D<float4> outMips[13] : register(u0);
 #ifdef PE_ENV_FROM_CUBE
 [[vk::binding(1)]] TextureCube<float4> inSource : register(t1);
 [[vk::binding(2)]] SamplerState samplerSource : register(s2);
