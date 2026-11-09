@@ -4,6 +4,8 @@
 
 #include "Physics/PhysicsTypes.h"
 
+#include <optional>
+
 // Forward-declare Jolt types to avoid header pollution
 namespace JPH
 {
@@ -33,6 +35,7 @@ namespace pe
         NodeId *nodeId = nullptr;
         uint32_t nodeRevision = 0;
         PhysicsBodyDesc desc;
+        std::optional<PhysicsBodyType> authoredBodyType; // desc.bodyType before SetBodyType; restored at StopSimulation
         vec3 authoredScale = vec3(1.f);          // cached at AddBody, avoids per-frame glm::length extraction
         const JPH::Shape *cachedShape = nullptr; // ref-counted manually in .cpp; reused across play toggles
         uint32_t joltBodyIdRaw = 0xFFFFFFFF;     // JPH::BodyID raw value

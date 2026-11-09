@@ -44,6 +44,8 @@ namespace pe
                 passInfos.push_back(m_voxelPassInfo.get());
             if (m_terrainPassInfo)
                 passInfos.push_back(m_terrainPassInfo.get());
+            if (m_hingePassInfo)
+                passInfos.push_back(m_hingePassInfo.get());
             return passInfos;
         }
 
@@ -57,10 +59,12 @@ namespace pe
         std::shared_ptr<PassInfo> m_passInfoDS; // double-sided variant (cullMode=eNone)
         std::shared_ptr<PassInfo> m_voxelPassInfo;
         std::shared_ptr<PassInfo> m_terrainPassInfo; // dedicated triplanar-splat terrain pipeline
+        std::shared_ptr<PassInfo> m_hingePassInfo;   // the hinge field's boxes (no vertex buffer)
 
         ResourceHandle<PassInfoAsset> m_passAsset;
         ResourceHandle<PassInfoAsset> m_voxelPassAsset;
         ResourceHandle<PassInfoAsset> m_terrainPassAsset;
+        ResourceHandle<PassInfoAsset> m_hingePassAsset;
         Image *m_ibl_brdf_lut;
         Image *m_normalRT;
         Image *m_albedoRT;

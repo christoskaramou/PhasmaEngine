@@ -2,9 +2,72 @@
 #include "Script/ScriptSystem.h"
 #include "Script/Bindings/BindingUtils.h"
 #include "Base/GamePack.h"
+#include "stb_image.h"
 
 namespace pe
 {
+    // PNG or JPEG under Assets as RGB bytes, box-filtered down so neither side passes maxSide; alpha lies over white.
+    static sol::object ReadAssetsImage(const std::string &path, int maxSide, sol::this_state ts)
+    {
+        sol::state_view lua(ts);
+        const std::filesystem::path fpath = ResolveAssetsPath(path);
+        if (path.empty() || !IsUnderAssets(fpath))
+            return sol::nil;
+
+        std::string bytes;
+        if (IsGamePackManagedAsset(fpath))
+        {
+            std::optional<std::string> packed = ReadGamePackAsset(fpath);
+            if (!packed)
+                return sol::nil;
+            bytes = std::move(*packed);
+        }
+        else
+        {
+            std::ifstream file(fpath, std::ios::in | std::ios::binary);
+            if (!file.is_open())
+                return sol::nil;
+            bytes.assign(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
+        }
+
+        int width = 0, height = 0, channels = 0;
+        stbi_uc *pixels = stbi_load_from_memory(reinterpret_cast<const stbi_uc *>(bytes.data()),
+                                                static_cast<int>(bytes.size()),
+                                                &width, &height, &channels, STBI_rgb_alpha);
+        if (!pixels)
+            return sol::nil;
+
+        const int step = std::max(1, (std::max(width, height) + maxSide - 1) / std::max(1, maxSide));
+        const int outW = std::max(1, width / step);
+        const int outH = std::max(1, height / step);
+        std::string rgb(static_cast<size_t>(outW) * outH * 3, '\0');
+        for (int y = 0; y < outH; y++)
+        {
+            for (int x = 0; x < outW; x++)
+            {
+                int sum[3] = {0, 0, 0};
+                for (int j = 0; j < step; j++)
+                {
+                    for (int i = 0; i < step; i++)
+                    {
+                        const stbi_uc *p = pixels + 4 * (static_cast<size_t>(y * step + j) * width + x * step + i);
+                        for (int c = 0; c < 3; c++)
+                            sum[c] += (p[c] * p[3] + 255 * (255 - p[3])) / 255;
+                    }
+                }
+                for (int c = 0; c < 3; c++)
+                    rgb[(static_cast<size_t>(y) * outW + x) * 3 + c] = static_cast<char>(sum[c] / (step * step));
+            }
+        }
+        stbi_image_free(pixels);
+
+        sol::table result = lua.create_table();
+        result["width"] = outW;
+        result["height"] = outH;
+        result["rgb"] = rgb;
+        return result;
+    }
+
     std::optional<std::string> ReadAssetsFile(const std::string &path)
     {
         if (path.empty())
@@ -114,6 +177,11 @@ namespace pe
                         if (i > 50) break;
                     }
                     return result;
+                });
+
+                // read_image(path, max_side) -> { width, height, rgb = bytes } or nil.
+                fs.set_function("read_image", [](const std::string &path, sol::optional<int> maxSide, sol::this_state ts) {
+                    return ReadAssetsImage(path, std::max(1, maxSide.value_or(2048)), ts);
                 });
 
                 fs.set_function("list", [](const std::string &path, sol::this_state ts) -> sol::table {

@@ -1,0 +1,14 @@
+{
+  "name": "hinge_gbuffer",
+  "version": 1,
+  "surface": {
+    "vertexShader": "Shaders/Field/HingeGBufferVS.hlsl",
+    "fragmentShader": "Shaders/Field/HingeGBufferPS.hlsl",
+    "cullMode": "none",
+    "depthWriteEnable": true,
+    "depthTestEnable": true,
+    "blendEnable": false,
+    "dynamicStates": ["viewport", "scissor"],
+    "colorBlendAttachments": ["default", "default", "default", "default", "default", "default"]
+  }
+}

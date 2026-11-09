@@ -1,5 +1,6 @@
 #include "Scene/Scene.h"
 #include <meshoptimizer.h> // meshopt_simplify for mesh LOD generation
+#include "Scene/HingeField.h"
 #include "Scene/Material.h"
 #include "Scene/ModelAsset.h"
 #include "Scene/MeshLod.h"
@@ -256,6 +257,9 @@ namespace pe
 
         DestroyBuffers();
         DestroyLightBuffers();
+
+        delete m_hingeField;
+        m_hingeField = nullptr;
 
         if (m_particleManager)
         {

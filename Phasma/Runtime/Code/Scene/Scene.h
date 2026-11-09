@@ -16,6 +16,7 @@ namespace pe
     class Buffer;
     class Camera;
     class CommandBuffer;
+    class HingeField;
     class Image;
     class ImageView;
     class Material;
@@ -459,6 +460,8 @@ namespace pe
         // mirror), recorded at the front of the frame command buffer instead of a Submit+Wait.
         void RecordPendingInstanceUploads(CommandBuffer *cmd);
         void RecordPendingUvUploads(CommandBuffer *cmd);
+        HingeField *GetHingeField() const { return m_hingeField; }
+        HingeField *EnsureHingeField();
         bool TryBindCachedTexture(int meshIndex, int textureSlot, const ResourceHandle<Image> &image);
         void RecordPendingTextureUploads(CommandBuffer *cmd);
 
@@ -1060,6 +1063,7 @@ namespace pe
         NodeId *m_sceneSettingsNode = nullptr;
         NodeId *m_voxelWorldNode = nullptr;
         NodeId *m_terrainNode = nullptr;
+        HingeField *m_hingeField = nullptr; // created on first use, by the games that want one
 
         // Instance-rebuild GPU work waiting for the next frame command buffer (RecordPendingInstanceUploads).
         std::vector<PeDrawIndexedIndirectCommand> m_pendingIndirectCommands;

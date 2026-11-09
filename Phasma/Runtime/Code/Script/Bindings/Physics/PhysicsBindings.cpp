@@ -298,7 +298,7 @@ namespace pe
                         return;
                     }
                     sol::function fn = callback.as<sol::function>();
-                    ps->SetContactCallback(h.nodeId, [fn = std::move(fn)](NodeId *self, NodeId *other, float speed, const vec3 &p) {
+                    auto onContact = [fn = std::move(fn)](NodeId *self, NodeId *other, float speed, const vec3 &p) {
                         Scene *s = GetActiveScene();
                         if (!s || !s->IsNodeAlive(self) || !s->IsNodeAlive(other))
                             return;
@@ -309,7 +309,8 @@ namespace pe
                             sol::error err = r;
                             Log::Error(PeFormat("[Lua] physics.on_contact callback error: %s", err.what()));
                         }
-                    });
+                    };
+                    ps->SetContactCallback(h.nodeId, std::move(onContact));
                 });
 
                 // Scales the time the 3D simulation advances each frame (slow motion); 1 is real time.
@@ -328,7 +329,8 @@ namespace pe
                     auto *ps = GetGlobalSystem<PhysicsSystem>();
                     if (!ps || !h.nodeId || (type != "dynamic" && type != "kinematic"))
                         return false;
-                    return ps->SetBodyType(h.nodeId, type == "kinematic" ? PhysicsBodyType::Kinematic : PhysicsBodyType::Dynamic);
+                    const PhysicsBodyType bodyType = type == "kinematic" ? PhysicsBodyType::Kinematic : PhysicsBodyType::Dynamic;
+                    return ps->SetBodyType(h.nodeId, bodyType);
                 });
 
                 // move_kinematic(node, x, y, z, qx, qy, qz, qw): drive a kinematic body to this world pose each step.

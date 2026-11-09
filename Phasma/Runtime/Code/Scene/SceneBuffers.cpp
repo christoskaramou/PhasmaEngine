@@ -1,4 +1,5 @@
 #include "Scene/Scene.h"
+#include "Scene/HingeField.h"
 #include "Scene/Material.h"
 #include "Scene/OpenPBRMaterial.h"
 #include "Scene/MaterialReflection.h"
@@ -803,8 +804,18 @@ namespace pe
         m_pendingDrawInstanceUpload = true;
     }
 
+    HingeField *Scene::EnsureHingeField()
+    {
+        if (!m_hingeField)
+            m_hingeField = new HingeField();
+        return m_hingeField;
+    }
+
     void Scene::RecordPendingInstanceUploads(CommandBuffer *cmd)
     {
+        if (m_hingeField)
+            m_hingeField->RecordUploads(cmd);
+
         if (!cmd || (!m_pendingIndirectUpload && !m_pendingVisibilitySeed && !m_pendingMeshConstantsMirror && !m_pendingDrawInstanceUpload))
             return;
 

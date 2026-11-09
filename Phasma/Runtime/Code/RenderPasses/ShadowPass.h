@@ -18,6 +18,15 @@ namespace pe
         uint32_t jointsCount;
     };
 
+    // Matches Shaders/Field/HingeShadowVS.hlsl.
+    struct PushConstants_HingeShadow
+    {
+        mat4 vp;
+        float time;
+        uint32_t generation;
+        uint32_t base;
+    };
+
     class ShadowPass : public IRenderPassComponent
     {
     public:
@@ -55,6 +64,8 @@ namespace pe
             std::vector<PassInfo *> passInfos{m_passInfo.get()};
             if (m_voxelPassInfo)
                 passInfos.push_back(m_voxelPassInfo.get());
+            if (m_hingePassInfo)
+                passInfos.push_back(m_hingePassInfo.get());
             if (m_cullPassInfo)
                 passInfos.push_back(m_cullPassInfo.get());
             if (m_fallbackPassInfo)
@@ -96,6 +107,7 @@ namespace pe
         Sampler *m_sampler = nullptr;
         Scene *m_scene = nullptr;
         std::shared_ptr<PassInfo> m_voxelPassInfo; // packed-voxel shadow caster pipeline
+        std::shared_ptr<PassInfo> m_hingePassInfo; // the hinge field's boxes (no vertex buffer)
         std::shared_ptr<PassInfo> m_cullPassInfo;  // per-cascade light-frustum compact
         std::shared_ptr<PassInfo> m_fallbackPassInfo;
         std::shared_ptr<PassInfo> m_tintPassInfo; // Transmission casters into m_tints

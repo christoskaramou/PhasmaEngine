@@ -9,6 +9,7 @@
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
 #include "Camera/Camera.h"
+#include "Scene/HingeField.h"
 #include "Scene/PassInfoAsset.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -19,6 +20,20 @@ namespace pe
 {
     namespace
     {
+        // Matches Shaders/Field/HingeGBufferVS.hlsl.
+        struct PushConstants_HingeField
+        {
+            vec2 projJitter;
+            vec2 prevProjJitter;
+            float time;
+            float prevTime;
+            uint32_t generation;
+            uint32_t base;
+            vec3 eye;
+            uint32_t farLod;
+            float nearDistance;
+        };
+
         void ApplyGBufferSurface(PassInfo &pi, const PassVariant &surface, bool writeVelocity, bool visibilityAttachment,
                                  bool writeVisibility)
         {
@@ -162,6 +177,8 @@ namespace pe
             m_voxelPassInfo = std::make_shared<PassInfo>();
         if (!m_terrainPassInfo)
             m_terrainPassInfo = std::make_shared<PassInfo>();
+        if (!m_hingePassInfo)
+            m_hingePassInfo = std::make_shared<PassInfo>();
         m_lastVoxelAtlasView = nullptr;
         m_lastTerrainSplatView = nullptr;
         m_scene = nullptr;
@@ -258,6 +275,8 @@ namespace pe
                                "gbuffer_voxel_pipeline");
         buildSubsystemPipeline(m_terrainPassInfo, m_terrainPassAsset, "Shaders/Terrain/terrain_gbuffer.passinfo",
                                "gbuffer_terrain_pipeline");
+        buildSubsystemPipeline(m_hingePassInfo, m_hingePassAsset, "Shaders/Field/hinge_gbuffer.passinfo",
+                               "gbuffer_hinge_pipeline");
     }
 
     void GbufferOpaquePass::Update()
@@ -522,6 +541,35 @@ namespace pe
                                               mesh);
             }
 
+            HingeField *hinges = m_scene->GetHingeField();
+            if (hinges && hinges->Ready() && m_hingePassInfo && m_hingePassInfo->pFragShader)
+            {
+                Descriptor *set = m_hingePassInfo->GetDescriptors(frame)[0];
+                set->SetBuffer(0, m_scene->GetUniforms(frame));
+                set->SetBuffer(1, hinges->GetBuffer());
+                set->Update();
+
+                PushConstants_HingeField hingeConstants{};
+                hingeConstants.projJitter = camera->GetProjJitter();
+                hingeConstants.prevProjJitter = camera->GetPrevProjJitter();
+                hingeConstants.time = hinges->GetClock();
+                hingeConstants.prevTime = hinges->GetPreviousClock();
+                hingeConstants.generation = hinges->GetGeneration();
+                hingeConstants.eye = camera->GetPosition();
+                hingeConstants.nearDistance = hinges->GetNearDistance();
+
+                cmd->BindPipeline(*m_hingePassInfo);
+                const auto planes = HingeField::PlanesFromMatrix(camera->GetViewProjection());
+                hinges->ForEachVisible(planes, camera->GetPosition(), [&](uint32_t first, uint32_t count, uint32_t vertices)
+                {
+                    hingeConstants.base = first;
+                    hingeConstants.farLod = vertices == HingeField::kFarVertices ? 1u : 0u;
+                    cmd->SetConstants(hingeConstants);
+                    cmd->PushConstants();
+                    cmd->Draw(vertices, count, 0, 0);
+                });
+            }
+
             cmd->EndPass();
         }
 
@@ -582,6 +630,12 @@ namespace pe
             Shader::Destroy(m_terrainPassInfo->pVertShader);
             Shader::Destroy(m_terrainPassInfo->pFragShader);
             m_terrainPassInfo.reset();
+        }
+        if (m_hingePassInfo)
+        {
+            Shader::Destroy(m_hingePassInfo->pVertShader);
+            Shader::Destroy(m_hingePassInfo->pFragShader);
+            m_hingePassInfo.reset();
         }
         m_lastVoxelAtlasView = nullptr;
         m_lastTerrainSplatView = nullptr;

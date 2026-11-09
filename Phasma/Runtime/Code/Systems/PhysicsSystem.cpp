@@ -63,6 +63,7 @@ namespace pe
         // Scenes can queue up large batches of dynamic primitives before entering play mode.
         // The original limits were too small and Jolt started reporting update errors once
         // contact pairs and constraints grew during settling.
+        constexpr float kDefaultGravityY = -9.81f;
         constexpr uint32_t kMaxBodies = 16384;
         constexpr uint32_t kMaxBodyPairs = 65536;
         constexpr uint32_t kMaxContactConstraints = 65536;
@@ -264,7 +265,7 @@ namespace pe
         m_contactListener = new TriggerContactListener(*this);
         m_joltSystem->SetContactListener(m_contactListener);
 
-        m_joltSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
+        m_joltSystem->SetGravity(JPH::Vec3(0.0f, kDefaultGravityY, 0.0f));
 
         // Reduce solver iterations for large-body-count scenes — trades a small
         // amount of contact precision for ~30% cheaper physics steps.
@@ -700,8 +701,13 @@ namespace pe
         auto it = m_nodeToIndex.find(node);
         if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
             return;
-        m_bodies[it->second].triggerEnterCallback = nullptr;
-        m_bodies[it->second].triggerExitCallback = nullptr;
+
+        PhysicsNodeState &state = m_bodies[it->second];
+        state.triggerEnterCallback = nullptr;
+        state.triggerExitCallback = nullptr;
+        state.contactCallback = nullptr;
+        if (state.inWorld)
+            m_contactBodies.erase(state.joltBodyIdRaw);
     }
 
     void PhysicsSystem::ClearAllTriggerCallbacks()
@@ -721,6 +727,7 @@ namespace pe
         auto it = m_nodeToIndex.find(node);
         if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
             return;
+
         PhysicsNodeState &state = m_bodies[it->second];
         state.contactCallback = std::move(callback);
         if (state.inWorld)
@@ -737,9 +744,18 @@ namespace pe
         auto it = m_nodeToIndex.find(node);
         if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
             return false;
+
         PhysicsNodeState &state = m_bodies[it->second];
         if (type == PhysicsBodyType::Static || state.desc.bodyType == PhysicsBodyType::Static)
             return false;
+        if (type == PhysicsBodyType::Dynamic && state.desc.shapeType == PhysicsShapeType::Mesh)
+        {
+            PE_WARN("[Physics] A mesh body cannot become dynamic: Jolt has no mass for a mesh shape");
+            return false;
+        }
+
+        if (!state.authoredBodyType)
+            state.authoredBodyType = state.desc.bodyType;
         state.desc.bodyType = type;
         if (state.inWorld && m_joltSystem)
         {
@@ -757,6 +773,7 @@ namespace pe
         auto it = m_nodeToIndex.find(node);
         if (it == m_nodeToIndex.end() || it->second >= m_bodies.size() || !MatchesNode(m_bodies[it->second], node))
             return;
+
         const PhysicsNodeState &state = m_bodies[it->second];
         if (state.inWorld && state.desc.bodyType == PhysicsBodyType::Kinematic)
             m_kinematicTargets[state.joltBodyIdRaw] = {pos, glm::normalize(rot)};
@@ -823,9 +840,15 @@ namespace pe
             if (!a || !b)
                 continue;
             if (a->contactCallback)
-                ready.push_back({a->contactCallback, a->nodeId, a->nodeRevision, b->nodeId, b->nodeRevision, c.speed, c.point});
+                ready.push_back({a->contactCallback,
+                                 a->nodeId, a->nodeRevision,
+                                 b->nodeId, b->nodeRevision,
+                                 c.speed, c.point});
             if (b->contactCallback)
-                ready.push_back({b->contactCallback, b->nodeId, b->nodeRevision, a->nodeId, a->nodeRevision, c.speed, c.point});
+                ready.push_back({b->contactCallback,
+                                 b->nodeId, b->nodeRevision,
+                                 a->nodeId, a->nodeRevision,
+                                 c.speed, c.point});
         }
         // Callbacks may add or remove bodies, so they run after the walk, each re-checked.
         for (const Ready &r : ready)
@@ -1194,6 +1217,15 @@ namespace pe
     {
         PE_PROFILE_SCOPE("Physics Stop Simulation");
 
+        // What scripts changed lasts one play session.
+        m_timeScale = 1.0f;
+        SetGravity(vec3(0.0f, kDefaultGravityY, 0.0f));
+        for (auto &state : m_bodies)
+        {
+            if (state.authoredBodyType)
+                state.desc.bodyType = *std::exchange(state.authoredBodyType, std::nullopt);
+        }
+
         if (!m_simulating)
         {
             ClearAllTriggerCallbacks();
@@ -1475,6 +1507,11 @@ namespace pe
         rotMat[2] = glm::normalize(rotMat[2]);
         quat rot = glm::normalize(glm::quat_cast(rotMat));
 
+        // Jolt has no mass for a mesh shape, so a mesh body never simulates as dynamic.
+        const bool meshShape = desc.shapeType == PhysicsShapeType::Mesh;
+        if (meshShape && desc.bodyType == PhysicsBodyType::Dynamic)
+            PE_WARN("[Physics] Mesh body '%s' cannot be dynamic: making it static", scene.GetNodeName(state.nodeId).c_str());
+
         // Determine motion type and layer
         JPH::EMotionType motionType;
         JPH::ObjectLayer layer;
@@ -1488,7 +1525,7 @@ namespace pe
             break;
         case PhysicsBodyType::Dynamic:
         default:
-            motionType = JPH::EMotionType::Dynamic;
+            motionType = meshShape ? JPH::EMotionType::Static : JPH::EMotionType::Dynamic;
             break;
         }
         layer = Layers::ToObjectLayer(desc.layer, motionType != JPH::EMotionType::Static);
@@ -1499,7 +1536,7 @@ namespace pe
             motionType, layer);
 
         // Kinematic gets the same mass and sweep as dynamic so SetBodyType can turn it into a falling body.
-        if (desc.bodyType == PhysicsBodyType::Dynamic || desc.bodyType == PhysicsBodyType::Kinematic)
+        if (!meshShape && (desc.bodyType == PhysicsBodyType::Dynamic || desc.bodyType == PhysicsBodyType::Kinematic))
         {
             bodySettings.mOverrideMassProperties = JPH::EOverrideMassProperties::CalculateInertia;
             bodySettings.mMassPropertiesOverride.mMass = std::max(desc.mass, 0.001f);

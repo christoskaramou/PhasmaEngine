@@ -470,8 +470,11 @@ namespace pe
                 cmd->SetConstantAt(i + 12, shadowsAvailable ? shadows.GetCascadeTexelSizeWorld(i) : 0.0f);
             }
 
+            // Fixed bounds cover the same world wherever the camera goes: no fade with its distance (0 = off).
+            const bool fixedShadows = gSettings.shadow_fixed_bounds && gSettings.shadow_bounds_radius > 0.0f;
+            const float shadowFade = std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f);
             cmd->SetConstantAt(16, gSettings.shadow_distance);
-            cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
+            cmd->SetConstantAt(17, fixedShadows ? 0.0f : gSettings.shadow_distance * shadowFade);
             cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
             cmd->SetConstantAt(19, gSettings.shadow_filter_radius);
             cmd->SetConstantAt(20, static_cast<uint32_t>(std::clamp(gSettings.shadow_debug_mode, 0, 2)));
@@ -1013,8 +1016,11 @@ namespace pe
         for (uint32_t i = 0; i < shadowmapCascades; i++)
             cmd->SetConstantAt(i + 12,
                                shadowsAvailable ? shadows.GetCascadeTexelSizeWorld(i) : 0.0f); // cascade world-space texel sizes
+        // Fixed bounds cover the same world wherever the camera goes: no fade with its distance (0 = off).
+        const bool fixedShadows = gSettings.shadow_fixed_bounds && gSettings.shadow_bounds_radius > 0.0f;
+        const float shadowFade = std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f);
         cmd->SetConstantAt(16, gSettings.shadow_distance);
-        cmd->SetConstantAt(17, gSettings.shadow_distance * std::clamp(gSettings.shadow_fade_fraction, 0.0f, 1.0f));
+        cmd->SetConstantAt(17, fixedShadows ? 0.0f : gSettings.shadow_distance * shadowFade);
         cmd->SetConstantAt(18, gSettings.shadow_normal_bias);
         cmd->SetConstantAt(19, gSettings.shadow_filter_radius);
         cmd->SetConstantAt(20, static_cast<uint32_t>(std::clamp(gSettings.shadow_debug_mode, 0, 2)));

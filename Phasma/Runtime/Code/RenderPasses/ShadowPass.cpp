@@ -9,6 +9,7 @@
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "GbufferPass.h"
+#include "Scene/HingeField.h"
 #include "Scene/Scene.h"
 #include "Render/SceneRenderTargets.h"
 #include "Scene/SceneAccess.h"
@@ -117,6 +118,28 @@ namespace pe
         m_voxelPassInfo->depthBiasClamp = Settings::Get<SceneSettings>().depth_bias[1];
         m_voxelPassInfo->depthBiasSlopeFactor = Settings::Get<SceneSettings>().depth_bias[2];
         m_voxelPassInfo->Update();
+
+        if (!SceneUsesWebProfile())
+        {
+            if (!m_hingePassInfo)
+                m_hingePassInfo = std::make_shared<PassInfo>();
+            m_hingePassInfo->name = "shadows_hinge_pipeline";
+            ShaderDesc hingeVS{};
+            hingeVS.sourcePath = Path::RuntimeAssets + "Shaders/Field/HingeShadowVS.hlsl";
+            hingeVS.entryPoint = "mainVS";
+            hingeVS.stage = PE_SHADER_STAGE_VERTEX;
+            m_hingePassInfo->pVertShader = Shader::Create(hingeVS);
+            m_hingePassInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT,
+                                              PE_DYNAMIC_STATE_SCISSOR,
+                                              PE_DYNAMIC_STATE_DEPTH_BIAS};
+            m_hingePassInfo->cullMode = PE_CULL_MODE_NONE;
+            m_hingePassInfo->depthFormat = RHII.GetDepthFormat();
+            m_hingePassInfo->depthBiasEnable = true;
+            m_hingePassInfo->depthBiasConstantFactor = Settings::Get<SceneSettings>().depth_bias[0];
+            m_hingePassInfo->depthBiasClamp = Settings::Get<SceneSettings>().depth_bias[1];
+            m_hingePassInfo->depthBiasSlopeFactor = Settings::Get<SceneSettings>().depth_bias[2];
+            m_hingePassInfo->Update();
+        }
 
         if (!m_cullPassInfo)
             m_cullPassInfo = std::make_shared<PassInfo>();
@@ -546,7 +569,9 @@ namespace pe
             mat4 lightViewMatrix = lookAt(frustumCenter - (lightDir * radius), frustumCenter, lightUp);
             // Casters up to clipRange toward the light are kept (at least the sphere's diameter in fixed mode).
             const float casterRange = fixedBounds ? std::max(clipRange, 2.0f * radius) : clipRange;
-            mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, maxExtents.z - minExtents.z, -casterRange);
+            mat4 lightOrthoMatrix = ortho(minExtents.x, maxExtents.x,
+                                          minExtents.y, maxExtents.y,
+                                          maxExtents.z - minExtents.z, -casterRange);
 
             // Store split distance and matrix in cascade
             m_cascades[i] = lightOrthoMatrix * lightViewMatrix;
@@ -675,6 +700,32 @@ namespace pe
                         cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
                     }
                 }
+                HingeField *hinges = m_scene->GetHingeField();
+                if (hinges && hinges->Ready() && hinges->CastsShadows() && m_hingePassInfo && m_hingePassInfo->pVertShader)
+                {
+                    Descriptor *set = m_hingePassInfo->GetDescriptors(frame)[0];
+                    set->SetBuffer(0, hinges->GetBuffer());
+                    set->Update();
+
+                    PushConstants_HingeShadow hingeConstants{};
+                    hingeConstants.vp = m_cascades[i];
+                    hingeConstants.time = hinges->GetClock();
+                    hingeConstants.generation = hinges->GetGeneration();
+
+                    cmd->BindPipeline(*m_hingePassInfo);
+                    cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
+                    const vec3 eye = GetActiveScene()->GetActiveCamera()->GetPosition();
+                    hinges->ForEachVisible(m_cascadePlanes[i], eye, [&](uint32_t first, uint32_t count, uint32_t)
+                    {
+                        hingeConstants.base = first;
+                        cmd->SetConstants(hingeConstants);
+                        cmd->PushConstants();
+                        cmd->Draw(HingeField::kNearVertices, count, 0, 0);
+                    });
+                    cmd->BindPipeline(passInfo);
+                    cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
+                }
+
                 // The cull lists generated-mask casters apart (counter 3); without it the replays walk every caster.
                 Buffer *maskIndirect = shadowCull ? m_scene->GetShadowIndirectMask(frame)
                                                   : m_scene->GetIndirectAll();
