@@ -24,6 +24,7 @@ fn robust_access_policies() -> BoundsCheckPolicies {
 }
 
 mod ffi;
+mod uniformity;
 
 // naga 29's spv writer has `unimplemented!()` paths (ImageClass::External,
 // some abstract-type lowering). `catch_unwind` recovers the thread but the
@@ -2256,6 +2257,14 @@ fn collect_short_circuit_bool_values(
         let Some(name) = trailing_identifier(&stmt[..eq]) else {
             continue;
         };
+        // Only immutable declarations have a known value; a `var` can be written later.
+        let declaration = &stmt[..eq];
+        let immutable = ["const", "let", "override"]
+            .iter()
+            .any(|keyword| find_keyword_from(declaration, keyword, 0).is_some());
+        if !immutable || find_keyword_from(declaration, "var", 0).is_some() {
+            continue;
+        }
         if let Some(v) = eval_short_circuit_bool_expr(&stmt[eq + 1..], &out) {
             out.insert(name.to_string(), v);
         }
@@ -7111,8 +7120,10 @@ fn call_pointer_args(
     callee: naga::Handle<naga::Function>,
     arguments: &[naga::Handle<naga::Expression>],
 ) -> Vec<(usize, PointerRoot)> {
+    // A call with too many arguments is reported later by naga's validator.
     arguments
         .iter()
+        .take(module.functions[callee].arguments.len())
         .enumerate()
         .filter(|(k, _)| {
             let param_ty = module.functions[callee].arguments[*k].ty;
@@ -13216,6 +13227,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
     bridge_errors.extend(validate_bool_order_comparisons(&module));
     bridge_errors.extend(validate_alias_analysis(&module));
+    bridge_errors.extend(uniformity::validate(&module, source));
     bridge_errors.extend(validate_div_rem(&module));
     // WGSL §17.6.3.4 / §17.6.3.21: clamp(v, low, high) and smoothstep(e0,
     // e1, x) require low ≤ high / e0 ≤ e1 when both are const- or override-
@@ -13448,6 +13460,31 @@ pub fn install_panic_suppression() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn short_circuit_on_a_var_is_not_folded_to_its_initializer() {
+        let values = collect_short_circuit_bool_values("var<private> n = false; const c = true;", None);
+        assert_eq!(values.get("n"), None);
+        assert_eq!(values.get("c"), Some(&true));
+    }
+
+    #[test]
+    fn misplaced_break_and_continue_are_errors_not_panics() {
+        assert!(compile_with_meta("fn f() { break; }").is_err());
+        assert!(compile_with_meta("fn f() { continue; }").is_err());
+    }
+
+    #[test]
+    fn uniformity_rejects_derivative_under_non_uniform_control_flow() {
+        let body = "var<private> n = false; @fragment fn main() { if n { _ = dpdx(1.0); } }";
+        assert!(compile_with_meta(body).is_err());
+        assert!(compile_with_meta(&format!("diagnostic(off, derivative_uniformity);\n{body}")).is_ok());
+    }
+
+    #[test]
+    fn call_with_too_many_arguments_is_an_error_not_a_panic() {
+        assert!(compile_with_meta("fn g() {} fn f() { g(1); }").is_err());
+    }
 
     #[test]
     fn continuing_shadows_of_loop_body_declarations_are_renamed() {
