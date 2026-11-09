@@ -22,7 +22,7 @@ namespace pe
         };
 
         static constexpr uint32_t kNearVertices = 36; // the whole box
-        static constexpr uint32_t kFarVertices = 12;  // top and the side that shows most
+        static constexpr uint32_t kFarVertices = 18;  // the three faces a box can show
 
         ~HingeField();
 

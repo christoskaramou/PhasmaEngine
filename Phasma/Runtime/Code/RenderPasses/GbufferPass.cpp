@@ -29,10 +29,11 @@ namespace pe
             float prevTime;
             uint32_t generation;
             uint32_t base;
-            vec3 eye;
+            float eye[3]; // not vec3: that is 16 bytes here (aligned GLM types), and the shader packs farLod right after
             uint32_t farLod;
             float nearDistance;
         };
+        static_assert(offsetof(PushConstants_HingeField, farLod) == 44 && offsetof(PushConstants_HingeField, nearDistance) == 48);
 
         void ApplyGBufferSurface(PassInfo &pi, const PassVariant &surface, bool writeVelocity, bool visibilityAttachment,
                                  bool writeVisibility)
@@ -555,7 +556,10 @@ namespace pe
                 hingeConstants.time = hinges->GetClock();
                 hingeConstants.prevTime = hinges->GetPreviousClock();
                 hingeConstants.generation = hinges->GetGeneration();
-                hingeConstants.eye = camera->GetPosition();
+                const vec3 hingeEye = camera->GetPosition();
+                hingeConstants.eye[0] = hingeEye.x;
+                hingeConstants.eye[1] = hingeEye.y;
+                hingeConstants.eye[2] = hingeEye.z;
                 hingeConstants.nearDistance = hinges->GetNearDistance();
 
                 cmd->BindPipeline(*m_hingePassInfo);

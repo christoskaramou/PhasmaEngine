@@ -14,7 +14,7 @@ struct PS_INPUT_Hinge
     nointerpolation uint face : TEXCOORD3;
     nointerpolation uint color : TEXCOORD4;
     float height : TEXCOORD5;
-    nointerpolation float distanceFade : TEXCOORD6;
+    nointerpolation float eyeRatio : TEXCOORD6;
 };
 
 struct PushConstants_HingeField
@@ -68,10 +68,15 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Hinge input)
     PS_OUTPUT_Gbuffer output;
 
     float3 color = float3(input.color & 255u, (input.color >> 8) & 255u, (input.color >> 16) & 255u) / 255.0f;
-    color *= 0.94f + 0.12f * input.side.y; // no two quite alike
+    // Distances, in near distances. Once a box is a few pixels across, whatever differs from one box or face to the next
+    // beats against the pixel grid as moire: `smooth` takes those differences away well before a box stops being a box.
+    const float flat = saturate((input.eyeRatio - 1.0f) * 4.0f);
+    const float smooth = max(flat, saturate((input.eyeRatio - 0.5f) / 0.7f));
+    color *= lerp(0.94f + 0.12f * input.side.y, 1.0f, smooth); // no two quite alike
 
-    // A fallen box shows its plain back: from afar the wave sweeps the picture away and leaves a sepia ghost of it.
-    const float fallen = saturate(input.rotation.w / 0.7f) * 0.9f * saturate(input.distanceFade * 4.0f);
+    // A fallen box shows its plain back: from far off the wave sweeps the picture away and leaves a sepia ghost of it.
+    // (Only that far: anywhere the follow camera looks, a fallen domino keeps its paint.)
+    const float fallen = saturate(input.rotation.w / 0.7f) * 0.9f * saturate((input.eyeRatio - 3.0f) / 2.0f);
     const float ghost = dot(color, float3(0.3f, 0.59f, 0.11f));
     color = lerp(color, float3(0.46f, 0.36f, 0.26f) * (0.25f + ghost), fallen);
 
@@ -86,12 +91,11 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Hinge input)
     const float sinA = input.rotation.w;
     const float3 tipped = HingeTip(localN, input.side.x, 0.0f, cosA, sinA);
     // Far off, every box takes the same light: a thousand tilted specks would shimmer against the pixels.
-    const float flat = saturate(input.distanceFade * 4.0f);
     const float3 worldN = HingeYaw(tipped, input.rotation.x, input.rotation.y);
-    const float3 N = normalize(lerp(worldN, float3(0.0f, 1.0f, 0.0f), flat * 0.85f));
+    const float3 N = normalize(lerp(worldN, float3(0.0f, 1.0f, 0.0f), smooth * 0.85f));
 
     // Enamel up close; far off a matte carpet, or its million small highlights wash the colours out.
-    float roughness = lerp(0.42f, 0.95f, flat);
+    float roughness = lerp(0.42f, 0.95f, smooth);
     if (input.face < 2u)
     {
         const float pip = PipMask(float2(centred.z, centred.y), input.side.y);
@@ -101,7 +105,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Hinge input)
     }
 
     // Contact shade toward the ground, where the neighbours and the floor shut out the sky.
-    const float occlusion = lerp(lerp(0.58f, 1.0f, saturate(input.height / 0.32f)), 1.0f, flat);
+    const float occlusion = lerp(lerp(0.58f, 1.0f, saturate(input.height / 0.32f)), 1.0f, smooth);
 
     output.normal = float4(N * 0.5f + 0.5f, 1.0f);
     output.albedo = float4(color, 1.0f);

@@ -41,7 +41,7 @@ struct VS_OUTPUT_Hinge
     nointerpolation uint face : TEXCOORD3;
     nointerpolation uint color : TEXCOORD4;
     float height : TEXCOORD5;
-    nointerpolation float distanceFade : TEXCOORD6; // 0 up close, 1 where a box is a speck
+    nointerpolation float eyeRatio : TEXCOORD6;     // distance from the eye, in near distances
     float4 position : SV_POSITION;
 };
 
@@ -64,7 +64,7 @@ VS_OUTPUT_Hinge mainVS(uint vertex : SV_VertexID, uint instance : SV_InstanceID)
     if (pc.farLod != 0u)
     {
         const float3 toEye = pc.eye - float3(inst.x, inst.y, inst.z);
-        face = HingeFarFace(face, HingeYaw(toEye, cosY, -sinY), side, angle);
+        face = HingeFarFace(face, HingeYaw(toEye, cosY, -sinY), side, cosA, sinA);
     }
 
     float3 local = HingeCornerLocal(face, vertex % 6u);
@@ -72,8 +72,9 @@ VS_OUTPUT_Hinge mainVS(uint vertex : SV_VertexID, uint instance : SV_InstanceID)
     // Far away the boxes close up into a carpet: thin tops would alias against the pixels into moire. The shading has
     // gone flat before this starts (see the PS), or the half-closed gaps would read as stripes.
     const float toEyeLength = distance(pc.eye, float3(inst.x, inst.y, inst.z));
-    const float distanceFade = pc.farLod != 0u ? saturate((toEyeLength - pc.nearDistance) / pc.nearDistance) : 0.0f;
-    const float carpet = saturate((distanceFade - 0.25f) / 0.75f);
+    // (by each box's own distance in both LODs: a whole cell switches LOD at once, and the shading must not step there)
+    const float eyeRatio = toEyeLength / max(pc.nearDistance, 1.0f);
+    const float carpet = saturate((eyeRatio - 1.25f) / 0.75f);
     if (carpet > 0.0f)
     {
         const float standing = 1.0f - saturate(angle / 0.35f);
@@ -96,6 +97,6 @@ VS_OUTPUT_Hinge mainVS(uint vertex : SV_VertexID, uint instance : SV_InstanceID)
     output.face = face;
     output.color = inst.color;
     output.height = world.y - inst.y;
-    output.distanceFade = distanceFade;
+    output.eyeRatio = eyeRatio;
     return output;
 }
