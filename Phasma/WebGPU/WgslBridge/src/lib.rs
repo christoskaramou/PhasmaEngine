@@ -2272,6 +2272,60 @@ fn collect_short_circuit_bool_values(
     out
 }
 
+// The identifier that starts `text`, after any whitespace.
+fn leading_identifier(text: &str) -> &str {
+    let text = text.trim_start();
+    let end = text.bytes().take_while(|&c| is_ident_char(c)).count();
+    &text[..end]
+}
+
+// Names whose values are only known at run time: every `var`, and every `let` whose value
+// collect_short_circuit_bool_values could not work out.
+// ponytail: function parameters are not collected; tracking them needs the function signatures.
+fn collect_short_circuit_runtime_names(
+    source: &str,
+    values: &HashMap<String, bool>,
+) -> HashSet<String> {
+    let mut out = HashSet::new();
+    let mut pos = 0usize;
+    while let Some(start) = find_keyword_from(source, "var", pos) {
+        let mut rest = source[start + 3..].trim_start();
+        // An address space and access mode come first: var<private>, var<storage, read_write>.
+        if rest.starts_with('<') {
+            rest = rest.find('>').map_or("", |close| &rest[close + 1..]);
+        }
+
+        let name = leading_identifier(rest);
+        if !name.is_empty() {
+            out.insert(name.to_string());
+        }
+        pos = start + 3;
+    }
+
+    for stmt in source.split(';') {
+        let Some(eq) = find_assignment_eq(stmt) else {
+            continue;
+        };
+        let Some(keyword) = find_keyword_from(&stmt[..eq], "let", 0) else {
+            continue;
+        };
+
+        let name = leading_identifier(&stmt[keyword + 3..eq]);
+        if !name.is_empty() && !values.contains_key(name) {
+            out.insert(name.to_string());
+        }
+    }
+    out
+}
+
+// Whether `expr` reads one of `names`. Such an expression is not a const-expression, so folding it to the value its
+// left operand settles would drop a run-time read the uniformity analysis has to see (`true || nonuniform` is not
+// uniform).
+fn short_circuit_reads_runtime_name(expr: &str, names: &HashSet<String>) -> bool {
+    expr.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_'))
+        .any(|token| names.contains(token))
+}
+
 fn find_top_level_logical_op(expr: &str, needle: &[u8]) -> Option<usize> {
     let bytes = expr.as_bytes();
     let mut depth = 0i32;
@@ -2382,6 +2436,7 @@ fn lower_short_circuit_source(source: &str, constants: Option<&HashMap<String, f
         return source.to_string();
     }
     let values = collect_short_circuit_bool_values(source, constants);
+    let runtime = collect_short_circuit_runtime_names(source, &values);
     let types = collect_short_circuit_types(source);
     let mut out = String::with_capacity(source.len());
     let mut changed = false;
@@ -2403,7 +2458,12 @@ fn lower_short_circuit_source(source: &str, constants: Option<&HashMap<String, f
                 out.push_str(stmt);
                 continue;
             }
-            if let Some(v) = eval_short_circuit_bool_expr(expr, &values) {
+            let folded = if short_circuit_reads_runtime_name(expr, &runtime) {
+                None
+            } else {
+                eval_short_circuit_bool_expr(expr, &values)
+            };
+            if let Some(v) = folded {
                 out.push_str(&stmt[..eq + 1]);
                 out.push(' ');
                 out.push_str(if v { "true" } else { "false" });
@@ -13278,6 +13338,11 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         Some((lowered_module, lowered_info)) => (lowered_module, lowered_info),
         None => (&module, &info),
     };
+    let access_copies = copy_override_access_components(emit_module);
+    let (emit_module, emit_info) = match &access_copies {
+        Some((copied_module, copied_info)) => (copied_module, copied_info),
+        None => (emit_module, emit_info),
+    };
 
     // catch_unwind: naga 29's SPIR-V writer has todo!() panics for some
     // unimplemented features. Emit failure leaves spirv=None; reflection survives.
@@ -13463,9 +13528,32 @@ mod tests {
 
     #[test]
     fn short_circuit_on_a_var_is_not_folded_to_its_initializer() {
-        let values = collect_short_circuit_bool_values("var<private> n = false; const c = true;", None);
+        let values =
+            collect_short_circuit_bool_values("var<private> n = false; const c = true;", None);
         assert_eq!(values.get("n"), None);
         assert_eq!(values.get("c"), Some(&true));
+    }
+
+    #[test]
+    fn short_circuit_keeps_a_skipped_non_uniform_operand_for_uniformity() {
+        // CTS shader,validation,uniformity,uniformity:short_circuit_expressions:case="or_uniform_nonuniform".
+        let module = |condition: &str| {
+            format!(
+                "@group(1) @binding(0) var t : texture_2d<f32>; @group(1) @binding(1) var s : sampler;\n\
+                 const uniform_cond = true; var<private> nonuniform_cond = false;\n\
+                 @fragment fn main() {{ let x = {condition}; if x {{ let tmp = textureSample(t, s, vec2f(0, 0)); }} }}"
+            )
+        };
+        assert!(compile_with_meta(&module("uniform_cond || nonuniform_cond")).is_err());
+        assert!(compile_with_meta(&module("uniform_cond || uniform_cond")).is_ok());
+
+        let values =
+            collect_short_circuit_bool_values("const c = true; var<private> n = false;", None);
+        let runtime = collect_short_circuit_runtime_names(
+            "const c = true; var<private> n = false; let l = n;",
+            &values,
+        );
+        assert!(runtime.contains("n") && runtime.contains("l") && !runtime.contains("c"));
     }
 
     #[test]
@@ -13478,7 +13566,9 @@ mod tests {
     fn uniformity_rejects_derivative_under_non_uniform_control_flow() {
         let body = "var<private> n = false; @fragment fn main() { if n { _ = dpdx(1.0); } }";
         assert!(compile_with_meta(body).is_err());
-        assert!(compile_with_meta(&format!("diagnostic(off, derivative_uniformity);\n{body}")).is_ok());
+        assert!(
+            compile_with_meta(&format!("diagnostic(off, derivative_uniformity);\n{body}")).is_ok()
+        );
     }
 
     #[test]
@@ -13534,6 +13624,37 @@ mod tests {
         let mut constants = HashMap::new();
         constants.insert("o".to_string(), 1e30);
         assert!(bake_wgsl_with_constants(src, constants, Some("main")).is_some());
+    }
+
+    #[test]
+    fn override_bake_copies_folded_composite_components() {
+        // naga's override fold reused the already emitted `vec2(o)` for `mat2x2(..)[0]` and the baked
+        // module failed validation (CTS early_evaluation override_let_matrix_vec).
+        let bake = |body: &str| {
+            let src = format!(
+                "override o : f32;
+fn foo() -> u32 {{
+  let l = f32(1e30);
+  {body}
+  return 0;
+}}
+@compute @workgroup_size(1) fn main() {{ _ = o; _ = foo(); }}
+"
+            );
+            let mut constants = HashMap::new();
+            constants.insert("o".to_string(), 1e30);
+            bake_wgsl_with_constants(&src, constants, Some("main")).is_some()
+        };
+        assert!(bake(
+            "let tmp = mat2x2(vec2(o), vec2(o))[0] * mat2x2(vec2(o), vec2(l))[0];"
+        ));
+        assert!(bake(
+            "let tmp = vec2(o * 2.0)[1] + mat2x2(vec2(o), vec2(o))[1][0];"
+        ));
+        // Both columns fold, so 1e30 * 1e30 still overflows.
+        assert!(!bake(
+            "let tmp = mat2x2(vec2(o), vec2(o))[0] * mat2x2(vec2(o), vec2(o))[0];"
+        ));
     }
 
     #[test]
@@ -14597,6 +14718,162 @@ pub fn wgsl_diagnostics(source: &str) -> Vec<WgslMessage> {
     }
 }
 
+// naga 29's process_overrides folds `composite[i]` over a constant or override composite to the
+// component's own handle, then rebuilds each Emit from its end handles. A fold to an earlier handle
+// therefore re-emits that component or stretches the Emit over its neighbours, and the processed
+// function fails validation (CTS early_evaluation override_let_matrix_vec). Returns a copy where
+// each such access holds a clone of an emitted component and has an Emit of its own, or None when
+// no function has one.
+// ponytail: AccessIndex only; `composite[o]` with an override index can still hit it. Upgrade:
+// treat Access the same way once its index value is known after substitution.
+fn copy_override_access_components(
+    module: &naga::Module,
+) -> Option<(naga::Module, naga::valid::ModuleInfo)> {
+    if module.overrides.is_empty() {
+        return None;
+    }
+
+    let functions = module
+        .functions
+        .iter()
+        .map(|(_, f)| f)
+        .chain(module.entry_points.iter().map(|ep| &ep.function));
+    let plans: Vec<_> = functions
+        .map(|f| plan_override_access_folds(&module.types, f))
+        .collect();
+    if plans.iter().all(|(folded, _)| folded.is_empty()) {
+        return None;
+    }
+
+    let mut copied = module.clone();
+    let functions = copied
+        .functions
+        .iter_mut()
+        .map(|(_, f)| f)
+        .chain(copied.entry_points.iter_mut().map(|ep| &mut ep.function));
+    for (function, (folded, copies)) in functions.zip(plans) {
+        for (handle, expr) in copies {
+            function.expressions[handle] = expr;
+        }
+        isolate_emits(&mut function.body, &folded);
+    }
+
+    let info = Validator::new(ValidationFlags::all(), Capabilities::all())
+        .validate(&copied)
+        .ok()?;
+    Some((copied, info))
+}
+
+// Returns the accesses naga will fold and, for those whose component is emitted, a clone of it.
+fn plan_override_access_folds(
+    types: &naga::UniqueArena<naga::Type>,
+    function: &naga::Function,
+) -> (
+    HashSet<naga::Handle<naga::Expression>>,
+    HashMap<naga::Handle<naga::Expression>, naga::Expression>,
+) {
+    use naga::Expression;
+
+    let kinds = naga::proc::ExpressionKindTracker::from_arena(&function.expressions);
+    let mut folded = HashSet::new();
+    let mut copies = HashMap::new();
+    for (handle, expr) in function.expressions.iter() {
+        let Expression::AccessIndex { base, index } = *expr else {
+            continue;
+        };
+        if !kinds.is_const_or_override(base) {
+            continue;
+        }
+
+        folded.insert(handle);
+        let base_expr = copies.get(&base).unwrap_or(&function.expressions[base]);
+        let component = match *base_expr {
+            Expression::Splat { value, .. } => value,
+            Expression::Compose { ty, ref components } => {
+                // A vector built from smaller vectors flattens, so its components are not indices.
+                let one_per_index = match types[ty].inner {
+                    naga::TypeInner::Vector { size, .. } => components.len() == size as usize,
+                    _ => true,
+                };
+                match components.get(index as usize) {
+                    Some(&component) if one_per_index => component,
+                    _ => continue,
+                }
+            }
+            _ => continue,
+        };
+
+        // Literals, constants and overrides are never emitted, so folding to them needs no clone.
+        let component_expr = copies
+            .get(&component)
+            .unwrap_or(&function.expressions[component])
+            .clone();
+        if !component_expr.needs_pre_emit() {
+            copies.insert(handle, component_expr);
+        }
+    }
+    (folded, copies)
+}
+
+fn isolate_emits(block: &mut naga::Block, isolated: &HashSet<naga::Handle<naga::Expression>>) {
+    use naga::{Range, Statement};
+
+    let original = std::mem::replace(block, naga::Block::with_capacity(block.len()));
+    for (mut stmt, span) in original.span_into_iter() {
+        match stmt {
+            Statement::Emit(ref range) => {
+                let mut run: Option<(
+                    naga::Handle<naga::Expression>,
+                    naga::Handle<naga::Expression>,
+                )> = None;
+                for handle in range.clone() {
+                    if !isolated.contains(&handle) {
+                        run = Some((run.map_or(handle, |(first, _)| first), handle));
+                        continue;
+                    }
+
+                    if let Some((first, last)) = run.take() {
+                        block.push(Statement::Emit(Range::new_from_bounds(first, last)), span);
+                    }
+                    block.push(
+                        Statement::Emit(Range::new_from_bounds(handle, handle)),
+                        span,
+                    );
+                }
+
+                if let Some((first, last)) = run {
+                    block.push(Statement::Emit(Range::new_from_bounds(first, last)), span);
+                }
+                continue;
+            }
+            Statement::Block(ref mut child) => isolate_emits(child, isolated),
+            Statement::If {
+                ref mut accept,
+                ref mut reject,
+                ..
+            } => {
+                isolate_emits(accept, isolated);
+                isolate_emits(reject, isolated);
+            }
+            Statement::Switch { ref mut cases, .. } => {
+                for case in cases.iter_mut() {
+                    isolate_emits(&mut case.body, isolated);
+                }
+            }
+            Statement::Loop {
+                ref mut body,
+                ref mut continuing,
+                ..
+            } => {
+                isolate_emits(body, isolated);
+                isolate_emits(continuing, isolated);
+            }
+            _ => {}
+        }
+        block.push(stmt, span);
+    }
+}
+
 // Pipeline-time SPIR-V emit. Keys follow WGSL §10.3.2.3: decimal(@id(n)) if
 // annotated, else the override name. When entry_point is set, substitution is
 // scoped to that entry point so unused overrides are not evaluated.
@@ -14725,6 +15002,7 @@ pub fn bake_wgsl_with_constants(
         .ok()?;
     let (module, info) =
         texture_external_emit_module(&module, &parse_source).unwrap_or((module, info));
+    let (module, info) = copy_override_access_components(&module).unwrap_or((module, info));
 
     // 0.0 stubs for missing no-default overrides; engine-side validation still
     // enforces "required but not provided" separately.

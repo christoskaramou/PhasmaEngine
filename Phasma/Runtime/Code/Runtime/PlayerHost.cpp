@@ -922,6 +922,12 @@ namespace pe
 #if !defined(PE_WIN32)
             windowDesc.flags |= SDL_WINDOW_MAXIMIZED;
 #endif
+#if defined(PE_WEB)
+            // ponytail: the canvas renders at CSS pixels, the units of input, the runtime UI and the swapchain, so
+            // high-DPI screens upscale it. To lift it: size the swapchain from SDL_GetWindowSizeInPixels and map
+            // input and UI from points to pixels.
+            windowDesc.flags &= ~SDL_WINDOW_ALLOW_HIGHDPI;
+#endif
 
             RuntimeWindow window(windowDesc);
             RuntimeRhiSession rhi(window.Get(), api, false);

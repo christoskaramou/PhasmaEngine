@@ -221,6 +221,7 @@ namespace pe
                     "WebGpuImageImpl::Blit: source and destination layer counts differ");
 
         WGPUCommandEncoder encoder = EncoderOf(cmd);
+        WebGpuCommandBufferImpl *recorder = WebGpuCommandBufferImpl::From(cmd);
         for (uint32_t layer = 0; layer < region.dstSubresource.layerCount; ++layer)
         {
             WebGpuBlitRegion blit{};
@@ -236,7 +237,8 @@ namespace pe
             blit.dstFrom[1] = region.dstOffsets[0].y;
             blit.dstTo[0] = region.dstOffsets[1].x;
             blit.dstTo[1] = region.dstOffsets[1].y;
-            WebGpuBlitTexture(encoder, source->m_texture, m_texture, blit, filter == PE_FILTER_LINEAR, false);
+            const bool linear = filter == PE_FILTER_LINEAR;
+            recorder->DestroyAfterSubmit(WebGpuBlitTexture(encoder, source->m_texture, m_texture, blit, linear, false));
         }
     }
 
@@ -253,6 +255,7 @@ namespace pe
                     image->GetName().c_str());
 
         WGPUCommandEncoder encoder = EncoderOf(cmd);
+        WebGpuCommandBufferImpl *recorder = WebGpuCommandBufferImpl::From(cmd);
         for (uint32_t layer = 0; layer < image->GetArrayLayers(); ++layer)
         {
             for (uint32_t mip = 1; mip < image->GetMipLevels(); ++mip)
@@ -266,7 +269,7 @@ namespace pe
                 blit.dstLayer = layer;
                 blit.dstTo[0] = static_cast<int32_t>(MipExtent(image->GetWidth(), mip));
                 blit.dstTo[1] = static_cast<int32_t>(MipExtent(image->GetHeight(), mip));
-                WebGpuBlitTexture(encoder, m_texture, m_texture, blit, true, true);
+                recorder->DestroyAfterSubmit(WebGpuBlitTexture(encoder, m_texture, m_texture, blit, true, true));
             }
         }
 

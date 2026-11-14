@@ -15,6 +15,8 @@
 #include "API/RenderPass.h"
 #include "API/Sampler.h"
 #include "API/Shader.h"
+#include "Base/FileSystem.h"
+#include "Base/Process.h"
 #include "Camera/Camera.h"
 #include "ForwardPlusLightCullingPass.h"
 #include "Render/SceneRendererHost.h"
@@ -57,12 +59,16 @@ namespace pe
         {
             using Baked = GlobalIlluminationPass;
             texels.resize(size_t(Baked::kBakedWidth) * Baked::kBakedHeight * 4);
-            std::ifstream file(path, std::ios::binary);
-            file.read(reinterpret_cast<char *>(&header), sizeof(header));
-            file.read(reinterpret_cast<char *>(texels.data()),
-                      static_cast<std::streamsize>(texels.size() * sizeof(uint16_t)));
-            if (!file.good())
+
+            // FileSystem serves the game pack in an exported game and loose files otherwise.
+            FileSystem file(PathUtf8(path), std::ios_base::in);
+            const size_t texelBytes = texels.size() * sizeof(uint16_t);
+            if (!file.IsOpen() || file.Size() < sizeof(header) + texelBytes)
                 return false;
+
+            const std::vector<uint8_t> bytes = file.ReadAllBytes();
+            std::memcpy(&header, bytes.data(), sizeof(header));
+            std::memcpy(texels.data(), bytes.data() + sizeof(header), texelBytes);
 
             const bool valid = std::memcmp(header.magic, "PEGI", 4) == 0 &&
                                header.version == Baked::kBakedVersion &&

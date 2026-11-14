@@ -10,10 +10,37 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include "miniaudio.h"
 
+#if defined(PE_WEB)
+#include <emscripten.h>
+
+// Whether audio can play: a page starts miniaudio's AudioContexts suspended until its first click or key press. After
+// that gesture the context is resuming, and a sound asked for in the meantime plays a moment late rather than never.
+// The body is JavaScript; clang-format would split its => into "= >".
+// clang-format off
+EM_JS(int, PeWebAudioUnlocked, (), {
+    const devices = window.miniaudio ? window.miniaudio.devices : [];
+    const running = devices.some((device) => device && device.webaudio && device.webaudio.state === "running");
+    const gesture = navigator.userActivation ? navigator.userActivation.hasBeenActive : true;
+    return running || gesture ? 1 : 0;
+});
+// clang-format on
+#endif
+
 namespace pe
 {
     namespace
     {
+        // A one-shot started while the browser holds audio back waits at its first frame, so every one of them would
+        // play at once on the first click or key press. They are dropped instead; music and sources still wait.
+        bool OneShotsHeldBack()
+        {
+#if defined(PE_WEB)
+            return !PeWebAudioUnlocked();
+#else
+            return false;
+#endif
+        }
+
         // miniaudio VFS that serves game-pack audio from memory and delegates everything else
         // to the stock file IO. Installed unconditionally; without a pack every open falls through.
         struct PackVfs
@@ -265,6 +292,9 @@ namespace pe
         if (!m_engine || !std::isfinite(volume) || !std::isfinite(pitch) || volume < 0.f || pitch <= 0.f)
             return;
 
+        if (OneShotsHeldBack())
+            return;
+
         std::string fullPath = ResolvePath(path);
         KeepResident(fullPath);
         auto *sound = new ma_sound();
@@ -287,7 +317,7 @@ namespace pe
 
     void AudioSystem::PlaySound3D(const std::string &path, const vec3 &pos)
     {
-        if (!m_engine)
+        if (!m_engine || OneShotsHeldBack())
             return;
 
         std::string fullPath = ResolvePath(path);

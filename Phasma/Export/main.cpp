@@ -14,6 +14,7 @@ namespace
         std::filesystem::path project;
         std::filesystem::path output;
         bool force = false;
+        bool web = false;
     };
 
     std::string ToUtf8(const std::filesystem::path &path)
@@ -52,6 +53,14 @@ namespace
                 options.output = argv[++i];
             else if (arg == "--force")
                 options.force = true;
+            else if (arg == "--target" && i + 1 < argc)
+            {
+                const std::string target = argv[++i];
+                if (target != "web" && target != "desktop")
+                    throw std::runtime_error("Unknown target: " + target);
+
+                options.web = target == "web";
+            }
             else if (arg == "--help" || arg == "-h")
                 return false;
             else
@@ -62,7 +71,7 @@ namespace
 
     void PrintUsage()
     {
-        std::cout << "Usage: PhasmaExport --project <project-dir> --output <export-dir> [--force]\n";
+        std::cout << "Usage: PhasmaExport --project <project-dir> --output <export-dir> [--target desktop|web] [--force]\n";
     }
 
     std::vector<uint8_t> ReadFile(const std::filesystem::path &path)
@@ -90,7 +99,8 @@ namespace
 
     std::vector<uint8_t> CompileLua(lua_State *lua,
                                     const std::filesystem::path &sourcePath,
-                                    const std::string &packPath)
+                                    const std::string &packPath,
+                                    bool web)
     {
         const std::vector<uint8_t> source = ReadFile(sourcePath);
         const std::string chunkName = "@" + packPath;
@@ -104,6 +114,14 @@ namespace
             const std::string error = message ? message : "unknown Lua compile error";
             lua_pop(lua, 1);
             throw std::runtime_error(error);
+        }
+
+        // ponytail: the browser's Lua 5.4 cannot load LuaJIT bytecode, so the web pack keeps checked source.
+        // Costs size and load-time parsing; dump 5.4 bytecode from a 5.4 VM in the exporter to lift it.
+        if (web)
+        {
+            lua_pop(lua, 1);
+            return source;
         }
 
         std::vector<uint8_t> bytecode;
@@ -220,10 +238,7 @@ namespace
                "It is otherwise empty; this file is here so the folder survives being zipped.\n";
     }
 
-    void CopyRuntime(const std::filesystem::path &runtimeDir,
-                     const std::filesystem::path &output,
-                     lua_State *lua,
-                     std::vector<pe::GamePackBuildEntry> &packEntries)
+    void CopyRuntimeBinaries(const std::filesystem::path &runtimeDir, const std::filesystem::path &output)
     {
         bool copiedPlayer = false;
         bool copiedCore = false;
@@ -241,6 +256,18 @@ namespace
         }
         if (!copiedPlayer || !copiedCore)
             throw std::runtime_error("PhasmaPlayer and PhasmaCore must be beside PhasmaExport");
+    }
+
+    void CopyRuntime(const std::filesystem::path &runtimeDir,
+                     const std::filesystem::path &output,
+                     lua_State *lua,
+                     std::vector<pe::GamePackBuildEntry> &packEntries,
+                     bool web)
+    {
+        if (!web)
+        {
+            CopyRuntimeBinaries(runtimeDir, output);
+        }
 
         const std::filesystem::path runtimeAssets = runtimeDir / "RuntimeAssets";
         if (!std::filesystem::is_directory(runtimeAssets))
@@ -259,7 +286,7 @@ namespace
             pe::GamePackBuildEntry packedEntry;
             packedEntry.path = "RuntimeAssets/" + relativePath;
             packedEntry.data = entry.path().extension() == ".lua"
-                                   ? CompileLua(lua, entry.path(), packedEntry.path)
+                                   ? CompileLua(lua, entry.path(), packedEntry.path, web)
                                    : ReadFile(entry.path());
             packEntries.push_back(std::move(packedEntry));
         }
@@ -269,7 +296,8 @@ namespace
     void ExportAssets(const pe::ProjectConfig &project,
                       const std::filesystem::path &output,
                       lua_State *lua,
-                      std::vector<pe::GamePackBuildEntry> &packEntries)
+                      std::vector<pe::GamePackBuildEntry> &packEntries,
+                      bool web)
     {
         const std::filesystem::path assetsRoot = project.AssetsRoot();
         const std::vector<std::string> ignoreRules = ReadIgnoreRules(project.root);
@@ -292,7 +320,7 @@ namespace
             pe::GamePackBuildEntry packedEntry;
             packedEntry.path = packPath;
             packedEntry.data = entry.path().extension() == ".lua"
-                                   ? CompileLua(lua, entry.path(), packPath)
+                                   ? CompileLua(lua, entry.path(), packPath, web)
                                    : ReadFile(entry.path());
             packEntries.push_back(std::move(packedEntry));
         }
@@ -354,8 +382,8 @@ int main(int argc, char **argv)
                 throw std::runtime_error("Failed to create Lua compiler state");
 
             std::vector<pe::GamePackBuildEntry> packEntries;
-            CopyRuntime(runtimeDir, temporary, lua.get(), packEntries);
-            ExportAssets(*project, temporary, lua.get(), packEntries);
+            CopyRuntime(runtimeDir, temporary, lua.get(), packEntries, options.web);
+            ExportAssets(*project, temporary, lua.get(), packEntries, options.web);
             std::sort(packEntries.begin(), packEntries.end(),
                       [](const auto &a, const auto &b)
                       { return a.path < b.path; });

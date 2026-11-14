@@ -37,6 +37,7 @@ struct WGPUPendingSubmit
     pe::CommandBuffer *cmd = nullptr;
     uint64_t serial = 0; // Submission serial this cmd was submitted at.
     std::vector<pe::ImageView *> nativeImageViews;
+    std::vector<pe::Buffer *> nativeBuffers;
 };
 
 struct WGPUQueueImpl
@@ -112,6 +113,11 @@ struct WGPUDeviceImpl
     bool supportsDepthClamp = false;
     bool supportsDepthClipEnable = false;
     WGPUDescriptorBufferState descriptorBuffer;
+
+    // dispatchWorkgroupsIndirect validation (ComputePass.cpp), created at the first indirect dispatch.
+    PeBackendHandle indirectValidationLayout = 0;
+    PeBackendHandle indirectValidationPipeline = 0;
+    std::mutex indirectValidationMutex;
 
     std::string adapterVendor;
     std::string adapterArchitecture;

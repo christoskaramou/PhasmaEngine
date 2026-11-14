@@ -8,6 +8,8 @@ set(PHASMAPLAYER_RUNTIME_UI_SOURCES
     "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/ImGuiRuntimeUiBackend.cpp"
     "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/ImGuiRuntimeUiBackend.h"
     "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/ImGuiRuntimeUiStyle.h"
+    "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_webgpu.cpp"
+    "${CMAKE_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_webgpu.h"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui.cpp"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_draw.cpp"
     "${PE_SHARED_THIRD_PARTY_DIR}/imgui/imgui_tables.cpp"
@@ -70,12 +72,25 @@ if(PE_WEB)
         -sEXIT_RUNTIME=0
     )
 
+    # The game page: a full-window canvas sized by CSS, with a loading and error line.
+    set(PE_WEB_SHELL "${CMAKE_CURRENT_SOURCE_DIR}/web_shell.html")
+    target_link_options(PhasmaPlayer PRIVATE "SHELL:--shell-file ${PE_WEB_SHELL}")
+    set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_SHELL})
+
     # Engine runtime assets go into MEMFS at /RuntimeAssets, where Path looks under the web root (spec decision 13).
     # Emscripten writes them to PhasmaPlayer.data, which the page downloads before main.
     # ponytail: everything downloads before start; fetch on demand once the asset set grows.
-    file(GLOB_RECURSE PE_WEB_RUNTIME_ASSETS CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
-    target_link_options(PhasmaPlayer PRIVATE "SHELL:--preload-file ${PE_RUNTIME_ASSETS_SOURCE_DIR}@/RuntimeAssets")
-    set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_RUNTIME_ASSETS})
+    # A web export (PhasmaExport --target web) carries the engine assets in its pack, so it replaces them.
+    set(PE_WEB_EXPORT "" CACHE PATH "PhasmaExport --target web folder the browser player runs at the web root")
+    if(PE_WEB_EXPORT)
+        file(GLOB_RECURSE PE_WEB_EXPORT_FILES CONFIGURE_DEPENDS "${PE_WEB_EXPORT}/*")
+        target_link_options(PhasmaPlayer PRIVATE "SHELL:--preload-file ${PE_WEB_EXPORT}@/")
+        set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_EXPORT_FILES})
+    else()
+        file(GLOB_RECURSE PE_WEB_RUNTIME_ASSETS CONFIGURE_DEPENDS "${PE_RUNTIME_ASSETS_SOURCE_DIR}/*")
+        target_link_options(PhasmaPlayer PRIVATE "SHELL:--preload-file ${PE_RUNTIME_ASSETS_SOURCE_DIR}@/RuntimeAssets")
+        set_property(TARGET PhasmaPlayer APPEND PROPERTY LINK_DEPENDS ${PE_WEB_RUNTIME_ASSETS})
+    endif()
 
     # The baked shader cache (tools/bake_web_shaders.py) goes into MEMFS at /ShaderCache as loose files, where the WebGPU
     # shader Impl reads _spv, _wgsl and the binding sidecars (spec decisions 7 and 13). Without it, the first shader is

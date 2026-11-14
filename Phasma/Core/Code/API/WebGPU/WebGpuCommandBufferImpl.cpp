@@ -98,6 +98,9 @@ namespace pe
         if (m_commands)
             wgpuCommandBufferRelease(m_commands);
 
+        // Recorded again or reset without a submit: nothing will read them.
+        DestroyTransientBuffers();
+
         m_renderPass = nullptr;
         m_computePass = nullptr;
         m_encoder = nullptr;
@@ -193,6 +196,18 @@ namespace pe
         WGPUCommandBuffer commands = m_commands;
         m_commands = nullptr;
         return commands;
+    }
+
+    void WebGpuCommandBufferImpl::DestroyTransientBuffers()
+    {
+        // Destroying after the submit is valid: the memory is reclaimed once submitted work using it completes.
+        for (WGPUBuffer buffer : m_destroyAfterSubmit)
+        {
+            wgpuBufferDestroy(buffer);
+            wgpuBufferRelease(buffer);
+        }
+
+        m_destroyAfterSubmit.clear();
     }
 
     void WebGpuCommandBufferImpl::CheckNotGpuWritten(Buffer *buffer, const char *what)

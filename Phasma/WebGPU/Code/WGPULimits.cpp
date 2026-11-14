@@ -7,35 +7,51 @@ namespace pwgpu
     void FillLimitsFromCore(WGPULimits &out, const pe::GpuLimits &limits)
     {
         out.nextInChain = nullptr;
-        out.maxTextureDimension1D = limits.maxTextureDimension1D;
-        out.maxTextureDimension2D = limits.maxTextureDimension2D;
-        out.maxTextureDimension3D = limits.maxTextureDimension3D;
-        out.maxTextureArrayLayers = limits.maxTextureArrayLayers;
-        out.maxBindGroups = limits.maxBindGroups;
-        out.maxDynamicUniformBuffersPerPipelineLayout = limits.maxDynamicUniformBuffersPerPipelineLayout;
-        out.maxDynamicStorageBuffersPerPipelineLayout = limits.maxDynamicStorageBuffersPerPipelineLayout;
-        out.maxSampledTexturesPerShaderStage = limits.maxSampledTexturesPerShaderStage;
-        out.maxSamplersPerShaderStage = limits.maxSamplersPerShaderStage;
-        out.maxStorageBuffersPerShaderStage = limits.maxStorageBuffersPerShaderStage;
-        out.maxStorageTexturesPerShaderStage = limits.maxStorageTexturesPerShaderStage;
-        out.maxUniformBuffersPerShaderStage = limits.maxUniformBuffersPerShaderStage;
+
+        // Capped at Dawn's highest limit tiers (src/dawn/native/Limits.cpp), the values Chrome reports on
+        // high-end GPUs. Raw Vulkan counts such as 1,048,576 textures per stage are not usable through WebGPU,
+        // and the CTS maximum-limit tests build shaders and layouts that large.
+        // ponytail: one fixed tier for every adapter; bucket by hardware like Dawn if lower tiers are needed.
+        // With maxBindGroups 4 and maxVertexBuffers 8, maxBindGroupsPlusVertexBuffers (24) cannot be exceeded,
+        // so its createRenderPipeline and draw checks are not implemented; add them if these caps rise.
+        constexpr uint64_t kMaxBufferBytes = 4ull * 1024 * 1024 * 1024 - 4;
+        out.maxTextureDimension1D = std::min(limits.maxTextureDimension1D, 16384u);
+        out.maxTextureDimension2D = std::min(limits.maxTextureDimension2D, 16384u);
+        out.maxTextureDimension3D = std::min(limits.maxTextureDimension3D, 2048u);
+        out.maxTextureArrayLayers = std::min(limits.maxTextureArrayLayers, 2048u);
+        out.maxBindGroups = std::min(limits.maxBindGroups, 4u);
+        out.maxDynamicUniformBuffersPerPipelineLayout = std::min(limits.maxDynamicUniformBuffersPerPipelineLayout, 10u);
+        out.maxDynamicStorageBuffersPerPipelineLayout = std::min(limits.maxDynamicStorageBuffersPerPipelineLayout, 8u);
+        out.maxSampledTexturesPerShaderStage = std::min(limits.maxSampledTexturesPerShaderStage, 48u);
+        out.maxSamplersPerShaderStage = std::min(limits.maxSamplersPerShaderStage, 16u);
+        out.maxStorageBuffersPerShaderStage = std::min(limits.maxStorageBuffersPerShaderStage, 16u);
+        out.maxStorageTexturesPerShaderStage = std::min(limits.maxStorageTexturesPerShaderStage, 8u);
+        out.maxUniformBuffersPerShaderStage = std::min(limits.maxUniformBuffersPerShaderStage, 12u);
         out.maxUniformBufferBindingSize = limits.maxUniformBufferBindingSize;
-        out.maxStorageBufferBindingSize = limits.maxStorageBufferBindingSize;
-        out.minUniformBufferOffsetAlignment = limits.minUniformBufferOffsetAlignment;
-        out.minStorageBufferOffsetAlignment = limits.minStorageBufferOffsetAlignment;
-        out.maxVertexBuffers = limits.maxVertexBuffers;
-        out.maxBufferSize = limits.maxBufferSize;
-        out.maxVertexAttributes = limits.maxVertexAttributes;
+
+        // Adapter capability guarantees: maxStorageBufferBindingSize is a multiple of 4 and both offset
+        // alignments are at least 32 bytes (Vulkan reports 2^32-1 and 16 on NVIDIA).
+        // pe::Buffer rounds storage sizes up to the backend's storage alignment, so the binding size is rounded
+        // down to it: a buffer of exactly this size must still fit the range (2^32-4 would round up to 2^32).
+        const uint64_t storageAlignment = std::max(limits.minStorageBufferOffsetAlignment, 4u);
+        const uint64_t maxStorageBinding = std::min<uint64_t>(limits.maxStorageBufferBindingSize, kMaxBufferBytes);
+        out.maxStorageBufferBindingSize = maxStorageBinding & ~(storageAlignment - 1);
+        out.minUniformBufferOffsetAlignment = std::max(limits.minUniformBufferOffsetAlignment, 32u);
+        out.minStorageBufferOffsetAlignment = std::max(limits.minStorageBufferOffsetAlignment, 32u);
+        out.maxVertexBuffers = std::min(limits.maxVertexBuffers, 8u);
+        out.maxBufferSize = std::min<uint64_t>(limits.maxBufferSize, kMaxBufferBytes);
+        out.maxVertexAttributes = std::min(limits.maxVertexAttributes, 30u);
         out.maxVertexBufferArrayStride = limits.maxVertexBufferArrayStride;
-        out.maxInterStageShaderVariables = limits.maxInterStageShaderVariables;
+        out.maxInterStageShaderVariables = std::min(limits.maxInterStageShaderVariables, 28u);
         out.maxColorAttachments = limits.maxColorAttachments;
+
         // RHI exposes backend limits; WebGPU derives this non-native aggregate.
         out.maxColorAttachmentBytesPerSample = 64;
-        out.maxComputeWorkgroupStorageSize = limits.maxComputeWorkgroupStorageSize;
-        out.maxComputeInvocationsPerWorkgroup = limits.maxComputeInvocationsPerWorkgroup;
-        out.maxComputeWorkgroupSizeX = limits.maxComputeWorkgroupSizeX;
-        out.maxComputeWorkgroupSizeY = limits.maxComputeWorkgroupSizeY;
-        out.maxComputeWorkgroupSizeZ = limits.maxComputeWorkgroupSizeZ;
+        out.maxComputeWorkgroupStorageSize = std::min(limits.maxComputeWorkgroupStorageSize, 65536u);
+        out.maxComputeInvocationsPerWorkgroup = std::min(limits.maxComputeInvocationsPerWorkgroup, 1024u);
+        out.maxComputeWorkgroupSizeX = std::min(limits.maxComputeWorkgroupSizeX, 1024u);
+        out.maxComputeWorkgroupSizeY = std::min(limits.maxComputeWorkgroupSizeY, 1024u);
+        out.maxComputeWorkgroupSizeZ = std::min(limits.maxComputeWorkgroupSizeZ, 64u);
         out.maxComputeWorkgroupsPerDimension = limits.maxComputeWorkgroupsPerDimension;
         out.maxImmediateSize = 0;
 

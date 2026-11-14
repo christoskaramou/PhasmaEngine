@@ -44,6 +44,8 @@ void WGPUQueueImpl::RecyclePendingSubmits()
                 it->cmd->Return();
                 for (auto *view : it->nativeImageViews)
                     pe::ImageView::Destroy(view);
+                for (auto *native : it->nativeBuffers)
+                    pe::Buffer::Destroy(native);
                 it = pendingSubmits.erase(it);
             }
             else
@@ -414,6 +416,7 @@ extern "C"
                 pending.cmd = cmds[i];
                 pending.serial = serial;
                 pending.nativeImageViews = std::move(validCBs[i]->retained.nativeImageViews);
+                pending.nativeBuffers = std::move(validCBs[i]->retained.nativeBuffers);
                 queue->pendingSubmits.push_back(std::move(pending));
             }
         }

@@ -14,7 +14,9 @@ namespace pe
                                  uint64_t submissionValue)
     {
         std::vector<WGPUCommandBuffer> commands;
+        std::vector<WebGpuCommandBufferImpl *> submitted;
         commands.reserve(commandBuffersCount);
+        submitted.reserve(commandBuffersCount);
         for (uint32_t i = 0; i < commandBuffersCount; ++i)
         {
             CommandBuffer *cmd = commandBuffers[i];
@@ -29,6 +31,7 @@ namespace pe
             if (list)
                 commands.push_back(list);
 
+            submitted.push_back(impl);
             cmd->SetSubmission(submissionValue);
         }
 
@@ -37,6 +40,9 @@ namespace pe
 
         if (!commands.empty())
             wgpuQueueSubmit(WebGpuRhiImpl::Get()->m_queue, commands.size(), commands.data());
+
+        for (WebGpuCommandBufferImpl *impl : submitted)
+            impl->DestroyTransientBuffers();
 
         for (WGPUCommandBuffer list : commands)
             wgpuCommandBufferRelease(list);

@@ -722,11 +722,10 @@ extern "C"
         if (texture->invalid)
             return reportValidation("texture is invalid");
 
-        // Destroyed texture use as an attachment is reported at queue.submit() (§3.3).
-        // Return a quiet stub view so encoders can retain it without touching a null
-        // native image/view.
-        if (texture->destroyed)
-            return reportValidation(nullptr);
+        // A destroyed texture still gets a validated view with its resolved descriptor, which
+        // createBindGroup checks; only the native views are skipped, and any use is reported at
+        // queue.submit() (§3.3).
+        const bool destroyed = texture->destroyed;
 
         WGPUTextureViewDescriptor resolved{};
         resolved.format = WGPUTextureFormat_Undefined;
@@ -975,6 +974,7 @@ extern "C"
         // do its own pre-pass clear) and STORAGE_BINDING-only views (compute writes
         // overwrite contents anyway).
         if (texture->image &&
+            !destroyed &&
             (viewUsage & WGPUTextureUsage_RenderAttachment) == 0 &&
             (viewUsage & (WGPUTextureUsage_TextureBinding | WGPUTextureUsage_CopySrc)) != 0)
         {
@@ -1014,7 +1014,7 @@ extern "C"
         constexpr WGPUTextureUsage kVkViewableUsages =
             WGPUTextureUsage_TextureBinding | WGPUTextureUsage_StorageBinding |
             WGPUTextureUsage_RenderAttachment;
-        if (texture->image && (viewUsage & kVkViewableUsages) != 0)
+        if (texture->image && !destroyed && (viewUsage & kVkViewableUsages) != 0)
         {
             const std::string viewName = view->label.empty()
                                              ? (texture->label + "_view")

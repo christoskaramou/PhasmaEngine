@@ -177,6 +177,174 @@ namespace
         if (!imageBarriers.empty())
             cpe->cmd->ImageBarriers(imageBarriers);
     }
+
+    // dispatchWorkgroupsIndirect, queue timeline: a workgroup count above maxComputeWorkgroupsPerDimension makes the
+    // dispatch do nothing. Only the GPU knows the counts, so this one-thread shader copies them into scratch indirect
+    // arguments, or zeros when any is over the limit, and the dispatch reads those. Built offline from:
+    //
+    //     struct Params { uint64_t source; uint64_t destination; uint limit; };
+    //     [[vk::push_constant]] Params params;
+    //
+    //     [numthreads(1, 1, 1)]
+    //     void main()
+    //     {
+    //         const uint3 counts = vk::RawBufferLoad<uint3>(params.source, 4);
+    //         const bool valid = all(counts <= params.limit);
+    //         vk::RawBufferStore<uint3>(params.destination, valid ? counts : uint3(0, 0, 0), 4);
+    //     }
+    //
+    // with dxc -T cs_6_0 -E main -spirv -fspv-target-env=vulkan1.2 -O3 (DXC 1.9.0.5347, Vulkan SDK 1.4.350.0).
+    // clang-format off
+    constexpr uint32_t kIndirectValidationSpirv[] = {
+        0x07230203, 0x00010500, 0x000e0000, 0x00000024, 0x00000000, 0x00020011, 0x00000001, 0x00020011,
+        0x0000000b, 0x00020011, 0x000014e3, 0x0003000e, 0x000014e4, 0x00000001, 0x0006000f, 0x00000005,
+        0x00000001, 0x6e69616d, 0x00000000, 0x00000002, 0x00060010, 0x00000001, 0x00000011, 0x00000001,
+        0x00000001, 0x00000001, 0x00030003, 0x00000005, 0x00000258, 0x00090005, 0x00000003, 0x65707974,
+        0x7375502e, 0x6e6f4368, 0x6e617473, 0x61502e74, 0x736d6172, 0x00000000, 0x00050006, 0x00000003,
+        0x00000000, 0x72756f73, 0x00006563, 0x00060006, 0x00000003, 0x00000001, 0x74736564, 0x74616e69,
+        0x006e6f69, 0x00050006, 0x00000003, 0x00000002, 0x696d696c, 0x00000074, 0x00040005, 0x00000002,
+        0x61726170, 0x0000736d, 0x00040005, 0x00000001, 0x6e69616d, 0x00000000, 0x00050048, 0x00000003,
+        0x00000000, 0x00000023, 0x00000000, 0x00050048, 0x00000003, 0x00000001, 0x00000023, 0x00000008,
+        0x00050048, 0x00000003, 0x00000002, 0x00000023, 0x00000010, 0x00030047, 0x00000003, 0x00000002,
+        0x00040015, 0x00000004, 0x00000020, 0x00000001, 0x0004002b, 0x00000004, 0x00000005, 0x00000000,
+        0x0004002b, 0x00000004, 0x00000006, 0x00000002, 0x0004002b, 0x00000004, 0x00000007, 0x00000001,
+        0x00040015, 0x00000008, 0x00000020, 0x00000000, 0x0004002b, 0x00000008, 0x00000009, 0x00000000,
+        0x00040017, 0x0000000a, 0x00000008, 0x00000003, 0x0006002c, 0x0000000a, 0x0000000b, 0x00000009,
+        0x00000009, 0x00000009, 0x00040015, 0x0000000c, 0x00000040, 0x00000000, 0x0005001e, 0x00000003,
+        0x0000000c, 0x0000000c, 0x00000008, 0x00040020, 0x0000000d, 0x00000009, 0x00000003, 0x00020013,
+        0x0000000e, 0x00030021, 0x0000000f, 0x0000000e, 0x00020014, 0x00000010, 0x00040020, 0x00000011,
+        0x00000009, 0x0000000c, 0x00040020, 0x00000012, 0x000014e5, 0x0000000a, 0x00040020, 0x00000013,
+        0x00000009, 0x00000008, 0x00040017, 0x00000014, 0x00000010, 0x00000003, 0x0004003b, 0x0000000d,
+        0x00000002, 0x00000009, 0x00050036, 0x0000000e, 0x00000001, 0x00000000, 0x0000000f, 0x000200f8,
+        0x00000015, 0x00050041, 0x00000011, 0x00000016, 0x00000002, 0x00000005, 0x0004003d, 0x0000000c,
+        0x00000017, 0x00000016, 0x0004007c, 0x00000012, 0x00000018, 0x00000017, 0x0006003d, 0x0000000a,
+        0x00000019, 0x00000018, 0x00000002, 0x00000004, 0x00050041, 0x00000013, 0x0000001a, 0x00000002,
+        0x00000006, 0x0004003d, 0x00000008, 0x0000001b, 0x0000001a, 0x00060050, 0x0000000a, 0x0000001c,
+        0x0000001b, 0x0000001b, 0x0000001b, 0x000500b2, 0x00000014, 0x0000001d, 0x00000019, 0x0000001c,
+        0x0004009b, 0x00000010, 0x0000001e, 0x0000001d, 0x00050041, 0x00000011, 0x0000001f, 0x00000002,
+        0x00000007, 0x0004003d, 0x0000000c, 0x00000020, 0x0000001f, 0x00060050, 0x00000014, 0x00000021,
+        0x0000001e, 0x0000001e, 0x0000001e, 0x000600a9, 0x0000000a, 0x00000022, 0x00000021, 0x00000019,
+        0x0000000b, 0x0004007c, 0x00000012, 0x00000023, 0x00000020, 0x0005003e, 0x00000023, 0x00000022,
+        0x00000002, 0x00000004, 0x000100fd, 0x00010038,
+    };
+    // clang-format on
+
+    struct IndirectValidationParams
+    {
+        uint64_t source = 0;
+        uint64_t destination = 0;
+        uint32_t limit = 0;
+        uint32_t padding = 0;
+    };
+
+    // The validation pipeline, created once per device at its first indirect dispatch.
+    bool EnsureIndirectValidationPipeline(WGPUDeviceImpl *device)
+    {
+        std::lock_guard<std::mutex> lock(device->indirectValidationMutex);
+        if (device->indirectValidationPipeline)
+            return true;
+
+        vk::Device vkDevice = pe::VulkanRhi::Device();
+        vk::PipelineLayout layout{};
+        vk::ShaderModule module{};
+        try
+        {
+            const vk::PushConstantRange range{vk::ShaderStageFlagBits::eCompute, 0, sizeof(IndirectValidationParams)};
+            vk::PipelineLayoutCreateInfo layoutInfo{};
+            layoutInfo.pushConstantRangeCount = 1;
+            layoutInfo.pPushConstantRanges = &range;
+            layout = vkDevice.createPipelineLayout(layoutInfo);
+
+            vk::ShaderModuleCreateInfo moduleInfo{};
+            moduleInfo.codeSize = sizeof(kIndirectValidationSpirv);
+            moduleInfo.pCode = kIndirectValidationSpirv;
+            module = vkDevice.createShaderModule(moduleInfo);
+
+            vk::ComputePipelineCreateInfo pipelineInfo{};
+            pipelineInfo.stage.stage = vk::ShaderStageFlagBits::eCompute;
+            pipelineInfo.stage.module = module;
+            pipelineInfo.stage.pName = "main";
+            pipelineInfo.layout = layout;
+            const vk::Pipeline pipeline = vkDevice.createComputePipeline(nullptr, pipelineInfo).value;
+
+            vkDevice.destroyShaderModule(module);
+            device->indirectValidationLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
+            device->indirectValidationPipeline = PeToBackendHandle(static_cast<VkPipeline>(pipeline));
+            return true;
+        }
+        catch (...)
+        {
+            if (module)
+                vkDevice.destroyShaderModule(module);
+
+            if (layout)
+                vkDevice.destroyPipelineLayout(layout);
+
+            return false;
+        }
+    }
+
+    // Records the validation shader for one indirect dispatch and returns its scratch arguments, which the command
+    // encoder owns until the GPU is done with them. Null when the counts cannot be validated here.
+    pe::Buffer *ValidatedIndirectArguments(WGPUComputePassEncoder cpe, WGPUBufferImpl *source, uint64_t offset)
+    {
+        WGPUDeviceImpl *device = cpe->device;
+        const bool addressable = (source->peBuffer->Usage() & PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS) != 0;
+        if (!addressable || !cpe->parent || !EnsureIndirectValidationPipeline(device))
+            return nullptr;
+
+        pe::Buffer *arguments = nullptr;
+        try
+        {
+            arguments = pe::Buffer::Create({
+                .size = 3 * sizeof(uint32_t),
+                .usage = PE_BUFFER_USAGE_INDIRECT_BUFFER | PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS,
+                .memoryUsage = PE_MEMORY_USAGE_GPU_ONLY,
+                .name = "wgpu_indirect_dispatch_arguments",
+            });
+        }
+        catch (...)
+        {
+            return nullptr;
+        }
+
+        cpe->parent->retained.nativeBuffers.push_back(arguments);
+
+        IndirectValidationParams params{};
+        params.source = source->peBuffer->GetDeviceAddress() + offset;
+        params.destination = arguments->GetDeviceAddress();
+        params.limit = device->limits.maxComputeWorkgroupsPerDimension;
+
+        const vk::PipelineLayout layout{PeFromBackendHandle<VkPipelineLayout>(device->indirectValidationLayout)};
+        const vk::Pipeline pipeline{PeFromBackendHandle<VkPipeline>(device->indirectValidationPipeline)};
+        vk::CommandBuffer cmd = pe::GetVulkanCommandBuffer(cpe->cmd);
+
+        // The application's last write of the counts (a copy, a dispatch, a queue write) lands before the shader reads.
+        const vk::MemoryBarrier toShader{vk::AccessFlagBits::eMemoryWrite, vk::AccessFlagBits::eShaderRead};
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eAllCommands,
+                            vk::PipelineStageFlagBits::eComputeShader,
+                            {},
+                            toShader,
+                            {},
+                            {});
+
+        cmd.bindPipeline(vk::PipelineBindPoint::eCompute, pipeline);
+        cmd.pushConstants(layout, vk::ShaderStageFlagBits::eCompute, 0, sizeof(params), &params);
+        cmd.dispatch(1, 1, 1);
+
+        const vk::MemoryBarrier toIndirect{vk::AccessFlagBits::eShaderWrite, vk::AccessFlagBits::eIndirectCommandRead};
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eComputeShader,
+                            vk::PipelineStageFlagBits::eDrawIndirect,
+                            {},
+                            toIndirect,
+                            {},
+                            {});
+
+        // Back to the application's pipeline. Its bind groups stay bound: the validation layout has no sets.
+        cpe->bindingCache.computePipeline = nullptr;
+        pwgpu::BindWebGPUComputePipeline(cpe->cmd, cpe->pipeline, &cpe->bindingCache);
+        return arguments;
+    }
 } // namespace
 
 extern "C"
@@ -650,7 +818,15 @@ extern "C"
         EmitDispatchResourceBarriers(cpe, buffer);
 
         pwgpu::FlushPendingBarriers(cpe->cmd);
-        pe::GetVulkanCommandBuffer(cpe->cmd).dispatchIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset);
+
+        // ponytail: without device addresses (no bufferDeviceAddress) the counts are dispatched unchecked; such a
+        // device needs a descriptor-bound variant of the validation shader.
+        vk::CommandBuffer vkCmd = pe::GetVulkanCommandBuffer(cpe->cmd);
+        if (pe::Buffer *arguments = ValidatedIndirectArguments(cpe, buffer, offset))
+            vkCmd.dispatchIndirect(pe::GetVulkanBuffer(arguments), 0);
+        else
+            vkCmd.dispatchIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset);
+
         wgpuBufferAddRef(buffer);
         cpe->usedBuffers.push_back(buffer);
     }
@@ -767,3 +943,16 @@ extern "C"
     }
 
 } // extern "C"
+
+void pwgpu::DestroyIndirectDispatchValidation(WGPUDeviceImpl *device)
+{
+    if (!device || !device->indirectValidationPipeline)
+        return;
+
+    vk::Device vkDevice = pe::VulkanRhi::Device();
+    vkDevice.destroyPipeline(vk::Pipeline{PeFromBackendHandle<VkPipeline>(device->indirectValidationPipeline)});
+    vkDevice.destroyPipelineLayout(
+        vk::PipelineLayout{PeFromBackendHandle<VkPipelineLayout>(device->indirectValidationLayout)});
+    device->indirectValidationPipeline = 0;
+    device->indirectValidationLayout = 0;
+}

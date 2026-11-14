@@ -30,6 +30,14 @@ namespace pe
         // fails inside a render pass, where WebGPU locks the encoder.
         WGPUCommandEncoder GetEncoder() { return Encoder("an image command"); }
 
+        // For a renderer that records its own draws inside a pass this command buffer opened (the runtime UI).
+        WGPURenderPassEncoder GetRenderPass() const { return m_renderPass; }
+
+        // A buffer only these commands read (a blit's parameters). The queue destroys it right after their submit, so
+        // its GPU memory goes when they finish; a release alone leaves it to the browser's garbage collector.
+        void DestroyAfterSubmit(WGPUBuffer buffer) { m_destroyAfterSubmit.push_back(buffer); }
+        void DestroyTransientBuffers();
+
         void Begin() override;
         void End() override;
         void Reset() override;
@@ -128,6 +136,7 @@ namespace pe
         uint32_t m_attachmentWidth = 0;
         uint32_t m_attachmentHeight = 0;
         std::vector<WebGpuBufferImpl *> m_referenced;
+        std::vector<WGPUBuffer> m_destroyAfterSubmit;
         std::vector<Descriptor *> m_boundDescriptors; // set index order
 
         // Bound state reaches the pass at the next draw or dispatch, since every WebGPU pass starts without any.

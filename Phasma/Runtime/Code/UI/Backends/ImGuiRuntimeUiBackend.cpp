@@ -37,6 +37,12 @@
 #if defined(PE_VULKAN)
 #include "imgui_impl_vulkan.h"
 #endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuCommandBufferImpl.h"
+#include "API/WebGPU/WebGpuImageImpl.h"
+#include "API/WebGPU/WebGpuRhiImpl.h"
+#include "UI/Backends/imgui_impl_webgpu.h"
+#endif
 
 namespace pe
 {
@@ -198,7 +204,9 @@ namespace pe
             bool IsSupported() const override
             {
                 const PeGraphicsApi api = RHII.GetApi();
-#if defined(PE_WIN32)
+#if defined(PE_WEB)
+                return api == PE_GRAPHICS_API_WEBGPU;
+#elif defined(PE_WIN32)
                 return api == PE_GRAPHICS_API_VULKAN || api == PE_GRAPHICS_API_DX12;
 #else
                 return api == PE_GRAPHICS_API_VULKAN;
@@ -289,7 +297,9 @@ namespace pe
                 ReleaseImageTextures();
                 if (m_rendererInitialized)
                 {
-#if defined(PE_WIN32)
+#if defined(PE_WEB)
+                    ImGui_ImplWebGpu_Shutdown();
+#elif defined(PE_WIN32)
                     if (m_api == PE_GRAPHICS_API_DX12)
                         ImGui_ImplDX12_Shutdown();
                     else
@@ -666,6 +676,12 @@ namespace pe
                 attachment.storeOp = PE_STORE_OP_STORE;
 
                 context.cmd->BeginPass(1, &attachment, "RuntimeUI", true);
+#if defined(PE_WEB)
+                ImGui_ImplWebGpu_RenderDrawData(drawData,
+                                                WebGpuCommandBufferImpl::From(context.cmd)->GetRenderPass(),
+                                                context.renderTarget->GetWidth(),
+                                                context.renderTarget->GetHeight());
+#endif
 #if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
@@ -1574,6 +1590,11 @@ namespace pe
                 if (!image || !image->GetSampler() || !image->GetSRV())
                     return nullptr;
 
+#if defined(PE_WEB)
+                const ImTextureID id = ImGui_ImplWebGpu_AddTexture(WebGpuImageViewImpl::From(image->GetSRV())->m_view);
+                return reinterpret_cast<void *>(static_cast<uintptr_t>(id));
+#endif
+
 #if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
@@ -1617,6 +1638,9 @@ namespace pe
                 if (!textureID)
                     return;
 
+#if defined(PE_WEB)
+                ImGui_ImplWebGpu_RemoveTexture(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(textureID)));
+#endif
 #if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                 {
@@ -1777,10 +1801,31 @@ namespace pe
                 case PE_GRAPHICS_API_DX12:
                     return InitDx12(renderTarget);
 #endif
+#if defined(PE_WEB)
+                case PE_GRAPHICS_API_WEBGPU:
+                    return InitWebGpu(renderTarget);
+#endif
                 default:
-                    return false; // ponytail: no WebGPU ImGui renderer yet (spec decision 11)
+                    return false;
                 }
             }
+
+#if defined(PE_WEB)
+            bool InitWebGpu(Image *renderTarget)
+            {
+                if (!renderTarget)
+                    return false;
+
+                ImGui_ImplSDL2_InitForOther(RHII.GetWindow());
+                m_platformInitialized = true;
+
+                WebGpuRhiImpl *rhi = WebGpuRhiImpl::Get();
+                ImGui_ImplWebGpu_Init(rhi->m_device, rhi->m_queue, WebGpuImageImpl::From(renderTarget)->m_format);
+                m_rendererInitialized = true;
+                m_api = PE_GRAPHICS_API_WEBGPU;
+                return true;
+            }
+#endif
 
 #if defined(PE_VULKAN)
             bool InitVulkan(Image *renderTarget)
@@ -1883,6 +1928,9 @@ namespace pe
 #if defined(PE_VULKAN)
                 if (m_api == PE_GRAPHICS_API_VULKAN)
                     ImGui_ImplVulkan_CreateFontsTexture();
+#endif
+#if defined(PE_WEB)
+                ImGui_ImplWebGpu_CreateFontsTexture();
 #endif
             }
 

@@ -21,12 +21,13 @@ namespace pe
 
     // Records a render pass that draws the source region into the destination region. `clear` discards the rest of
     // the destination mip (a whole-mip blit), otherwise it is kept. The destination needs RenderAttachment usage.
-    void WebGpuBlitTexture(WGPUCommandEncoder encoder,
-                           WGPUTexture src,
-                           WGPUTexture dst,
-                           const WebGpuBlitRegion &region,
-                           bool linear,
-                           bool clear);
+    // Returns the blit's uniform buffer for WebGpuCommandBufferImpl::DestroyAfterSubmit.
+    [[nodiscard]] WGPUBuffer WebGpuBlitTexture(WGPUCommandEncoder encoder,
+                                               WGPUTexture src,
+                                               WGPUTexture dst,
+                                               const WebGpuBlitRegion &region,
+                                               bool linear,
+                                               bool clear);
 
     // Releases the cached pipelines and samplers (WebGpuRhiImpl::Shutdown).
     void WebGpuBlitShutdown();

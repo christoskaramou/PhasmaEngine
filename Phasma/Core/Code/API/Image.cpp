@@ -12,6 +12,7 @@
 #endif
 #if defined(PE_WEB)
 #include "API/WebGPU/WebGpuImageImpl.h"
+#include <glm/gtc/packing.hpp>
 #endif
 
 #define STB_IMAGE_IMPLEMENTATION
@@ -684,6 +685,21 @@ namespace pe
             return nullptr;
         }
 
+        size_t floatBytes = 16;
+#if defined(PE_WEB)
+        // rgba32f needs the optional float32-filterable feature; rgba16f filters on every adapter.
+        if (isFloat)
+        {
+            auto *floats = static_cast<float *>(pixels);
+            auto *halves = static_cast<uint16_t *>(pixels);
+            for (size_t i = 0; i < size_t(texWidth) * texHeight * 4; i++)
+                halves[i] = glm::packHalf1x16(floats[i]);
+
+            format = PE_FORMAT_R16G16B16A16_SFLOAT;
+            floatBytes = 8;
+        }
+#endif
+
         uint32_t mipLevels = Image::CalculateMips(texWidth, texHeight);
         PeImageUsageFlags usage = PE_IMAGE_USAGE_TRANSFER_SRC | PE_IMAGE_USAGE_TRANSFER_DST |
                                   PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_STORAGE;
@@ -693,7 +709,7 @@ namespace pe
         samplerInfo.maxLod = static_cast<float>(mipLevels);
         samplerInfo.borderColor = PE_SAMPLER_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
 
-        Image *image = CreateImageAndUpload(cmd, path, pixels, texWidth * texHeight * (isFloat ? 16 : 4),
+        Image *image = CreateImageAndUpload(cmd, path, pixels, texWidth * texHeight * (isFloat ? floatBytes : 4),
                                             texWidth, texHeight, format, mipLevels, usage, samplerInfo);
 
         cmd->AddAfterWaitCallback([pixels]()

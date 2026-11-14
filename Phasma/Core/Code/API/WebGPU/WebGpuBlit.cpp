@@ -137,8 +137,8 @@ struct Params {
             return wgpuTextureCreateView(texture, &desc);
         }
 
-        // ponytail: one 32-byte uniform buffer per blit (a mip chain makes one per level); a ring with dynamic
-        // offsets would avoid the allocations if blits become frequent.
+        // ponytail: one 32-byte uniform buffer per blit (a mip chain makes one per level, a frame at least one),
+        // destroyed after its submit; a ring with dynamic offsets would avoid the allocations.
         WGPUBuffer ParamsBuffer(WGPUDevice device, const float (&params)[8])
         {
             WGPUBufferDescriptor desc{};
@@ -152,12 +152,12 @@ struct Params {
         }
     } // namespace
 
-    void WebGpuBlitTexture(WGPUCommandEncoder encoder,
-                           WGPUTexture src,
-                           WGPUTexture dst,
-                           const WebGpuBlitRegion &region,
-                           bool linear,
-                           bool clear)
+    WGPUBuffer WebGpuBlitTexture(WGPUCommandEncoder encoder,
+                                 WGPUTexture src,
+                                 WGPUTexture dst,
+                                 const WebGpuBlitRegion &region,
+                                 bool linear,
+                                 bool clear)
     {
         WGPUDevice device = WebGpuRhiImpl::Get()->m_device;
         WGPURenderPipeline pipeline = PipelineFor(wgpuTextureGetFormat(dst));
@@ -234,9 +234,9 @@ struct Params {
         // WebGPU keeps each object alive while the recorded commands use it.
         wgpuRenderPassEncoderRelease(pass);
         wgpuBindGroupRelease(group);
-        wgpuBufferRelease(paramsBuffer);
         wgpuTextureViewRelease(dstView);
         wgpuTextureViewRelease(srcView);
+        return paramsBuffer;
     }
 
     void WebGpuBlitShutdown()

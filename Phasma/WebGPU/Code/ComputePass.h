@@ -40,3 +40,9 @@ struct WGPUComputePassEncoderImpl
     pwgpu::WebGPUBindingCache bindingCache;
     bool usageScopeValid = true;
 };
+
+namespace pwgpu
+{
+    // Releases the dispatchWorkgroupsIndirect validation pipeline (ReleaseDevice, after the queue is idle).
+    void DestroyIndirectDispatchValidation(WGPUDeviceImpl *device);
+} // namespace pwgpu

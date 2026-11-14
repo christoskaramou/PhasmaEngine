@@ -76,7 +76,7 @@ float3 ScreenSpaceReflections(float3 position, float3 normal, float metallic, fl
             continue;
         }
 
-        float depth_sample       = Depth.Sample(sampler_Depth, uv).x;
+        float depth_sample       = DepthAt(Depth, sampler_Depth, uv);
         float actual_view_depth  = abs(GetPosFromUV(uv, depth_sample, cb_invProj).z);
         float curr_view_depth    = abs(new_pos.z);
         float delta              = curr_view_depth - actual_view_depth;
@@ -113,7 +113,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (pc.linearColor != 0)
         albedo = SrgbToLinear(albedo);
     float4 color             = Color.Sample(sampler_Color, input.uv);
-    float depth              = Depth.Sample(sampler_Depth, input.uv).x;
+    float depth              = DepthAt(Depth, sampler_Depth, input.uv);
 
     if (depth == 0.0)
     {

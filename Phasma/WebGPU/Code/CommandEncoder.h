@@ -17,8 +17,9 @@ struct WGPUTextureImpl;
 
 namespace pe
 {
+    class Buffer;
     class ImageView;
-}
+} // namespace pe
 
 struct RetainedResources
 {
@@ -31,6 +32,7 @@ struct RetainedResources
     std::vector<WGPUBufferImpl *> usedBuffers;   // buffers touched by this command encoder
     std::vector<WGPUTextureImpl *> usedTextures; // textures touched by this command encoder
     std::vector<pe::ImageView *> nativeImageViews;
+    std::vector<pe::Buffer *> nativeBuffers; // layer-owned scratch the commands read (indirect dispatch arguments)
 
     void UseBuffer(WGPUBufferImpl *buffer)
     {

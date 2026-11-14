@@ -17,6 +17,7 @@
 #include "RenderPipeline.h"
 #include "ComputePipeline.h"
 #include "CommandEncoder.h"
+#include "ComputePass.h"
 #include "DescriptorBuffer.h"
 #include "Instance.h"
 #include "RenderBundle.h"
@@ -879,6 +880,8 @@ void pwgpu::ReleaseDevice(WGPUDeviceImpl *device)
         }
         if (device->descriptorBuffer.buffer)
             pe::Buffer::Destroy(device->descriptorBuffer.buffer);
+
+        pwgpu::DestroyIndirectDispatchValidation(device);
         WGPUInstance inst = device->instance;
         delete device;
         if (inst)
@@ -1253,6 +1256,13 @@ extern "C"
             peUsage |= PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS;
         if (usage & WGPUBufferUsage_Indirect)
             peUsage |= PE_BUFFER_USAGE_INDIRECT_BUFFER;
+
+        // The dispatchWorkgroupsIndirect validation shader reads the counts through a device address (Vulkan).
+        const bool vulkanAddresses = device->rhi && device->rhi->GetApi() == PE_GRAPHICS_API_VULKAN &&
+                                     device->rhi->GetCaps().bufferDeviceAddress;
+        if ((usage & WGPUBufferUsage_Indirect) && vulkanAddresses)
+            peUsage |= PE_BUFFER_USAGE_SHADER_DEVICE_ADDRESS;
+
         if (usage & WGPUBufferUsage_QueryResolve)
             peUsage |= PE_BUFFER_USAGE_TRANSFER_DST;
         if (usage & WGPUBufferUsage_MapRead)
@@ -1415,6 +1425,17 @@ extern "C"
 
         if (usage == WGPUTextureUsage_None)
             return makeInvalid("usage must not be 0");
+
+        // Spec "allowed texture usages": the always-allowed bits; no feature adds more yet.
+        constexpr WGPUTextureUsage kAllowedUsages = WGPUTextureUsage_CopySrc |
+                                                    WGPUTextureUsage_CopyDst |
+                                                    WGPUTextureUsage_TextureBinding |
+                                                    WGPUTextureUsage_StorageBinding |
+                                                    WGPUTextureUsage_RenderAttachment |
+                                                    WGPUTextureUsage_TransientAttachment;
+        if ((usage & ~kAllowedUsages) != 0)
+            return makeInvalid("usage contains bits that are not allowed texture usages");
+
         if (w == 0 || h == 0 || d == 0)
             return makeInvalid("size width/height/depthOrArrayLayers must be > 0");
         if (mips == 0)
@@ -2451,6 +2472,10 @@ extern "C"
             }
         }
 
+        // §3.3: a destroyed resource is a queue.submit() error, not a createBindGroup one, so it only
+        // marks the bind group invalid after every createBindGroup check has passed.
+        bool destroyedResource = false;
+
         std::unordered_set<uint32_t> seenBindings;
         for (size_t i = 0; i < descriptor->entryCount; ++i)
         {
@@ -2487,13 +2512,8 @@ extern "C"
                     return makeInvalid("buffer resource is invalid");
                 if (buf->device != device)
                     return makeInvalid("buffer resource device mismatch");
-                // §3.3: destroyed resources defer to queue.submit().
-                if (buf->internalState.load(std::memory_order_acquire) ==
-                    BufferInternalState::Destroyed)
-                {
-                    bg->invalidFromDestroyedResource = true;
-                    return makeInvalid(nullptr);
-                }
+                if (buf->internalState.load(std::memory_order_acquire) == BufferInternalState::Destroyed)
+                    destroyedResource = true;
 
                 {
                     uint64_t offset = entry.offset;
@@ -2581,12 +2601,12 @@ extern "C"
                     return makeInvalid("texture resource is null");
                 if (tv->texture->invalid)
                     return makeInvalid("texture resource is invalid");
-                // §3.3: destroyed defers to queue.submit().
-                if (tv->texture->destroyed)
-                {
-                    bg->invalidFromDestroyedResource = true;
-                    return makeInvalid(nullptr);
-                }
+
+                // A destroyed texture's native views are released, so only its recorded state is checked.
+                const bool destroyed = tv->texture->destroyed;
+                if (destroyed)
+                    destroyedResource = true;
+
                 if (tv->texture->device != device)
                     return makeInvalid("texture resource device mismatch");
 
@@ -2608,7 +2628,7 @@ extern "C"
 
                 if (!(tv->usage & WGPUTextureUsage_TextureBinding))
                     return makeInvalid("textureView missing TEXTURE_BINDING usage");
-                if (!pwgpu::TextureBindingImageView(tv))
+                if (!destroyed && !pwgpu::TextureBindingImageView(tv))
                     return makeInvalid("textureView native TEXTURE_BINDING view is invalid");
 
                 if (le.texture.multisampled)
@@ -2684,12 +2704,12 @@ extern "C"
                     return makeInvalid("storageTexture resource is null");
                 if (tv->texture->invalid)
                     return makeInvalid("storageTexture resource is invalid");
-                // §3.3: destroyed defers to queue.submit().
-                if (tv->texture->destroyed)
-                {
-                    bg->invalidFromDestroyedResource = true;
-                    return makeInvalid(nullptr);
-                }
+
+                // A destroyed texture's native views are released, so only its recorded state is checked.
+                const bool destroyed = tv->texture->destroyed;
+                if (destroyed)
+                    destroyedResource = true;
+
                 if (tv->texture->device != device)
                     return makeInvalid("storageTexture resource device mismatch");
 
@@ -2701,7 +2721,7 @@ extern "C"
 
                 if (!(tv->usage & WGPUTextureUsage_StorageBinding))
                     return makeInvalid("textureView missing STORAGE_BINDING usage");
-                if (!pwgpu::StorageBindingImageView(tv))
+                if (!destroyed && !pwgpu::StorageBindingImageView(tv))
                     return makeInvalid("textureView native STORAGE_BINDING view is invalid");
 
                 if (tv->mipLevelCount != 1)
@@ -2738,6 +2758,12 @@ extern "C"
                         "compatibility mode requires textureView arrayLayerCount to "
                         "equal texture's depthOrArrayLayers");
             }
+        }
+
+        if (destroyedResource)
+        {
+            bg->invalidFromDestroyedResource = true;
+            return makeInvalid(nullptr);
         }
 
         bool descriptorBufferWritesOk = true;
@@ -4253,7 +4279,7 @@ extern "C"
                 }
 
                 // maxInterStageShaderVariables limit checks (spec §10.3.1)
-                constexpr uint32_t kMaxInterStageVars = 16;
+                const uint32_t deviceMaxInterStage = device->limits.maxInterStageShaderVariables;
 
                 // Spec §10.3.1: if the vertex shader declares @builtin(clip_distances)
                 // with array size N, decrement both maxVertexShaderOutputVariables and
@@ -4270,7 +4296,7 @@ extern "C"
                         clipSlots = (n + 3u) / 4u;
                 }
                 const uint32_t maxInterStageNow =
-                    (clipSlots < kMaxInterStageVars) ? (kMaxInterStageVars - clipSlots) : 0u;
+                    (clipSlots < deviceMaxInterStage) ? (deviceMaxInterStage - clipSlots) : 0u;
 
                 // Vertex: each output location must be < maxInterStageShaderVariables
                 // (reduced by clip_distances slots if present).

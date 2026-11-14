@@ -42,6 +42,7 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     usedBuffers.insert(usedBuffers.end(), other.usedBuffers.begin(), other.usedBuffers.end());
     usedTextures.insert(usedTextures.end(), other.usedTextures.begin(), other.usedTextures.end());
     nativeImageViews.insert(nativeImageViews.end(), other.nativeImageViews.begin(), other.nativeImageViews.end());
+    nativeBuffers.insert(nativeBuffers.end(), other.nativeBuffers.begin(), other.nativeBuffers.end());
     other.renderPipelines.clear();
     other.computePipelines.clear();
     other.bindGroups.clear();
@@ -51,6 +52,7 @@ void RetainedResources::MergeFrom(RetainedResources &other)
     other.usedBuffers.clear();
     other.usedTextures.clear();
     other.nativeImageViews.clear();
+    other.nativeBuffers.clear();
 }
 
 void RetainedResources::ReleaseAll()
@@ -69,6 +71,8 @@ void RetainedResources::ReleaseAll()
         wgpuRenderBundleRelease(rb);
     for (auto *view : nativeImageViews)
         pe::ImageView::Destroy(view);
+    for (auto *native : nativeBuffers)
+        pe::Buffer::Destroy(native);
     for (auto *buf : usedBuffers)
         wgpuBufferRelease(buf);
     for (auto *tex : usedTextures)
@@ -82,6 +86,7 @@ void RetainedResources::ReleaseAll()
     usedBuffers.clear();
     usedTextures.clear();
     nativeImageViews.clear();
+    nativeBuffers.clear();
 }
 
 namespace
