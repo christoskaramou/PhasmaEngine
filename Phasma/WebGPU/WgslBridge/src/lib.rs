@@ -11,6 +11,10 @@ use naga::front::wgsl;
 use naga::proc::{BoundsCheckPolicies, BoundsCheckPolicy, ResolveContext, TypeResolution};
 use naga::valid::{Capabilities, ValidationFlags, Validator};
 
+// WGSL allows subgroup operations in compute and fragment shaders only.
+const WGSL_CAPABILITIES: Capabilities =
+    Capabilities::all().difference(Capabilities::SUBGROUP_VERTEX_STAGE);
+
 // WGSL §15.6: clamp every OOB index. `Restrict` (not `ReadZeroSkipWrite`)
 // because naga 29's spv backend hits FeatureNotImplemented on storage-buffer
 // atomics with the latter.
@@ -524,11 +528,30 @@ fn validate_subgroup_enable_source(source: &str) -> Vec<WgslMessage> {
     }
 
     let scan = mask_comments_preserve_len(source);
-    if source_enables_subgroups(&scan) {
-        return Vec::new();
+    let mut errors = Vec::new();
+
+    // subgroup_id and num_subgroups need the subgroup_id language feature, which is not advertised.
+    // ponytail: rejected outright; advertising subgroup_id needs `requires subgroup_id;` lowered for naga 29.
+    let mut pos = 0usize;
+    while let Some((attr_start, _, close, _, args)) =
+        find_attribute_call_from(&scan, "builtin", pos)
+    {
+        let name = args.first().map(|arg| arg.trim()).unwrap_or_default();
+        if name == "subgroup_id" || name == "num_subgroups" {
+            errors.push(wgsl_error_at(
+                source,
+                attr_start,
+                close + 1 - attr_start,
+                "@builtin(subgroup_id) and @builtin(num_subgroups) require the subgroup_id language feature",
+            ));
+        }
+        pos = close + 1;
     }
 
-    let mut errors = Vec::new();
+    if source_enables_subgroups(&scan) {
+        return errors;
+    }
+
     for name in SUBGROUP_BUILTIN_CALLS {
         let mut pos = 0usize;
         while let Some(start) = find_keyword_from(&scan, name, pos) {
@@ -548,6 +571,206 @@ fn validate_subgroup_enable_source(source: &str) -> Vec<WgslMessage> {
         }
     }
     errors
+}
+
+fn blank_preserving_newlines(out: &mut [u8], start: usize, end: usize) {
+    for byte in &mut out[start..end] {
+        if *byte != b'\n' && *byte != b'\r' {
+            *byte = b' ';
+        }
+    }
+}
+
+// naga 29 lists `enable subgroups;` as unimplemented and rejects it, but parses every subgroup builtin under
+// Capabilities::SUBGROUP. validate_subgroup_enable_source has already required the directive and the device
+// has checked the "subgroups" feature, so `subgroups` is blanked out of each enable list before naga parses.
+// Byte length and newlines are kept, so later error spans still point into the original source.
+fn strip_subgroups_enable_source(source: &str) -> String {
+    if !source.contains("subgroups") {
+        return source.to_string();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut out = source.as_bytes().to_vec();
+    let mut pos = 0usize;
+    while let Some(enable_pos) = find_keyword_from(&scan, "enable", pos) {
+        pos = enable_pos + "enable".len();
+        let Some(rel_end) = scan[pos..].find(';') else {
+            break;
+        };
+        let end = pos + rel_end;
+
+        // Only a real directive: identifiers, commas and whitespace up to the `;`.
+        let list = &bytes[pos..end];
+        let is_list = list
+            .iter()
+            .all(|&c| is_ident_char(c) || c == b',' || c.is_ascii_whitespace());
+        if !is_list {
+            continue;
+        }
+
+        let mut idents: Vec<(usize, usize)> = Vec::new();
+        let mut p = pos;
+        while p < end {
+            if !is_ident_char(bytes[p]) {
+                p += 1;
+                continue;
+            }
+
+            let start = p;
+            while p < end && is_ident_char(bytes[p]) {
+                p += 1;
+            }
+            idents.push((start, p));
+        }
+
+        let is_subgroups = |&(start, stop): &(usize, usize)| &scan[start..stop] == "subgroups";
+        if !idents.iter().any(is_subgroups) {
+            continue;
+        }
+
+        if idents.iter().all(is_subgroups) {
+            blank_preserving_newlines(&mut out, enable_pos, end + 1);
+            pos = end + 1;
+            continue;
+        }
+
+        // Blank `subgroups` with the comma after it, or with the comma before it when it is last.
+        for &(start, stop) in idents.iter().filter(|span| is_subgroups(span)) {
+            let after = skip_ws_and_comments(bytes, stop);
+            if after < end && bytes[after] == b',' {
+                blank_preserving_newlines(&mut out, start, after + 1);
+            } else if let Some(comma) = scan[pos..start].rfind(',') {
+                blank_preserving_newlines(&mut out, pos + comma, stop);
+            }
+        }
+        pos = end + 1;
+    }
+
+    String::from_utf8(out).unwrap_or_else(|_| source.to_string())
+}
+
+// Source passes that make WGSL subgroup code acceptable to naga 29.
+fn lower_subgroups_source(source: &str) -> String {
+    let stripped = strip_subgroups_enable_source(source);
+    suffix_shuffle_delta_literals_source(&lower_subgroup_elect_source(&stripped))
+}
+
+// The delta of subgroupShuffleUp/Down and the mask of subgroupShuffleXor are u32 only, so an unsuffixed integer
+// literal there is a u32; naga 29 concretizes it to i32 and rejects the call. The literal gets a `u` suffix while it
+// can still be told apart from an explicit `1i`, which stays an error.
+fn suffix_shuffle_delta_literals_source(source: &str) -> String {
+    const NAMES: &[&str] = &[
+        "subgroupShuffleUp",
+        "subgroupShuffleDown",
+        "subgroupShuffleXor",
+    ];
+    if !NAMES.iter().any(|name| source.contains(name)) {
+        return source.to_string();
+    }
+
+    let is_abstract_int = |text: &str| {
+        let hex = text
+            .strip_prefix("0x")
+            .or_else(|| text.strip_prefix("0X"))
+            .is_some_and(|digits| {
+                !digits.is_empty() && digits.bytes().all(|b| b.is_ascii_hexdigit())
+            });
+        let decimal = !text.is_empty()
+            && text.bytes().all(|b| b.is_ascii_digit())
+            && (text == "0" || !text.starts_with('0'));
+        hex || decimal
+    };
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut inserts: Vec<usize> = Vec::new();
+    for name in NAMES {
+        let mut pos = 0usize;
+        while let Some(start) = find_keyword_from(&scan, name, pos) {
+            pos = start + name.len();
+            if is_function_declaration_name(&scan, start)
+                || is_builtin_shadowed_at_call(&scan, name, start)
+            {
+                continue;
+            }
+
+            let Some((args, close)) = find_call_args(&scan, start, name.len()) else {
+                continue;
+            };
+            let args: Vec<&str> = args
+                .iter()
+                .map(|arg| arg.trim())
+                .filter(|arg| !arg.is_empty())
+                .collect();
+            if args.len() != 2 || !is_abstract_int(args[1]) {
+                continue;
+            }
+
+            // The literal ends just before `)`, past whitespace and an optional trailing comma.
+            let mut end = close;
+            while end > start && bytes[end - 1].is_ascii_whitespace() {
+                end -= 1;
+            }
+            if bytes[end - 1] == b',' {
+                end -= 1;
+                while end > start && bytes[end - 1].is_ascii_whitespace() {
+                    end -= 1;
+                }
+            }
+            inserts.push(end);
+        }
+    }
+
+    inserts.sort_unstable();
+    let mut out = String::with_capacity(source.len() + inserts.len());
+    let mut copied = 0usize;
+    for at in inserts {
+        out.push_str(&source[copied..at]);
+        out.push('u');
+        copied = at;
+    }
+    out.push_str(&source[copied..]);
+    out
+}
+
+// naga 29 has no subgroupElect. It is true only for the active invocation with the lowest subgroup_invocation_id,
+// which is the one active invocation whose exclusive prefix sum of 1 over the active invocations is 0.
+fn lower_subgroup_elect_source(source: &str) -> String {
+    const NAME: &str = "subgroupElect";
+    if !source.contains(NAME) {
+        return source.to_string();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut out = String::with_capacity(source.len() + 32);
+    let mut copied = 0usize;
+    let mut pos = 0usize;
+    while let Some(start) = find_keyword_from(&scan, NAME, pos) {
+        pos = start + NAME.len();
+        let user_defined = is_function_declaration_name(&scan, start)
+            || is_builtin_shadowed_at_call(&scan, NAME, start);
+        if user_defined {
+            continue;
+        }
+
+        // Calls with arguments stay as they are, so naga still rejects them.
+        let Some((args, close)) = find_call_args(&scan, start, NAME.len()) else {
+            continue;
+        };
+        if args.iter().any(|arg| !arg.trim().is_empty()) {
+            continue;
+        }
+
+        out.push_str(&source[copied..start]);
+        out.push_str("(subgroupExclusiveAdd(1u) == 0u)");
+        copied = close + 1;
+        pos = close + 1;
+    }
+
+    out.push_str(&source[copied..]);
+    out
 }
 
 fn validate_parse_frontend_source(source: &str) -> Vec<WgslMessage> {
@@ -3910,7 +4133,7 @@ fn texture_external_emit_module(
     fold_bit_builtins(&mut lowered_module);
     round_rgb10a2unorm_stores(&mut lowered_module);
     center_per_sample_frag_position(&mut lowered_module);
-    let info = Validator::new(ValidationFlags::all(), Capabilities::all())
+    let info = Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES)
         .validate(&lowered_module)
         .ok()?;
     Some((lowered_module, info))
@@ -6677,6 +6900,309 @@ fn collect_type_closure(id: u32, type_children: &HashMap<u32, Vec<u32>>, out: &m
             collect_type_closure(*child, type_children, out);
         }
     }
+}
+
+fn uses_subgroup_id_builtin(
+    types: &naga::UniqueArena<naga::Type>,
+    function: &naga::Function,
+) -> bool {
+    let is_id = |binding: &Option<naga::Binding>| {
+        matches!(
+            binding,
+            Some(naga::Binding::BuiltIn(
+                naga::BuiltIn::SubgroupInvocationId | naga::BuiltIn::SubgroupId
+            ))
+        )
+    };
+
+    function.arguments.iter().any(|arg| {
+        let struct_member_is_id = match &types[arg.ty].inner {
+            naga::TypeInner::Struct { members, .. } => members.iter().any(|m| is_id(&m.binding)),
+            _ => false,
+        };
+        is_id(&arg.binding) || struct_member_is_id
+    })
+}
+
+// naga 29 rejects @builtin(subgroup_invocation_id) and @builtin(subgroup_id) when the workgroup size has more than
+// one dimension (InvalidMultiDimensionalSubgroupBuiltIn), a wgpu backend restriction WGSL does not have; Vulkan's
+// SubgroupLocalInvocationId works for any workgroup shape. Such entry points are validated and emitted as
+// [x*y*z, 1, 1], and restore_local_sizes writes the real size back into their LocalSize execution mode. The code
+// naga emits reads the invocation-ID builtins and derives nothing from the workgroup size.
+// ponytail: literal sizes only; process_overrides recomputes an override-sized workgroup, which still fails.
+fn flatten_subgroup_workgroup_sizes(module: &mut naga::Module) -> Vec<(String, [u32; 3])> {
+    let types = &module.types;
+    let mut real_sizes = Vec::new();
+    for ep in module.entry_points.iter_mut() {
+        let multi_dimensional = ep.workgroup_size[1..].iter().any(|&s| s > 1);
+        let candidate = ep.stage == naga::ShaderStage::Compute
+            && multi_dimensional
+            && ep.workgroup_size_overrides.is_none();
+        if !candidate || !uses_subgroup_id_builtin(types, &ep.function) {
+            continue;
+        }
+
+        real_sizes.push((ep.name.clone(), ep.workgroup_size));
+        let [x, y, z] = ep.workgroup_size;
+        ep.workgroup_size = [x.saturating_mul(y).saturating_mul(z), 1, 1];
+    }
+    real_sizes
+}
+
+fn restore_local_sizes(words: &mut [u32], real_sizes: &[(String, [u32; 3])]) {
+    if real_sizes.is_empty() || words.len() < 5 {
+        return;
+    }
+
+    const OP_ENTRY_POINT: u32 = 15;
+    const OP_EXECUTION_MODE: u32 = 16;
+    const EXECUTION_MODE_LOCAL_SIZE: u32 = 17;
+
+    // OpEntryPoint precedes OpExecutionMode in a module's logical layout.
+    let mut sizes_by_id: HashMap<u32, [u32; 3]> = HashMap::new();
+    let mut i = 5usize;
+    while i < words.len() {
+        let count = (words[i] >> 16) as usize;
+        let opcode = words[i] & 0xFFFF;
+        if count == 0 || i + count > words.len() {
+            break;
+        }
+
+        if opcode == OP_ENTRY_POINT && count >= 4 {
+            let name: Vec<u8> = words[i + 3..i + count]
+                .iter()
+                .flat_map(|w| w.to_le_bytes())
+                .take_while(|&b| b != 0)
+                .collect();
+            if let Some((_, size)) = real_sizes
+                .iter()
+                .find(|(n, _)| n.as_bytes() == name.as_slice())
+            {
+                sizes_by_id.insert(words[i + 2], *size);
+            }
+        } else if opcode == OP_EXECUTION_MODE
+            && count == 6
+            && words[i + 2] == EXECUTION_MODE_LOCAL_SIZE
+        {
+            if let Some(size) = sizes_by_id.get(&words[i + 1]) {
+                words[i + 3..i + 6].copy_from_slice(size);
+            }
+        }
+        i += count;
+    }
+}
+
+// subgroupBroadcast, subgroupShuffle and quadBroadcast take a u32 or i32 id (`0` concretizes to i32), but naga 29
+// accepts only u32.
+fn signed_gather_ids(
+    module: &naga::Module,
+    f: &naga::Function,
+) -> Vec<naga::Handle<naga::Expression>> {
+    let types = resolve_expression_types(module, &f.expressions, &f.local_variables, &f.arguments);
+    let mut ids = Vec::new();
+    for_each_statement(&f.body, &mut |stmt| {
+        let naga::Statement::SubgroupGather { mode, .. } = stmt else {
+            return;
+        };
+        let id = match *mode {
+            naga::GatherMode::Broadcast(id)
+            | naga::GatherMode::Shuffle(id)
+            | naga::GatherMode::QuadBroadcast(id) => id,
+            _ => return,
+        };
+
+        let is_i32 = types.get(&id).is_some_and(|ty| {
+            matches!(
+                ty.inner_with(&module.types),
+                naga::TypeInner::Scalar(naga::Scalar::I32)
+            )
+        });
+        if is_i32 && !ids.contains(&id) {
+            ids.push(id);
+        }
+    });
+    ids
+}
+
+fn constant_i32_value(
+    constants: &naga::Arena<naga::Constant>,
+    global_expressions: &naga::Arena<naga::Expression>,
+    expression: &naga::Expression,
+) -> Option<i32> {
+    match *expression {
+        naga::Expression::Literal(naga::Literal::I32(v)) => Some(v),
+        naga::Expression::Constant(c) => match global_expressions[constants[c].init] {
+            naga::Expression::Literal(naga::Literal::I32(v)) => Some(v),
+            _ => None,
+        },
+        _ => None,
+    }
+}
+
+// A non-negative constant id becomes a new u32 literal; broadcast ids must stay constant for naga. Any other id is
+// converted by a u32() with an Emit of its own before the gather. A negative constant is left as i32, so naga still
+// rejects it, as WGSL's [0, 128) rule for constant ids requires. Existing expressions are never rewritten, because
+// their handles may have other uses.
+fn convert_function_gather_ids(
+    constants: &naga::Arena<naga::Constant>,
+    global_expressions: &naga::Arena<naga::Expression>,
+    f: &mut naga::Function,
+    ids: &[naga::Handle<naga::Expression>],
+) {
+    let mut replaced = HashMap::new();
+    let mut emitted = HashSet::new();
+    for &id in ids {
+        let span = f.expressions.get_span(id);
+        // naga names `let` bindings, even of a literal; those are runtime values.
+        let value = match f.named_expressions.contains_key(&id) {
+            true => None,
+            false => constant_i32_value(constants, global_expressions, &f.expressions[id]),
+        };
+        let replacement = match value {
+            Some(v) if v >= 0 => naga::Expression::Literal(naga::Literal::U32(v as u32)),
+            Some(_) => continue,
+            None => naga::Expression::As {
+                expr: id,
+                kind: naga::ScalarKind::Uint,
+                convert: Some(4),
+            },
+        };
+
+        let new_id = f.expressions.append(replacement, span);
+        if value.is_none() {
+            emitted.insert(new_id);
+        }
+        replaced.insert(id, new_id);
+    }
+
+    if !replaced.is_empty() {
+        replace_gather_ids(&mut f.body, &replaced, &emitted);
+    }
+}
+
+fn replace_gather_ids(
+    block: &mut naga::Block,
+    replaced: &HashMap<naga::Handle<naga::Expression>, naga::Handle<naga::Expression>>,
+    emitted: &HashSet<naga::Handle<naga::Expression>>,
+) {
+    let original = std::mem::replace(block, naga::Block::with_capacity(block.len()));
+    for (mut stmt, span) in original.span_into_iter() {
+        match &mut stmt {
+            naga::Statement::SubgroupGather { mode, .. } => {
+                let id = match mode {
+                    naga::GatherMode::Broadcast(id)
+                    | naga::GatherMode::Shuffle(id)
+                    | naga::GatherMode::QuadBroadcast(id) => Some(id),
+                    _ => None,
+                };
+                if let Some(id) = id {
+                    if let Some(&new_id) = replaced.get(id) {
+                        *id = new_id;
+                        if emitted.contains(&new_id) {
+                            let range = naga::Range::new_from_bounds(new_id, new_id);
+                            block.push(naga::Statement::Emit(range), span);
+                        }
+                    }
+                }
+            }
+            naga::Statement::Block(child) => replace_gather_ids(child, replaced, emitted),
+            naga::Statement::If { accept, reject, .. } => {
+                replace_gather_ids(accept, replaced, emitted);
+                replace_gather_ids(reject, replaced, emitted);
+            }
+            naga::Statement::Switch { cases, .. } => {
+                for case in cases {
+                    replace_gather_ids(&mut case.body, replaced, emitted);
+                }
+            }
+            naga::Statement::Loop {
+                body, continuing, ..
+            } => {
+                replace_gather_ids(body, replaced, emitted);
+                replace_gather_ids(continuing, replaced, emitted);
+            }
+            _ => {}
+        }
+        block.push(stmt, span);
+    }
+}
+
+fn convert_signed_gather_ids(module: &mut naga::Module) {
+    let functions: Vec<_> = module.functions.iter().map(|(h, _)| h).collect();
+    for h in functions {
+        let ids = signed_gather_ids(module, &module.functions[h]);
+        if !ids.is_empty() {
+            let f = &mut module.functions[h];
+            convert_function_gather_ids(&module.constants, &module.global_expressions, f, &ids);
+        }
+    }
+
+    for i in 0..module.entry_points.len() {
+        let ids = signed_gather_ids(module, &module.entry_points[i].function);
+        if !ids.is_empty() {
+            let f = &mut module.entry_points[i].function;
+            convert_function_gather_ids(&module.constants, &module.global_expressions, f, &ids);
+        }
+    }
+}
+
+// WGSL: a constant broadcast, shuffle, shuffle-up/down or shuffle-xor id must be in [0, 128), and a quadBroadcast
+// id in [0, 4). Run on the parsed module for const ids (shader-creation error) and on the module after
+// process_overrides for override ids (pipeline-creation error). naga 29 checks neither.
+fn validate_subgroup_gather_ids(module: &naga::Module) -> Vec<WgslMessage> {
+    let constant_value =
+        |f: &naga::Function, mut id: naga::Handle<naga::Expression>| -> Option<i64> {
+            loop {
+                // A `let` binding is a runtime value even when it holds a literal.
+                if f.named_expressions.contains_key(&id) {
+                    return None;
+                }
+
+                match f.expressions[id] {
+                    naga::Expression::As { expr, .. } => id = expr,
+                    naga::Expression::Literal(naga::Literal::I32(v)) => return Some(i64::from(v)),
+                    naga::Expression::Literal(naga::Literal::U32(v)) => return Some(i64::from(v)),
+                    naga::Expression::Constant(c) => {
+                        return match module.global_expressions[module.constants[c].init] {
+                            naga::Expression::Literal(naga::Literal::I32(v)) => Some(i64::from(v)),
+                            naga::Expression::Literal(naga::Literal::U32(v)) => Some(i64::from(v)),
+                            _ => None,
+                        };
+                    }
+                    _ => return None,
+                }
+            }
+        };
+
+    let mut errors = Vec::new();
+    let all_functions = module
+        .functions
+        .iter()
+        .map(|(_, f)| f)
+        .chain(module.entry_points.iter().map(|ep| &ep.function));
+    for f in all_functions {
+        for_each_statement(&f.body, &mut |stmt| {
+            let naga::Statement::SubgroupGather { mode, .. } = stmt else {
+                return;
+            };
+            let (id, bound) = match *mode {
+                naga::GatherMode::QuadBroadcast(id) => (id, 4),
+                naga::GatherMode::Broadcast(id)
+                | naga::GatherMode::Shuffle(id)
+                | naga::GatherMode::ShuffleDown(id)
+                | naga::GatherMode::ShuffleUp(id)
+                | naga::GatherMode::ShuffleXor(id) => (id, 128),
+                _ => return,
+            };
+
+            if constant_value(f, id).is_some_and(|v| v < 0 || v >= bound) {
+                errors.push(wgsl_error(format!(
+                    "subgroup invocation id must be in the range [0, {bound})"
+                )));
+            }
+        });
+    }
+    errors
 }
 
 fn strip_workgroup_explicit_layout(words: &mut Vec<u32>) {
@@ -12385,7 +12911,7 @@ fn round_rgb10a2unorm_stores(module: &mut naga::Module) {
     }
     // A scalar `value` is a validation error, but the vec4 scale would broadcast it
     // into a valid store; only rewrite modules that already validate.
-    if Validator::new(ValidationFlags::all(), Capabilities::all())
+    if Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES)
         .validate(module)
         .is_err()
     {
@@ -13105,7 +13631,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         return Err(frontend_errors);
     }
     let strip = strip_diagnostic_directives(&rename_continuing_shadows_source(
-        &split_minus_minus_source(source),
+        &split_minus_minus_source(&lower_subgroups_source(source)),
     ));
     if strip.has_error {
         return Err(strip.messages);
@@ -13276,6 +13802,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // process_overrides + spv::write_vec) see the new expressions.
     clamp_image_sample_bias(&mut module);
     cloak_const_indices(&mut module, &parse_source);
+    convert_signed_gather_ids(&mut module);
 
     // WGSL §17.6.2: integer e1 / e2 and e1 % e2 with v2 == 0 must be a
     // compilation error. naga 29 catches this for fully-const expressions
@@ -13300,6 +13827,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // WGSL integer bit builtins: const/override offset+count must fit in the
     // 32-bit lane, and Naga 29 misses a few invalid atomic offset/count cases.
     bridge_errors.extend(validate_bit_builtins(&module));
+    bridge_errors.extend(validate_subgroup_gather_ids(&module));
     if !bridge_errors.is_empty() {
         let mut msgs = strip.messages;
         msgs.extend(bridge_errors);
@@ -13311,8 +13839,9 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     fold_bit_builtins(&mut module);
     round_rgb10a2unorm_stores(&mut module);
     center_per_sample_frag_position(&mut module);
+    let real_local_sizes = flatten_subgroup_workgroup_sizes(&mut module);
 
-    let info = match Validator::new(ValidationFlags::all(), Capabilities::all()).validate(&module) {
+    let info = match Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES).validate(&module) {
         Ok(i) => i,
         Err(e) => return Err(vec![validation_error_to_message(&e, &parse_source)]),
     };
@@ -13358,10 +13887,9 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
                 .and_then(|(processed_module, _processed_info)| {
                     let mut processed_module = processed_module.into_owned();
                     fold_bit_builtins(&mut processed_module);
-                    let processed_info =
-                        Validator::new(ValidationFlags::all(), Capabilities::all())
-                            .validate(&processed_module)
-                            .ok()?;
+                    let processed_info = Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES)
+                        .validate(&processed_module)
+                        .ok()?;
                     spv::write_vec(&processed_module, &processed_info, &options, None).ok()
                 })
         }))
@@ -13370,6 +13898,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         .map(|mut words| {
             strip_workgroup_explicit_layout(&mut words);
             rewrite_signed_mod_to_remainder(&mut words);
+            restore_local_sizes(&mut words, &real_local_sizes);
             words
         });
 
@@ -13705,7 +14234,7 @@ fn foo() -> u32 {{
                 })
                 .count();
             assert_eq!(floors, if src == plain { 0 } else { 1 });
-            assert!(Validator::new(ValidationFlags::all(), Capabilities::all())
+            assert!(Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES)
                 .validate(&module)
                 .is_ok());
             assert!(compile_with_meta(src).is_ok());
@@ -14131,6 +14660,170 @@ fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
         .is_empty());
         assert!(validate_subgroup_enable_source("fn foo() { let subgroupAny = true; }").is_empty());
         assert!(validate_subgroup_enable_source("fn subgroupAny() {}").is_empty());
+        assert!(!validate_subgroup_enable_source(
+            "enable subgroups;\n@compute @workgroup_size(1) fn main(@builtin(subgroup_id) id: u32) {}"
+        )
+        .is_empty());
+        assert!(!validate_subgroup_enable_source(
+            "enable subgroups;\n@compute @workgroup_size(1) fn main(@builtin( num_subgroups ) n: u32) {}"
+        )
+        .is_empty());
+    }
+
+    #[test]
+    fn subgroup_gather_ids_accept_i32_and_check_constant_ranges() {
+        let compiles = |body: &str| {
+            let source = format!(
+                "enable subgroups;\n\
+                 @group(0) @binding(0) var<storage, read_write> out: array<u32>;\n\
+                 const c = 3i;\n\
+                 @compute @workgroup_size(64) fn main(@builtin(local_invocation_index) lid: u32) {{\n{body}\n}}\n"
+            );
+            compile_with_meta(&source).is_ok_and(|r| r.spirv.is_some())
+        };
+
+        assert!(compiles("out[lid] = subgroupBroadcast(lid, 0);"));
+        assert!(compiles(
+            "out[lid] = subgroupBroadcast(lid, c) + quadBroadcast(lid, 1i);"
+        ));
+        assert!(compiles(
+            "let i = i32(lid); out[lid] = subgroupShuffle(lid, i);"
+        ));
+        assert!(compiles("out[lid] = subgroupShuffle(lid, 127u);"));
+
+        assert!(!compiles("out[lid] = subgroupBroadcast(lid, -1);"));
+        assert!(!compiles("out[lid] = subgroupBroadcast(lid, 128u);"));
+        assert!(!compiles("out[lid] = quadBroadcast(lid, 4);"));
+        assert!(!compiles("out[lid] = subgroupShuffleXor(lid, 128u);"));
+        assert!(!compiles("out[lid] = subgroupBroadcast(lid, 0.0);"));
+
+        // A `let` id is runtime, so even -1 compiles for subgroupShuffle.
+        assert!(compiles(
+            "let i : i32 = -1; out[lid] = subgroupShuffle(lid, i);"
+        ));
+
+        // delta and mask are u32: an unsuffixed literal is one, an explicit i32 is not.
+        assert!(compiles(
+            "out[lid] = subgroupShuffleXor(lid, 0) + subgroupShuffleUp(lid, 0x1,);"
+        ));
+        assert!(!compiles("out[lid] = subgroupShuffleDown(lid, 1i);"));
+    }
+
+    #[test]
+    fn subgroup_calls_require_uniform_control_flow() {
+        let body = "enable subgroups;\n\
+            fn foo() {\n\
+              if subgroupInclusiveAdd(0) == 0 {\n\
+                _ = subgroupAny(true);\n\
+              }\n\
+            }\n";
+        assert!(compile_with_meta(body).is_err());
+
+        let filtered = body.replace(
+            "enable subgroups;\n",
+            "enable subgroups;\ndiagnostic(off, subgroup_uniformity);\n",
+        );
+        assert!(compile_with_meta(&filtered).is_ok());
+
+        let uniform = "enable subgroups;\nfn foo() { _ = subgroupAny(true); }\n";
+        assert!(compile_with_meta(uniform).is_ok());
+
+        let shuffle_delta = "enable subgroups;\n\
+            @group(0) @binding(0) var<storage, read_write> out: array<u32>;\n\
+            @compute @workgroup_size(32) fn main(@builtin(local_invocation_index) lid: u32) {\n\
+              out[lid] = subgroupShuffleUp(lid, lid);\n\
+            }\n";
+        assert!(compile_with_meta(shuffle_delta).is_err());
+
+        // subgroup_size is uniform in compute shaders only.
+        let compute_size = "enable subgroups;\n\
+            @compute @workgroup_size(16) fn main(@builtin(subgroup_size) p: u32) {\n\
+              if p > 0 { workgroupBarrier(); }\n\
+            }\n";
+        assert!(compile_with_meta(compute_size).is_ok());
+
+        let fragment_size = "enable subgroups;\n\
+            @fragment fn main(@builtin(subgroup_size) p: u32) -> @location(0) vec4f {\n\
+              if p > 0 { _ = subgroupAny(true); }\n\
+              return vec4f(0);\n\
+            }\n";
+        assert!(compile_with_meta(fragment_size).is_err());
+    }
+
+    #[test]
+    fn subgroup_operations_are_rejected_in_vertex_shaders() {
+        let source = "enable subgroups;\n\
+            @vertex fn main() -> @builtin(position) vec4f {\n\
+                return vec4f(f32(subgroupAdd(1u)));\n\
+            }\n";
+        assert!(compile_with_meta(source).is_err());
+    }
+
+    #[test]
+    fn subgroup_ids_keep_multi_dimensional_workgroup_size() {
+        let source = "enable subgroups;\n\
+            @group(0) @binding(0) var<storage, read_write> out: array<u32>;\n\
+            struct In { @builtin(subgroup_invocation_id) id: u32, @builtin(local_invocation_index) lid: u32 }\n\
+            @compute @workgroup_size(2, 4, 3) fn main(input: In) { out[input.lid] = input.id; }\n";
+
+        let local_size = |words: &[u32]| {
+            let mut i = 5usize;
+            while i < words.len() {
+                let count = (words[i] >> 16) as usize;
+                if words[i] & 0xFFFF == 16 && count == 6 && words[i + 2] == 17 {
+                    return Some([words[i + 3], words[i + 4], words[i + 5]]);
+                }
+                i += count.max(1);
+            }
+            None
+        };
+
+        let compiled = compile_with_meta(source)
+            .ok()
+            .and_then(|r| r.spirv)
+            .expect("compile");
+        assert_eq!(local_size(&compiled), Some([2, 4, 3]));
+
+        let baked = bake_wgsl_with_constants(source, HashMap::new(), Some("main")).expect("bake");
+        assert_eq!(local_size(&baked), Some([2, 4, 3]));
+    }
+
+    #[test]
+    fn enable_subgroups_compiles_alone_and_in_lists() {
+        let body = "@group(0) @binding(0) var<storage, read_write> out: array<u32>;\n\
+            @compute @workgroup_size(64)\n\
+            fn main(@builtin(subgroup_invocation_id) id: u32, @builtin(subgroup_size) size: u32) {\n\
+                out[id] = subgroupAdd(id) + size + u32(subgroupElect()) + quadSwapX(id);\n\
+            }\n";
+        for directive in [
+            "enable subgroups;",
+            "enable f16, subgroups;",
+            "enable subgroups, f16;",
+            "enable f16,\n  subgroups,\n;",
+            "enable subgroups;\nenable f16;",
+        ] {
+            let source = format!("{directive}\n{body}");
+            let stripped = strip_subgroups_enable_source(&source);
+            assert_eq!(stripped.len(), source.len(), "{directive}");
+            assert_eq!(
+                stripped.lines().count(),
+                source.lines().count(),
+                "{directive}"
+            );
+            match compile_with_meta(&source) {
+                Ok(result) => assert!(result.spirv.is_some(), "{directive}: no SPIR-V"),
+                Err(messages) => {
+                    let text: Vec<&str> = messages.iter().map(|m| m.message.as_str()).collect();
+                    panic!("{directive}: {text:?}");
+                }
+            }
+        }
+
+        assert!(compile_with_meta(body).is_err());
+        assert_eq!(
+            strip_subgroups_enable_source("// enable subgroups;\nfn f() {}"),
+            "// enable subgroups;\nfn f() {}"
+        );
     }
 
     #[test]
@@ -14758,7 +15451,7 @@ fn copy_override_access_components(
         isolate_emits(&mut function.body, &folded);
     }
 
-    let info = Validator::new(ValidationFlags::all(), Capabilities::all())
+    let info = Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES)
         .validate(&copied)
         .ok()?;
     Some((copied, info))
@@ -14887,7 +15580,7 @@ pub fn bake_wgsl_with_constants(
         return None;
     }
     let strip = strip_diagnostic_directives(&rename_continuing_shadows_source(
-        &split_minus_minus_source(source),
+        &split_minus_minus_source(&lower_subgroups_source(source)),
     ));
     if strip.has_error {
         return None;
@@ -14988,7 +15681,9 @@ pub fn bake_wgsl_with_constants(
     let mut module = wgsl::parse_str(&parse_source).ok()?;
     clamp_image_sample_bias(&mut module);
     cloak_const_indices(&mut module, &parse_source);
+    convert_signed_gather_ids(&mut module);
     let mut bridge_errors = validate_storage_atomic_access(&module);
+    bridge_errors.extend(validate_subgroup_gather_ids(&module));
     bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
     bridge_errors.extend(validate_bool_order_comparisons(&module));
     bridge_errors.extend(validate_alias_analysis(&module));
@@ -14997,7 +15692,8 @@ pub fn bake_wgsl_with_constants(
     }
     round_rgb10a2unorm_stores(&mut module);
     center_per_sample_frag_position(&mut module);
-    let info = Validator::new(ValidationFlags::all(), Capabilities::all())
+    let real_local_sizes = flatten_subgroup_workgroup_sizes(&mut module);
+    let info = Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES)
         .validate(&module)
         .ok()?;
     let (module, info) =
@@ -15067,8 +15763,11 @@ pub fn bake_wgsl_with_constants(
                 if !validate_bit_builtins_live(&processed_module).is_empty() {
                     return None;
                 }
+                if !validate_subgroup_gather_ids(&processed_module).is_empty() {
+                    return None;
+                }
                 fold_bit_builtins(&mut processed_module);
-                let processed_info = Validator::new(ValidationFlags::all(), Capabilities::all())
+                let processed_info = Validator::new(ValidationFlags::all(), WGSL_CAPABILITIES)
                     .validate(&processed_module)
                     .ok()?;
                 spv::write_vec(&processed_module, &processed_info, &options, None).ok()
@@ -15078,6 +15777,7 @@ pub fn bake_wgsl_with_constants(
     .flatten()?;
     strip_workgroup_explicit_layout(&mut words);
     rewrite_signed_mod_to_remainder(&mut words);
+    restore_local_sizes(&mut words, &real_local_sizes);
     Some(words)
 }
 

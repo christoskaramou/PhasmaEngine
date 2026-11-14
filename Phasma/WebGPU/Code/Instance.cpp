@@ -419,9 +419,11 @@ extern "C"
                 VK_SUBGROUP_FEATURE_QUAD_BIT;
             const bool opsSupported =
                 (vk11Props.subgroupSupportedOperations & kRequiredOps) == kRequiredOps;
-            const bool computeStage =
-                (vk11Props.subgroupSupportedStages & VK_SHADER_STAGE_COMPUTE_BIT) != 0;
-            adapter->chainedCaps.subgroups = opsSupported && computeStage;
+            // WGSL allows subgroup operations in compute and fragment shaders.
+            constexpr VkShaderStageFlags kRequiredStages = VK_SHADER_STAGE_COMPUTE_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+            const bool stagesSupported =
+                (vk11Props.subgroupSupportedStages & kRequiredStages) == kRequiredStages;
+            adapter->chainedCaps.subgroups = opsSupported && stagesSupported;
 
             if (adapter->chainedCaps.subgroups)
             {

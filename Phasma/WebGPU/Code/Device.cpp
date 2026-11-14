@@ -1018,8 +1018,8 @@ extern "C"
         info->backendType = device->adapterBackend;
         info->vendorID = device->adapterVendorID;
         info->deviceID = device->adapterDeviceID;
-        info->subgroupMinSize = 4;
-        info->subgroupMaxSize = 128;
+        info->subgroupMinSize = device->adapterSubgroupMinSize;
+        info->subgroupMaxSize = device->adapterSubgroupMaxSize;
         return WGPUStatus_Success;
     }
 

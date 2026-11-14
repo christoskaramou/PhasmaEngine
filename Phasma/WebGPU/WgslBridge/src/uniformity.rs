@@ -6,7 +6,8 @@
 // joined at control-flow merges; loops iterate to a fixed point.
 
 use naga::{
-    Binding, BuiltIn, Expression, Function, Handle, Module, SampleLevel, Statement, TypeInner,
+    Binding, BuiltIn, Expression, Function, GatherMode, Handle, Module, SampleLevel, Statement,
+    TypeInner,
 };
 
 const NON_UNIFORM: u64 = 1;
@@ -107,6 +108,7 @@ struct Walker<'a> {
     summaries: &'a [Summary],
     is_entry: bool,
     check_derivatives: bool,
+    check_subgroups: bool,
     values: Vec<u64>,
     frames: Vec<Frame>,
     required: u64,
@@ -136,22 +138,34 @@ impl Walker<'_> {
         }
     }
 
-    fn binding_taint(binding: Option<&Binding>) -> u64 {
+    // WGSL "Uniformity": workgroup_id, num_workgroups, num_subgroups, and subgroup_size in a compute shader.
+    fn binding_taint(&self, binding: Option<&Binding>) -> u64 {
         match binding {
-            Some(Binding::BuiltIn(BuiltIn::WorkGroupId | BuiltIn::NumWorkGroups)) => 0,
+            Some(Binding::BuiltIn(
+                BuiltIn::WorkGroupId | BuiltIn::NumWorkGroups | BuiltIn::NumSubgroups,
+            )) => 0,
+            Some(Binding::BuiltIn(BuiltIn::SubgroupSize)) if self.is_compute_entry() => 0,
             _ => NON_UNIFORM,
         }
+    }
+
+    fn is_compute_entry(&self) -> bool {
+        self.is_entry
+            && self.module.entry_points.iter().any(|entry| {
+                std::ptr::eq(&entry.function, self.function)
+                    && entry.stage == naga::ShaderStage::Compute
+            })
     }
 
     fn entry_argument_taint(&self, index: u32) -> u64 {
         let argument = &self.function.arguments[index as usize];
         if let TypeInner::Struct { members, .. } = &self.module.types[argument.ty].inner {
             return members.iter().fold(0, |mask, member| {
-                mask | Self::binding_taint(member.binding.as_ref())
+                mask | self.binding_taint(member.binding.as_ref())
             });
         }
 
-        Self::binding_taint(argument.binding.as_ref())
+        self.binding_taint(argument.binding.as_ref())
     }
 
     fn entry_member_taint(&self, base: Handle<Expression>, member: u32) -> Option<u64> {
@@ -166,9 +180,7 @@ impl Walker<'_> {
         let TypeInner::Struct { members, .. } = &self.module.types[argument.ty].inner else {
             return None;
         };
-        Some(Self::binding_taint(
-            members[member as usize].binding.as_ref(),
-        ))
+        Some(self.binding_taint(members[member as usize].binding.as_ref()))
     }
 
     fn value(&self, handle: Handle<Expression>) -> u64 {
@@ -603,6 +615,22 @@ impl Walker<'_> {
             Statement::SubgroupBallot { result, .. }
             | Statement::SubgroupGather { result, .. }
             | Statement::SubgroupCollectiveOperation { result, .. } => {
+                // Without the subgroup_uniformity language feature, every subgroup and quad call needs
+                // uniform control flow, and so does the delta or mask of a relative shuffle.
+                if self.check_subgroups {
+                    let mut mask = state.control;
+                    if let Statement::SubgroupGather {
+                        mode:
+                            GatherMode::ShuffleUp(operand)
+                            | GatherMode::ShuffleDown(operand)
+                            | GatherMode::ShuffleXor(operand),
+                        ..
+                    } = statement
+                    {
+                        mask |= self.value(*operand);
+                    }
+                    self.require(mask);
+                }
                 self.values[result.index()] = NON_UNIFORM;
             }
             _ => {}
@@ -625,6 +653,7 @@ fn analyze_function(
     summaries: &[Summary],
     is_entry: bool,
     check_derivatives: bool,
+    check_subgroups: bool,
 ) -> (Summary, bool) {
     let mut contents = vec![0u64; function.arguments.len()];
     for (k, argument) in function.arguments.iter().enumerate() {
@@ -639,6 +668,7 @@ fn analyze_function(
         summaries,
         is_entry,
         check_derivatives,
+        check_subgroups,
         values: vec![0; function.expressions.len()],
         frames: Vec::new(),
         required: 0,
@@ -676,21 +706,22 @@ fn analyze_function(
     (summary, violated)
 }
 
-// `diagnostic(<severity>, derivative_uniformity)` filters, as global and per-function severities.
+// `diagnostic(<severity>, <rule>)` filters for derivative_uniformity or subgroup_uniformity, as global and
+// per-function severities.
 // ponytail: a filter on a statement applies to its whole function; exact scopes need naga's filter tree.
-struct DerivativeFilters {
+struct DiagnosticFilters {
     global_checks: bool,
     per_function: std::collections::HashMap<String, bool>,
 }
 
-impl DerivativeFilters {
-    fn parse(source: &str) -> Self {
+impl DiagnosticFilters {
+    fn parse(source: &str, rule: &str) -> Self {
         let mut filters = Self {
             global_checks: true,
             per_function: std::collections::HashMap::new(),
         };
 
-        for (position, _) in source.match_indices("derivative_uniformity") {
+        for (position, _) in source.match_indices(rule) {
             let Some(open) = source[..position].rfind("diagnostic") else {
                 continue;
             };
@@ -745,15 +776,22 @@ fn violation(name: &str) -> crate::WgslMessage {
 }
 
 pub(crate) fn validate(module: &Module, source: &str) -> Vec<crate::WgslMessage> {
-    let filters = DerivativeFilters::parse(source);
+    let derivative_filters = DiagnosticFilters::parse(source, "derivative_uniformity");
+    let subgroup_filters = DiagnosticFilters::parse(source, "subgroup_uniformity");
     let mut errors = Vec::new();
     let mut summaries: Vec<Summary> = Vec::with_capacity(module.functions.len());
 
     // naga orders the function arena so that a callee comes before its callers.
     for (_, function) in module.functions.iter() {
         let name = function.name.as_deref().unwrap_or("function");
-        let (summary, violated) =
-            analyze_function(module, function, &summaries, false, filters.checks(name));
+        let (summary, violated) = analyze_function(
+            module,
+            function,
+            &summaries,
+            false,
+            derivative_filters.checks(name),
+            subgroup_filters.checks(name),
+        );
         if violated {
             errors.push(violation(name));
         }
@@ -761,9 +799,14 @@ pub(crate) fn validate(module: &Module, source: &str) -> Vec<crate::WgslMessage>
     }
 
     for entry in &module.entry_points {
-        let check_derivatives = filters.checks(&entry.name);
-        let (_, violated) =
-            analyze_function(module, &entry.function, &summaries, true, check_derivatives);
+        let (_, violated) = analyze_function(
+            module,
+            &entry.function,
+            &summaries,
+            true,
+            derivative_filters.checks(&entry.name),
+            subgroup_filters.checks(&entry.name),
+        );
         if violated {
             errors.push(violation(&entry.name));
         }

@@ -127,6 +127,8 @@ struct WGPUDeviceImpl
     WGPUBackendType adapterBackend = WGPUBackendType_Vulkan;
     uint32_t adapterVendorID = 0;
     uint32_t adapterDeviceID = 0;
+    uint32_t adapterSubgroupMinSize = 4;
+    uint32_t adapterSubgroupMaxSize = 128;
 
     std::vector<pwgpu::ErrorScope> errorScopeStack;
     std::mutex errorScopeMutex;

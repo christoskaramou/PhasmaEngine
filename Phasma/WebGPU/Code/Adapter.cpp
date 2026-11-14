@@ -123,8 +123,7 @@ namespace
         case WGPUFeatureName_PrimitiveIndex:
             return a.primitiveIndex;
         case WGPUFeatureName_Subgroups:
-            // Do not expose until the WGSL frontend can lower `enable subgroups`.
-            return false;
+            return a.chainedCaps.subgroups;
         default:
             return false;
         }
@@ -633,6 +632,8 @@ extern "C"
         dev->adapterBackend = adapter->backendType;
         dev->adapterVendorID = adapter->adapterInfo.vendorId;
         dev->adapterDeviceID = adapter->adapterInfo.deviceId;
+        dev->adapterSubgroupMinSize = adapter->chainedCaps.subgroupMinSize;
+        dev->adapterSubgroupMaxSize = adapter->chainedCaps.subgroupMaxSize;
         dev->resolvedDepth24Plus = adapter->resolvedDepth24Plus;
         dev->resolvedDepth24PlusStencil8 = adapter->resolvedDepth24PlusStencil8;
         dev->resolvedStencil8 = adapter->resolvedStencil8;
