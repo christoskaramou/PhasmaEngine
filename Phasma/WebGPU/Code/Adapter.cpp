@@ -101,7 +101,8 @@ namespace
         case WGPUFeatureName_ClipDistances:
             return a.featureSupport.shaderClipDistance;
         case WGPUFeatureName_ShaderF16:
-            return a.featureSupport.shaderFloat16 && a.featureSupport.storageInputOutput16;
+            // f16 stage inputs and outputs are lowered to f32 by the WGSL bridge, so storageInputOutput16 is not needed.
+            return a.featureSupport.shaderFloat16 && a.chainedCaps.storageBuffer16;
         case WGPUFeatureName_DepthClipControl:
             return a.featureSupport.depthClipControl;
         case WGPUFeatureName_BGRA8UnormStorage:

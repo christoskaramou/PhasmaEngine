@@ -377,6 +377,8 @@ extern "C"
             vkGetPhysicalDeviceFeatures2(vkGpu, &features2);
             adapter->chainedCaps.shaderFloat16 = vk12Features.shaderFloat16 != 0;
             adapter->chainedCaps.storageInputOutput16 = vk11Features.storageInputOutput16 != 0;
+            adapter->chainedCaps.storageBuffer16 = vk11Features.storageBuffer16BitAccess != 0 &&
+                                                   vk11Features.uniformAndStorageBuffer16BitAccess != 0;
             adapter->chainedCaps.depthClipEnable = depthClipFeatures.depthClipEnable != 0;
             adapter->featureSupport.textureCompressionBC =
                 adapter->vkFeatures.textureCompressionBC != 0;

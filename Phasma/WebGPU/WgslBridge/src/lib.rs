@@ -7999,6 +7999,69 @@ fn validate_bool_order_comparisons_in_arena(
     }
 }
 
+// WGSL defines dpdx, dpdy, fwidth and their coarse and fine forms for f32 and vecN<f32> only; naga 29 also
+// accepts f16.
+fn validate_derivative_types(module: &naga::Module) -> Vec<WgslMessage> {
+    let mut errors = Vec::new();
+    let functions = module
+        .functions
+        .iter()
+        .map(|(_, f)| f)
+        .chain(module.entry_points.iter().map(|ep| &ep.function));
+    for f in functions {
+        let has_derivative = f
+            .expressions
+            .iter()
+            .any(|(_, e)| matches!(e, naga::Expression::Derivative { .. }));
+        if !has_derivative {
+            continue;
+        }
+
+        let types =
+            resolve_expression_types(module, &f.expressions, &f.local_variables, &f.arguments);
+        for (_, expression) in f.expressions.iter() {
+            let naga::Expression::Derivative { expr, .. } = *expression else {
+                continue;
+            };
+            let is_f16 = types
+                .get(&expr)
+                .and_then(|ty| ty.inner_with(&module.types).scalar())
+                .is_some_and(|scalar| scalar == naga::Scalar::F16);
+            if is_f16 {
+                errors.push(wgsl_error(
+                    "derivative builtins take f32 or vecN<f32>, not f16",
+                ));
+            }
+        }
+    }
+    errors
+}
+
+// WGSL has no infinite or NaN f16 literals, so a non-finite f16 literal in the IR came from evaluating a const- or
+// override-expression that overflowed, which is a shader- or pipeline-creation error. naga 29 checks this for f32
+// only.
+fn validate_f16_const_overflow(module: &naga::Module) -> Vec<WgslMessage> {
+    let arenas = std::iter::once(&module.global_expressions)
+        .chain(module.functions.iter().map(|(_, f)| &f.expressions))
+        .chain(
+            module
+                .entry_points
+                .iter()
+                .map(|ep| &ep.function.expressions),
+        );
+    for arena in arenas {
+        let overflowed = arena.iter().any(|(_, expression)| {
+            matches!(expression, naga::Expression::Literal(naga::Literal::F16(v)) if !v.is_finite())
+        });
+        if overflowed {
+            return vec![wgsl_error(
+                "an f16 const-expression evaluates to infinity or NaN",
+            )];
+        }
+    }
+    Vec::new()
+}
+
 fn validate_bool_order_comparisons(module: &naga::Module) -> Vec<WgslMessage> {
     let mut errors = Vec::new();
     let empty_locals = naga::Arena::new();
@@ -11613,6 +11676,714 @@ fn lower_const_bitcasts_source(source: &str, constants: Option<&HashMap<String, 
     out
 }
 
+fn scalar_or_vector_type(text: &str) -> Option<naga::TypeInner> {
+    let scalar = |name: &str| match name {
+        "i32" => Some(naga::Scalar::I32),
+        "u32" => Some(naga::Scalar::U32),
+        "f32" => Some(naga::Scalar::F32),
+        "f16" => Some(naga::Scalar::F16),
+        _ => None,
+    };
+
+    if let Some(s) = scalar(text) {
+        return Some(naga::TypeInner::Scalar(s));
+    }
+
+    let (size, rest) = text.strip_prefix("vec")?.split_at_checked(1)?;
+    let size = match size {
+        "2" => naga::VectorSize::Bi,
+        "3" => naga::VectorSize::Tri,
+        "4" => naga::VectorSize::Quad,
+        _ => return None,
+    };
+    let scalar = scalar(rest.strip_prefix('<')?.strip_suffix('>')?)?;
+    Some(naga::TypeInner::Vector { size, scalar })
+}
+
+// Parses `probe` and counts its calls to `function` and how many of them have a first argument of type `expected`;
+// None when it does not parse. naga's frontend accepts a call whose argument type differs from the parameter (only
+// validation catches it), so the argument's resolved type is compared instead of trusting a successful parse.
+fn probe_argument_types(probe: &str, function: &str, expected: &str) -> Option<(usize, usize)> {
+    let module = wgsl::parse_str(probe).ok()?;
+    let expected = scalar_or_vector_type(expected)?;
+    let (probe_fn, _) = module
+        .functions
+        .iter()
+        .find(|(_, f)| f.name.as_deref() == Some(function))?;
+
+    let mut matched = 0usize;
+    let mut total = 0usize;
+    let callers = module
+        .functions
+        .iter()
+        .map(|(_, f)| f)
+        .chain(module.entry_points.iter().map(|ep| &ep.function));
+    for f in callers {
+        let mut arguments = Vec::new();
+        for_each_statement(&f.body, &mut |stmt| {
+            if let naga::Statement::Call {
+                function,
+                arguments: args,
+                ..
+            } = stmt
+            {
+                if *function == probe_fn {
+                    arguments.extend(args.first().copied());
+                }
+            }
+        });
+        if arguments.is_empty() {
+            continue;
+        }
+
+        let types =
+            resolve_expression_types(&module, &f.expressions, &f.local_variables, &f.arguments);
+        for argument in arguments {
+            total += 1;
+            let is_expected = types
+                .get(&argument)
+                .is_some_and(|ty| *ty.inner_with(&module.types) == expected);
+            matched += usize::from(is_expected);
+        }
+    }
+    Some((matched, total))
+}
+
+fn probe_argument_is(probe: &str, function: &str, expected: &str) -> bool {
+    probe_argument_types(probe, function, expected) == Some((1, 1))
+}
+
+// A bitcast call's target type, its argument text range (open + 1 .. close) and the end of the whole call.
+fn bitcast_call_parts(scan: &str, start: usize) -> Option<(String, usize, usize)> {
+    let (target, _, close) = find_bitcast_call(scan, start)?;
+    let bytes = scan.as_bytes();
+    let mut depth = 0i32;
+    let mut i = start + "bitcast".len();
+    while i < close {
+        match bytes[i] {
+            b'<' => depth += 1,
+            b'>' => {
+                depth -= 1;
+                if depth == 0 {
+                    break;
+                }
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    let open = i + scan[i..close].find('(')?;
+    Some((target, open + 1, close))
+}
+
+// Type text without whitespace, with vecNh/i/u/f shorthands spelled out and `alias` names resolved.
+fn normalize_wgsl_type(text: &str, aliases: &HashMap<String, String>) -> String {
+    let mut ty: String = text.chars().filter(|c| !c.is_whitespace()).collect();
+    for _ in 0..8 {
+        match aliases.get(&ty) {
+            Some(target) => ty = target.clone(),
+            None => break,
+        }
+    }
+
+    for size in ['2', '3', '4'] {
+        for (suffix, scalar) in [('h', "f16"), ('i', "i32"), ('u', "u32"), ('f', "f32")] {
+            if ty == format!("vec{size}{suffix}") {
+                return format!("vec{size}<{scalar}>");
+            }
+        }
+    }
+    ty
+}
+
+fn module_type_aliases(scan: &str) -> HashMap<String, String> {
+    let mut aliases: HashMap<String, String> = HashMap::new();
+    let mut pos = 0usize;
+    while let Some(start) = find_keyword_from(scan, "alias", pos) {
+        pos = start + "alias".len();
+        let Some(end) = scan[pos..].find(';') else {
+            break;
+        };
+        if let Some((name, target)) = scan[pos..pos + end].split_once('=') {
+            aliases.insert(
+                name.trim().to_string(),
+                target
+                    .trim()
+                    .chars()
+                    .filter(|c| !c.is_whitespace())
+                    .collect(),
+            );
+        }
+    }
+
+    let names: Vec<String> = aliases.keys().cloned().collect();
+    for name in names {
+        let resolved = normalize_wgsl_type(&aliases[&name], &aliases);
+        aliases.insert(name, resolved);
+    }
+    aliases
+}
+
+// The helper that performs bitcast<target>(v: source) through pack2x16float/unpack2x16float.
+fn f16_bitcast_helper(source: &str, target: &str) -> String {
+    let name = f16_bitcast_helper_name(source, target);
+    let body = match (source, target) {
+        (_, "vec2<f16>") => "return vec2<f16>(unpack2x16float(bitcast<u32>(v)));".to_string(),
+        (_, "vec4<f16>") => "let u = bitcast<vec2<u32>>(v);\n  \
+             return vec4<f16>(vec4<f32>(unpack2x16float(u.x), unpack2x16float(u.y)));"
+            .to_string(),
+        ("vec2<f16>", _) => format!("return bitcast<{target}>(pack2x16float(vec2<f32>(v)));"),
+        _ => format!(
+            "return bitcast<{target}>(vec2<u32>(pack2x16float(vec2<f32>(v.xy)), pack2x16float(vec2<f32>(v.zw))));"
+        ),
+    };
+    format!("\nfn {name}(v: {source}) -> {target} {{\n  {body}\n}}\n")
+}
+
+fn f16_bitcast_helper_name(source: &str, target: &str) -> String {
+    let clean = |t: &str| t.replace(['<', '>'], "_");
+    format!("_pe_bitcast_{}_to_{}", clean(source), clean(target))
+}
+
+fn wgsl_type_text(inner: &naga::TypeInner) -> Option<String> {
+    let scalar = |s: naga::Scalar| match (s.kind, s.width) {
+        (naga::ScalarKind::Sint, 4) | (naga::ScalarKind::AbstractInt, _) => Some("i32"),
+        (naga::ScalarKind::Uint, 4) => Some("u32"),
+        (naga::ScalarKind::Float, 4) | (naga::ScalarKind::AbstractFloat, _) => Some("f32"),
+        (naga::ScalarKind::Float, 2) => Some("f16"),
+        _ => None,
+    };
+    match *inner {
+        naga::TypeInner::Scalar(s) => scalar(s).map(str::to_string),
+        naga::TypeInner::Vector { size, scalar: s } => {
+            Some(format!("vec{}<{}>", size as u8, scalar(s)?))
+        }
+        _ => None,
+    }
+}
+
+// The bits of a constant's components, each with whether it is 16 bits wide.
+fn collect_const_bits(
+    module: &naga::Module,
+    expr: naga::Handle<naga::Expression>,
+    out: &mut Vec<(u32, bool)>,
+) -> Option<()> {
+    use naga::{Expression, Literal};
+    match module.global_expressions[expr] {
+        Expression::Literal(Literal::I32(v)) => out.push((v as u32, false)),
+        Expression::Literal(Literal::U32(v)) => out.push((v, false)),
+        Expression::Literal(Literal::F32(v)) => out.push((v.to_bits(), false)),
+        Expression::Literal(Literal::F16(v)) => out.push((u32::from(v.to_bits()), true)),
+        Expression::Literal(Literal::AbstractInt(v)) => {
+            out.push((i32::try_from(v).ok()? as u32, false))
+        }
+        Expression::Literal(Literal::AbstractFloat(v)) => out.push(((v as f32).to_bits(), false)),
+        Expression::Constant(c) => collect_const_bits(module, module.constants[c].init, out)?,
+        Expression::Compose { ref components, .. } => {
+            for &component in components {
+                collect_const_bits(module, component, out)?;
+            }
+        }
+        Expression::Splat { size, value } => {
+            for _ in 0..size as u8 {
+                collect_const_bits(module, value, out)?;
+            }
+        }
+        Expression::ZeroValue(ty) => {
+            let (count, scalar) = match module.types[ty].inner {
+                naga::TypeInner::Scalar(s) => (1, s),
+                naga::TypeInner::Vector { size, scalar } => (size as u8, scalar),
+                _ => return None,
+            };
+            out.extend(std::iter::repeat_n(
+                (0, scalar.width == 2),
+                usize::from(count),
+            ));
+        }
+        _ => return None,
+    }
+    Some(())
+}
+
+fn f16_bits_to_f64(bits: u16) -> f64 {
+    let sign = if bits & 0x8000 != 0 { -1.0 } else { 1.0 };
+    let exponent = i32::from((bits >> 10) & 0x1f);
+    let mantissa = f64::from(bits & 0x3ff);
+    match exponent {
+        0 => sign * mantissa * 2f64.powi(-24),
+        31 if mantissa == 0.0 => sign * f64::INFINITY,
+        31 => f64::NAN,
+        _ => sign * (1.0 + mantissa / 1024.0) * 2f64.powi(exponent - 15),
+    }
+}
+
+fn wgsl_f16_literal(value: f64) -> String {
+    match value == 0.0 {
+        true if value.is_sign_negative() => "-0.0h".to_string(),
+        true => "0.0h".to_string(),
+        false => format!("{value:e}h"),
+    }
+}
+
+fn wgsl_32bit_literal(scalar: &str, word: u32) -> Option<String> {
+    match scalar {
+        "i32" if word as i32 == i32::MIN => Some("(-2147483647i - 1i)".to_string()),
+        "i32" => Some(format!("{}i", word as i32)),
+        "u32" => Some(format!("{word}u")),
+        _ => format_wgsl_f32_literal(f32::from_bits(word)),
+    }
+}
+
+// Folds bitcast<target>(argument) for call k when the argument is a const-expression of the other width family:
+// the module is parsed with `const _pe_bitcast_arg = argument;` added and every bitcast replaced by a zero value.
+// Some(Err) for a pair WGSL does not define, or when the result is NaN or infinity (a shader-creation error for a
+// const-expression).
+fn fold_f16_bitcast(
+    source: &str,
+    calls: &[(usize, usize, usize, String)],
+    k: usize,
+) -> Option<Result<String, String>> {
+    let (_, args_start, close, ref target) = calls[k];
+    let mut probe = String::with_capacity(source.len() + 64);
+    let mut copied = 0usize;
+    for (start, _, end, call_target) in calls {
+        probe.push_str(&source[copied..*start]);
+        probe.push_str(&format!("{call_target}()"));
+        copied = end + 1;
+    }
+    probe.push_str(&source[copied..]);
+    probe.push_str(&format!(
+        "\nconst _pe_bitcast_arg = {};\n",
+        &source[args_start..close]
+    ));
+
+    let module = wgsl::parse_str(&probe).ok()?;
+    let (_, constant) = module
+        .constants
+        .iter()
+        .find(|(_, c)| c.name.as_deref() == Some("_pe_bitcast_arg"))?;
+    let source_type = wgsl_type_text(&module.types[constant.ty].inner)?;
+    match f16_bitcast_plan(&source_type, target) {
+        F16BitcastPlan::Keep => return None,
+        F16BitcastPlan::Invalid => {
+            let message =
+                format!("no bitcast<{target}> overload takes an argument of type {source_type}");
+            return Some(Err(message));
+        }
+        F16BitcastPlan::Helper => {}
+    }
+
+    let mut bits = Vec::new();
+    collect_const_bits(&module, constant.init, &mut bits)?;
+    let not_finite =
+        format!("bitcast<{target}> of a const-expression evaluates to NaN or infinity");
+
+    let mut components = Vec::new();
+    if target.contains("f16") {
+        for (word, _) in bits {
+            for half in [word & 0xffff, word >> 16] {
+                let value = f16_bits_to_f64(half as u16);
+                if !value.is_finite() {
+                    return Some(Err(not_finite));
+                }
+                components.push(wgsl_f16_literal(value));
+            }
+        }
+    } else {
+        let scalar = target
+            .strip_prefix("vec")
+            .map_or(target.as_str(), |rest| &rest[2..rest.len() - 1]);
+        for pair in bits.chunks(2) {
+            let word = pair[0].0 | (pair.get(1)?.0 << 16);
+            match wgsl_32bit_literal(scalar, word) {
+                Some(text) => components.push(text),
+                None => return Some(Err(not_finite)),
+            }
+        }
+    }
+
+    match target.starts_with("vec") {
+        true => Some(Ok(format!("{target}({})", components.join(", ")))),
+        false => Some(Ok(components.concat())),
+    }
+}
+
+#[derive(Clone, Copy, PartialEq, Debug)]
+enum F16BitcastPlan {
+    Keep,
+    Helper,
+    Invalid,
+}
+
+// What bitcast<target>(e: source) needs, for pairs where either side has f16 components (WGSL bitcast overloads).
+fn f16_bitcast_plan(source: &str, target: &str) -> F16BitcastPlan {
+    let components = |t: &str| match t.strip_prefix("vec") {
+        Some(rest) => rest[..1].parse::<usize>().unwrap_or(0),
+        None => 1,
+    };
+    let (from, to) = (components(source), components(target));
+    let widening = (from == 1 && to == 2) || (from == 2 && to == 4);
+    let narrowing = (from == 2 && to == 1) || (from == 4 && to == 2);
+    match (source.contains("f16"), target.contains("f16")) {
+        _ if source == target => F16BitcastPlan::Keep,
+        (false, false) => F16BitcastPlan::Keep,
+        (false, true) if widening => F16BitcastPlan::Helper,
+        (true, false) if narrowing => F16BitcastPlan::Helper,
+        _ => F16BitcastPlan::Invalid,
+    }
+}
+
+// naga 29 cannot express a bitcast that changes the component count, and its IR has 16-bit integers, so a bitcast
+// between a 32-bit scalar or vec2 and vec2<f16> or vec4<f16> became a wrong-typed 32-bit bitcast, and invalid ones
+// such as bitcast<f16>(u32) or bitcast<vec3h>(u32) were accepted. The operand type is not in the source text, so in
+// a module that enables f16 each bitcast is probed: naga parses the module with the call routed through a function
+// taking a candidate type (the target first, so abstract literals resolve as overload resolution would), the
+// other calls replaced by zero values of their targets, and the argument's resolved type is compared. Width-changing
+// pairs use a pack2x16float/unpack2x16float helper; every value involved is representable in f16, so the result is
+// exact apart from NaN payloads. Pairs WGSL does not define are shader-creation errors.
+// ponytail: one parse per candidate per call; const-expression uses (`const c = bitcast<vec2h>(1i)`) stay rejected.
+fn lower_f16_bitcasts_source(source: &str) -> (String, Vec<WgslMessage>) {
+    const F16_SOURCES: &[&str] = &["f16", "vec2<f16>", "vec3<f16>", "vec4<f16>"];
+    const ALL_SOURCES: &[&str] = &[
+        "i32",
+        "u32",
+        "f32",
+        "f16",
+        "vec2<i32>",
+        "vec2<u32>",
+        "vec2<f32>",
+        "vec2<f16>",
+        "vec3<i32>",
+        "vec3<u32>",
+        "vec3<f32>",
+        "vec3<f16>",
+        "vec4<i32>",
+        "vec4<u32>",
+        "vec4<f32>",
+        "vec4<f16>",
+    ];
+    if !source.contains("bitcast") || !source.contains("f16") {
+        return (source.to_string(), Vec::new());
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let aliases = module_type_aliases(&scan);
+    let mut calls: Vec<(usize, usize, usize, String)> = Vec::new();
+    let mut pos = 0usize;
+    while let Some(start) = find_keyword_from(&scan, "bitcast", pos) {
+        pos = start + "bitcast".len();
+        let Some((target, args_start, close)) = bitcast_call_parts(&scan, start) else {
+            continue;
+        };
+        let target = normalize_wgsl_type(&target, &aliases);
+        if scalar_or_vector_type(&target).is_some() {
+            calls.push((start, args_start, close, target));
+        }
+    }
+
+    let mut errors = Vec::new();
+    let mut plans: Vec<Option<(&str, F16BitcastPlan)>> = vec![None; calls.len()];
+    for k in 0..calls.len() {
+        let (start, args_start, close, ref target) = calls[k];
+
+        // Nested calls are left to naga.
+        let nested = calls
+            .iter()
+            .enumerate()
+            .any(|(j, other)| j != k && other.0 < close && start < other.2);
+        if nested {
+            continue;
+        }
+
+        let others = if target.contains("f16") {
+            ALL_SOURCES
+        } else {
+            F16_SOURCES
+        };
+        let candidates =
+            std::iter::once(target.as_str()).chain(others.iter().copied().filter(|c| c != target));
+        for candidate in candidates {
+            let mut probe = String::with_capacity(source.len() + 128);
+            let mut copied = 0usize;
+            for (j, (other_start, _, other_close, other_target)) in calls.iter().enumerate() {
+                probe.push_str(&source[copied..*other_start]);
+                match j == k {
+                    true => probe.push_str(&format!(
+                        "_pe_bitcast_probe({})",
+                        &source[args_start..close]
+                    )),
+                    false => probe.push_str(&format!("{other_target}()")),
+                }
+                copied = other_close + 1;
+            }
+            probe.push_str(&source[copied..]);
+            probe.push_str(&format!(
+                "\nfn _pe_bitcast_probe(v: {candidate}) -> {target} {{ return {target}(); }}\n"
+            ));
+
+            if probe_argument_is(&probe, "_pe_bitcast_probe", candidate) {
+                let plan = f16_bitcast_plan(candidate, target);
+                if plan == F16BitcastPlan::Invalid {
+                    errors.push(wgsl_error_at(
+                        source,
+                        start,
+                        close + 1 - start,
+                        &format!(
+                            "no bitcast<{target}> overload takes an argument of type {candidate}"
+                        ),
+                    ));
+                }
+                plans[k] = Some((candidate, plan));
+                break;
+            }
+        }
+    }
+
+    // Constant-expression bitcasts cannot call a helper, so the width-changing ones are folded to literals.
+    let mut literals: Vec<Option<String>> = vec![None; calls.len()];
+    for k in 0..calls.len() {
+        if plans[k].is_some() {
+            continue;
+        }
+        let (start, _, close, _) = calls[k];
+        match fold_f16_bitcast(source, &calls, k) {
+            Some(Ok(literal)) => literals[k] = Some(literal),
+            Some(Err(message)) => {
+                errors.push(wgsl_error_at(source, start, close + 1 - start, &message))
+            }
+            None => {}
+        }
+    }
+
+    let mut out = String::with_capacity(source.len() + 512);
+    let mut helpers: BTreeSet<String> = BTreeSet::new();
+    let mut copied = 0usize;
+    for (k, (start, args_start, close, target)) in calls.iter().enumerate() {
+        let replacement = match (plans[k], &literals[k]) {
+            (Some((candidate, F16BitcastPlan::Helper)), _) => {
+                helpers.insert(f16_bitcast_helper(candidate, target));
+                let name = f16_bitcast_helper_name(candidate, target);
+                format!("{name}({})", &source[*args_start..*close])
+            }
+            (_, Some(literal)) => literal.clone(),
+            _ => continue,
+        };
+        out.push_str(&source[copied..*start]);
+        out.push_str(&replacement);
+        copied = close + 1;
+    }
+    out.push_str(&source[copied..]);
+    for helper in helpers {
+        out.push_str(&helper);
+    }
+    (out, errors)
+}
+
+// naga 29 rejects valid hexadecimal f16 literals such as `0xep2h` ("not representable by target type"), so each one
+// is rewritten as the decimal f16 literal of the same value. The value is exact in f64, and naga rounds the decimal
+// to f16 through f64 as it would the hex form.
+fn lower_hex_f16_literals_source(source: &str) -> String {
+    if !source.contains("0x") && !source.contains("0X") {
+        return source.to_string();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut replacements: Vec<(usize, usize, String)> = Vec::new();
+    let mut i = 0usize;
+    while i + 2 < bytes.len() {
+        let starts_hex = bytes[i] == b'0'
+            && (bytes[i + 1] | 0x20) == b'x'
+            && (i == 0 || !is_ident_char(bytes[i - 1]));
+        if !starts_hex {
+            i += 1;
+            continue;
+        }
+
+        let start = i;
+        let mut p = i + 2;
+        let mut mantissa = 0f64;
+        let mut scale = 0i32;
+        let mut digits = 0usize;
+        let mut seen_point = false;
+        while p < bytes.len() {
+            let c = bytes[p];
+            if c == b'.' && !seen_point {
+                seen_point = true;
+            } else if let Some(d) = (c as char).to_digit(16) {
+                mantissa = mantissa * 16.0 + f64::from(d);
+                digits += 1;
+                if seen_point {
+                    scale -= 4;
+                }
+            } else {
+                break;
+            }
+            p += 1;
+        }
+
+        // Only `<hex mantissa>p<exponent>h` is a hex f16 literal; anything else is left alone.
+        if digits == 0 || p >= bytes.len() || (bytes[p] | 0x20) != b'p' {
+            i = p.max(i + 1);
+            continue;
+        }
+        let exponent_start = p + 1;
+        let mut q = exponent_start;
+        if q < bytes.len() && (bytes[q] == b'+' || bytes[q] == b'-') {
+            q += 1;
+        }
+        let digits_start = q;
+        while q < bytes.len() && bytes[q].is_ascii_digit() {
+            q += 1;
+        }
+        let is_f16 = q > digits_start && q < bytes.len() && bytes[q] == b'h';
+        let terminated = q + 1 >= bytes.len() || !is_ident_char(bytes[q + 1]);
+        if !is_f16 || !terminated {
+            i = q.max(i + 1);
+            continue;
+        }
+
+        let Ok(exponent) = scan[exponent_start..q].parse::<i32>() else {
+            i = q + 1;
+            continue;
+        };
+        let value = mantissa * 2f64.powi(exponent.saturating_add(scale));
+        if value.is_finite() {
+            replacements.push((start, q + 1, wgsl_f16_literal(value)));
+        }
+        i = q + 1;
+    }
+
+    let mut out = String::with_capacity(source.len());
+    let mut copied = 0usize;
+    for (start, end, text) in replacements {
+        out.push_str(&source[copied..start]);
+        out.push_str(&text);
+        copied = end;
+    }
+    out.push_str(&source[copied..]);
+    out
+}
+
+// naga 29 types frexp's `exp` for an f16 argument as a 16-bit integer instead of i32, so `r.exp` cannot be stored
+// as i32 (and SPIR-V's FrexpStruct needs a 32-bit exponent). Each frexp whose argument naga resolves to f16 calls a
+// helper that runs frexp in f32: the f16 value converts exactly and its fraction keeps the same mantissa bits.
+// The calls are probed together per candidate type, then one at a time. Unsuffixed literal arguments are abstract
+// and left to naga, which evaluates them at full precision.
+// ponytail: a module whose f16 frexp calls differ in type and whose results feed i32 values is left to naga.
+fn lower_f16_frexp_source(source: &str) -> String {
+    const NAME: &str = "frexp";
+    const PROBE: &str = "_pe_frexp_probe";
+    const CANDIDATES: &[&str] = &[
+        "f32",
+        "vec2<f32>",
+        "vec3<f32>",
+        "vec4<f32>",
+        "f16",
+        "vec2<f16>",
+        "vec3<f16>",
+        "vec4<f16>",
+    ];
+    if !source.contains(NAME) || !source.contains("f16") {
+        return source.to_string();
+    }
+
+    let scan = mask_comments_preserve_len(source);
+    let mut calls: Vec<(usize, usize, usize)> = Vec::new();
+    let mut pos = 0usize;
+    while let Some(start) = find_keyword_from(&scan, NAME, pos) {
+        pos = start + NAME.len();
+        if is_function_declaration_name(&scan, start)
+            || is_builtin_shadowed_at_call(&scan, NAME, start)
+        {
+            continue;
+        }
+        let Some((_, close)) = find_call_args(&scan, start, NAME.len()) else {
+            continue;
+        };
+        let open = start + scan[start..close].find('(').unwrap_or(0);
+        let argument = scan[open + 1..close].trim();
+        let abstract_literal = argument.parse::<f64>().is_ok();
+        let nested = calls
+            .last()
+            .is_some_and(|&(_, _, last_close)| start < last_close);
+        if !abstract_literal && !nested {
+            calls.push((start, open + 1, close));
+        }
+    }
+
+    let exp_type = |float: &str| match float.strip_prefix("vec") {
+        Some(rest) => format!("vec{}<i32>", &rest[..1]),
+        None => "i32".to_string(),
+    };
+
+    // `probed` calls go through the probe function typed `candidate`; the rest stay as written.
+    let probe_for = |probed: &[usize], candidate: &str| {
+        let mut text = String::with_capacity(source.len() + 256);
+        let mut copied = 0usize;
+        for &k in probed {
+            let (start, args_start, close) = calls[k];
+            text.push_str(&source[copied..start]);
+            text.push_str(&format!("{PROBE}({})", &source[args_start..close]));
+            copied = close + 1;
+        }
+        text.push_str(&source[copied..]);
+        text.push_str(&format!(
+            "\nstruct _pe_frexp_probe_result {{ fract: {candidate}, exp: {} }}\n\
+             fn {PROBE}(v: {candidate}) -> _pe_frexp_probe_result {{ return _pe_frexp_probe_result(); }}\n",
+            exp_type(candidate)
+        ));
+        text
+    };
+
+    let all: Vec<usize> = (0..calls.len()).collect();
+    let mut chosen: Vec<Option<&str>> = vec![None; calls.len()];
+    let batch = CANDIDATES.iter().find(|candidate| {
+        probe_argument_types(&probe_for(&all, candidate), PROBE, candidate)
+            == Some((calls.len(), calls.len()))
+    });
+    match batch {
+        Some(candidate) => chosen.fill(Some(candidate)),
+        None => {
+            for (k, slot) in chosen.iter_mut().enumerate() {
+                *slot = CANDIDATES
+                    .iter()
+                    .find(|candidate| {
+                        probe_argument_is(&probe_for(&[k], candidate), PROBE, candidate)
+                    })
+                    .copied();
+            }
+        }
+    }
+
+    let mut out = String::with_capacity(source.len() + 512);
+    let mut helpers: BTreeSet<String> = BTreeSet::new();
+    let mut copied = 0usize;
+    for (&(start, args_start, close), float) in calls.iter().zip(&chosen) {
+        let Some(float) = float.filter(|c| c.contains("f16")) else {
+            continue;
+        };
+        let wide = float.replace("f16", "f32");
+        let suffix = float.replace(['<', '>'], "_");
+        let result = format!("_pe_frexp_result_{suffix}");
+        let helper = format!("_pe_frexp_{suffix}");
+        helpers.insert(format!(
+            "\nstruct {result} {{ fract: {float}, exp: {} }}\n\
+             fn {helper}(v: {float}) -> {result} {{\n  let r = frexp({wide}(v));\n  return {result}({float}(r.fract), r.exp);\n}}\n",
+            exp_type(float)
+        ));
+
+        out.push_str(&source[copied..start]);
+        out.push_str(&format!("{helper}({})", &source[args_start..close]));
+        copied = close + 1;
+    }
+    out.push_str(&source[copied..]);
+    for helper in helpers {
+        out.push_str(&helper);
+    }
+    out
+}
+
 fn lower_bit_builtins_source_once(
     source: &str,
     constants: Option<&HashMap<String, f64>>,
@@ -13789,6 +14560,14 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         None,
     );
     let parse_source = lower_abstract_float_output_snippets_source(&parse_source, None);
+    let (parse_source, bitcast_errors) = lower_f16_bitcasts_source(&parse_source);
+    if !bitcast_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(bitcast_errors);
+        return Err(msgs);
+    }
+    let parse_source = lower_f16_frexp_source(&parse_source);
+    let parse_source = lower_hex_f16_literals_source(&parse_source);
     let mut module = match wgsl::parse_str(&parse_source) {
         Ok(m) => m,
         Err(e) => {
@@ -13813,6 +14592,8 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     let mut bridge_errors = validate_storage_atomic_access(&module);
     bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
     bridge_errors.extend(validate_bool_order_comparisons(&module));
+    bridge_errors.extend(validate_derivative_types(&module));
+    bridge_errors.extend(validate_f16_const_overflow(&module));
     bridge_errors.extend(validate_alias_analysis(&module));
     bridge_errors.extend(uniformity::validate(&module, source));
     bridge_errors.extend(validate_div_rem(&module));
@@ -13877,6 +14658,9 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     // unimplemented features. Emit failure leaves spirv=None; reflection survives.
     let mut options = spv::Options::default();
     options.lang_version = (1, 3);
+    // naga polyfills f16 stage IO as f32: many GPUs (the RTX 4080 among them) lack storageInputOutput16.
+    // ponytail: on every device; keep native f16 IO where it is enabled once the bridge knows the features.
+    options.use_storage_input_output_16 = false;
     // Flips position.y at vertex exit so engine can use a native Vulkan viewport.
     options.flags = spv::WriterFlags::ADJUST_COORDINATE_SPACE;
     options.bounds_check_policies = robust_access_policies();
@@ -14748,6 +15532,188 @@ fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
               return vec4f(0);\n\
             }\n";
         assert!(compile_with_meta(fragment_size).is_err());
+    }
+
+    #[test]
+    fn f16_bitcasts_between_widths_compile() {
+        let source = "enable f16;\n\
+            alias myalias = vec2<f16>;\n\
+            @group(0) @binding(0) var<storage, read> i : array<i32>;\n\
+            @group(0) @binding(1) var<storage, read_write> h2 : array<vec2h>;\n\
+            @group(0) @binding(2) var<storage, read_write> h4 : array<vec4h>;\n\
+            @group(0) @binding(3) var<storage, read_write> u : array<u32>;\n\
+            @group(0) @binding(4) var<storage, read_write> v2 : array<vec2i>;\n\
+            @compute @workgroup_size(1) fn main() {\n\
+              h2[0] = bitcast<vec2<f16>>(i[0]);\n\
+              h2[1] = bitcast<myalias>(1);\n\
+              h2[2] = bitcast<vec2h>(h2[0]);\n\
+              h4[0] = bitcast<vec4h>(vec2f(1.0, 2.0));\n\
+              u[0] = bitcast<u32>(h2[1]) + bitcast<u32>(i[1]);\n\
+              v2[0] = bitcast<vec2<i32>>(h4[0]);\n\
+            }\n";
+
+        let lowered = lower_f16_bitcasts_source(source).0;
+        assert!(
+            lowered.contains("_pe_bitcast_i32_to_vec2_f16_(i[0])"),
+            "{lowered}"
+        );
+        assert!(
+            lowered.contains("_pe_bitcast_i32_to_vec2_f16_(1)"),
+            "{lowered}"
+        );
+        assert!(lowered.contains("bitcast<vec2h>(h2[0])"), "{lowered}");
+        assert!(lowered.contains("bitcast<u32>(i[1])"), "{lowered}");
+        assert!(
+            lowered.contains("_pe_bitcast_vec4_f16__to_vec2_i32_(h4[0])"),
+            "{lowered}"
+        );
+
+        let compiled = compile_with_meta(source);
+        if let Err(messages) = &compiled {
+            let text: Vec<&str> = messages.iter().map(|m| m.message.as_str()).collect();
+            panic!("{text:?}");
+        }
+        assert!(compiled.ok().and_then(|r| r.spirv).is_some());
+
+        // WGSL defines no bitcast for these pairs; naga accepted them as 16-bit integer bitcasts.
+        let body = |statement: &str| {
+            format!("enable f16;\n@fragment fn main() {{\n  var u : u32;\n  var h : f16;\n  var h3 : vec3h;\n  {statement}\n}}\n")
+        };
+        for invalid in [
+            "let d = bitcast<f16>(u);",
+            "let d = bitcast<vec3h>(u);",
+            "let d = bitcast<u32>(h);",
+            "let d = bitcast<u32>(h3);",
+            "let d = bitcast<vec4h>(u);",
+        ] {
+            assert!(compile_with_meta(&body(invalid)).is_err(), "{invalid}");
+        }
+        for valid in [
+            "let d = bitcast<f16>(h);",
+            "let d = bitcast<vec3h>(h3);",
+            "let d = bitcast<f32>(u);",
+        ] {
+            assert!(compile_with_meta(&body(valid)).is_ok(), "{valid}");
+        }
+
+        // Const-expression bitcasts are folded; NaN or infinity is a shader-creation error.
+        let ones = "enable f16;\n\
+            const f = bitcast<vec2<f16>>(i32(u32(0x3c003c00)));\n\
+            const w = bitcast<u32>(vec2h(1.0h, 2.0h));\n";
+        let folded = lower_f16_bitcasts_source(ones).0;
+        assert!(
+            folded.contains("const f = vec2<f16>(1e0h, 1e0h);"),
+            "{folded}"
+        );
+        assert!(folded.contains("const w = 1073757184u;"), "{folded}");
+        assert!(compile_with_meta(ones).is_ok());
+        let infinity = "enable f16;\nconst f = bitcast<vec4<f16>>(vec2<u32>(0, u32(0x7c00)));\n";
+        assert!(compile_with_meta(infinity).is_err());
+    }
+
+    #[test]
+    fn f16_validation_matches_wgsl() {
+        let module = |body: &str| format!("enable f16;\n{body}\n");
+
+        // Derivatives are f32-only.
+        assert!(compile_with_meta(&module("fn foo() { let x: f16 = dpdx(1.0h); }")).is_err());
+        assert!(compile_with_meta(&module("fn foo() { let x: f32 = dpdx(1.0f); }")).is_ok());
+
+        // An f16 const-expression that overflows is a shader-creation error.
+        assert!(
+            compile_with_meta(&module("const v = length(vec2(-65504.0h, -65504.0h));")).is_err()
+        );
+        assert!(compile_with_meta(&module("const v = length(vec2(-3.0h, 4.0h));")).is_ok());
+
+        // Hex f16 literals parse, with their exact value.
+        assert_eq!(
+            lower_hex_f16_literals_source("var<private> t = 0xep2h;"),
+            "var<private> t = 5.6e1h;"
+        );
+        assert_eq!(
+            lower_hex_f16_literals_source("let t = 0x1.8p-1h + 0x10;"),
+            "let t = 7.5e-1h + 0x10;"
+        );
+        assert!(compile_with_meta(&module("fn foo() { var test = 0xEp-2h; }")).is_ok());
+    }
+
+    #[test]
+    fn f16_frexp_exponent_is_i32() {
+        let scalar = "enable f16;\n\
+            @group(0) @binding(0) var<storage, read> h : array<f16>;\n\
+            @group(0) @binding(1) var<storage, read_write> e : array<i32>;\n\
+            @group(0) @binding(2) var<storage, read_write> f : array<f16>;\n\
+            @compute @workgroup_size(1) fn main() {\n\
+              let r = frexp(h[0]);\n\
+              e[0] = r.exp;\n\
+              f[0] = r.fract;\n\
+              e[1] = frexp(h[1]).exp;\n\
+              e[2] = frexp(1.5).exp;\n\
+            }\n";
+        let vector = "enable f16;\n\
+            @group(0) @binding(0) var<storage, read> h : array<vec3h>;\n\
+            @group(0) @binding(1) var<storage, read_write> e : array<vec3i>;\n\
+            @compute @workgroup_size(1) fn main() { e[0] = frexp(h[0]).exp; }\n";
+
+        let lowered = lower_f16_frexp_source(scalar);
+        assert!(lowered.contains("_pe_frexp_f16(h[0])"), "{lowered}");
+        assert!(lowered.contains("_pe_frexp_f16(h[1])"), "{lowered}");
+        assert!(lowered.contains("frexp(1.5)"), "{lowered}");
+        assert!(lower_f16_frexp_source(vector).contains("_pe_frexp_vec3_f16_(h[0])"));
+
+        for source in [scalar, vector] {
+            let compiled = compile_with_meta(source);
+            if let Err(messages) = &compiled {
+                let text: Vec<&str> = messages.iter().map(|m| m.message.as_str()).collect();
+                panic!("{text:?}");
+            }
+            assert!(compiled.ok().and_then(|r| r.spirv).is_some());
+        }
+    }
+
+    #[test]
+    fn f16_stage_io_is_lowered_to_f32() {
+        let source = "enable f16;\n\
+            struct V { @builtin(position) pos: vec4f, @location(0) color: vec3h, @location(1) @interpolate(flat) k: f16 }\n\
+            @vertex fn vs(@location(0) p: vec2h, @location(1) w: f32) -> V {\n\
+              return V(vec4f(vec2f(p), 0.0, w), vec3h(p.x, p.y, 1.0h), p.x * 2.0h);\n\
+            }\n\
+            @fragment fn fs(v: V) -> @location(0) vec4h {\n\
+              return vec4h(v.color * v.k, 1.0h);\n\
+            }\n";
+
+        let capabilities = |words: &[u32]| {
+            let mut out = Vec::new();
+            let mut i = 5usize;
+            while i < words.len() {
+                let count = (words[i] >> 16) as usize;
+                if words[i] & 0xFFFF == 17 && count == 2 {
+                    out.push(words[i + 1]);
+                }
+                i += count.max(1);
+            }
+            out
+        };
+
+        let compiled = compile_with_meta(source)
+            .ok()
+            .and_then(|r| r.spirv)
+            .expect("compile");
+        let caps = capabilities(&compiled);
+        assert!(
+            !caps.contains(&4436),
+            "StorageInputOutput16 still declared: {caps:?}"
+        );
+        assert!(caps.contains(&9), "Float16 arithmetic missing: {caps:?}");
+
+        for entry in ["vs", "fs"] {
+            let baked =
+                bake_wgsl_with_constants(source, HashMap::new(), Some(entry)).expect("bake");
+            assert!(
+                !capabilities(&baked).contains(&4436),
+                "{entry}: StorageInputOutput16 declared"
+            );
+        }
     }
 
     #[test]
@@ -15678,6 +16644,12 @@ pub fn bake_wgsl_with_constants(
     );
     let parse_source = lower_abstract_float_output_snippets_source(&parse_source, Some(&constants));
     let parse_source = runtime_constant_lets_source(&parse_source);
+    let (parse_source, bitcast_errors) = lower_f16_bitcasts_source(&parse_source);
+    if !bitcast_errors.is_empty() {
+        return None;
+    }
+    let parse_source = lower_f16_frexp_source(&parse_source);
+    let parse_source = lower_hex_f16_literals_source(&parse_source);
     let mut module = wgsl::parse_str(&parse_source).ok()?;
     clamp_image_sample_bias(&mut module);
     cloak_const_indices(&mut module, &parse_source);
@@ -15686,6 +16658,8 @@ pub fn bake_wgsl_with_constants(
     bridge_errors.extend(validate_subgroup_gather_ids(&module));
     bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
     bridge_errors.extend(validate_bool_order_comparisons(&module));
+    bridge_errors.extend(validate_derivative_types(&module));
+    bridge_errors.extend(validate_f16_const_overflow(&module));
     bridge_errors.extend(validate_alias_analysis(&module));
     if !bridge_errors.is_empty() {
         return None;
@@ -15729,6 +16703,9 @@ pub fn bake_wgsl_with_constants(
 
     let mut options = spv::Options::default();
     options.lang_version = (1, 3);
+    // naga polyfills f16 stage IO as f32: many GPUs (the RTX 4080 among them) lack storageInputOutput16.
+    // ponytail: on every device; keep native f16 IO where it is enabled once the bridge knows the features.
+    options.use_storage_input_output_16 = false;
     options.flags = spv::WriterFlags::ADJUST_COORDINATE_SPACE;
     options.bounds_check_policies = robust_access_policies();
     let mut words: Vec<u32> = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
@@ -15764,6 +16741,9 @@ pub fn bake_wgsl_with_constants(
                     return None;
                 }
                 if !validate_subgroup_gather_ids(&processed_module).is_empty() {
+                    return None;
+                }
+                if !validate_f16_const_overflow(&processed_module).is_empty() {
                     return None;
                 }
                 fold_bit_builtins(&mut processed_module);
