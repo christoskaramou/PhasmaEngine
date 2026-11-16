@@ -450,6 +450,36 @@ namespace pwgpu
     // encoder's command buffer. Marks them initialized afterwards. Returns true iff any
     // clear was emitted (caller may want to know whether to insert a follow-up barrier).
     //
+    // The clear mask for zeroing `pairs` of aspect `a`; the caller holds tex->stateMutex. Intel's UHD 770
+    // Vulkan driver crashes in a later vkCmdClearDepthStencilImage once images that had only one aspect of a
+    // combined depth-stencil format cleared are destroyed, so when the other aspect of every pair is
+    // uninitialized too (its contents cannot be observed) it is zeroed in the same clear and marked initialized.
+    // ponytail: a single-aspect clear remains when the other aspect already holds data; a render-pass clear
+    // would avoid that one as well.
+    static PeImageAspectFlags ZeroInitAspectMask(WGPUTextureImpl *tex, uint8_t a,
+                                                 const std::vector<std::pair<uint32_t, uint32_t>> &pairs)
+    {
+        if (a != kAspectDepth && a != kAspectStencil)
+            return PE_IMAGE_ASPECT_COLOR;
+
+        const PeImageAspectFlags single = a == kAspectDepth ? PE_IMAGE_ASPECT_DEPTH : PE_IMAGE_ASPECT_STENCIL;
+        const bool combined = pwgpu::HasDepthAspect(tex->format) && pwgpu::HasStencilAspect(tex->format);
+        if (!combined)
+            return single;
+
+        const uint8_t other = a == kAspectDepth ? kAspectStencil : kAspectDepth;
+        for (const auto &p : pairs)
+        {
+            if (!tex->uninitializedSubresources.count(MakeSubresourceKey(p.first, p.second, other)))
+                return single;
+        }
+
+        for (const auto &p : pairs)
+            tex->uninitializedSubresources.erase(MakeSubresourceKey(p.first, p.second, other));
+
+        return PE_IMAGE_ASPECT_DEPTH | PE_IMAGE_ASPECT_STENCIL;
+    }
+
     // Only the individual (mip, layer) subresources that are currently tracked as
     // uninitialized are cleared; untouched subresources in the same bounding range
     // keep their data. Previously this function issued a fused clear over the full
@@ -480,15 +510,7 @@ namespace pwgpu
                 if (toClear.empty())
                     continue;
 
-                PeImageAspectFlags aspectMask = PE_IMAGE_ASPECT_NONE;
-                if (a == kAspectDepth)
-                    aspectMask = PE_IMAGE_ASPECT_DEPTH;
-                else if (a == kAspectStencil)
-                    aspectMask = PE_IMAGE_ASPECT_STENCIL;
-                else
-                    aspectMask = PE_IMAGE_ASPECT_COLOR;
-
-                RecordZeroInitTextureSubresources(cmd, tex, toClear, aspectMask);
+                RecordZeroInitTextureSubresources(cmd, tex, toClear, ZeroInitAspectMask(tex, a, toClear));
                 emittedAny = true;
 
                 for (const auto &p : toClear)
@@ -515,7 +537,7 @@ namespace pwgpu
         // Under a single lock: snapshot exact (aspect -> list of (mip,layer)) pairs that
         // need clearing, then mark them initialized so concurrent lookups see the state
         // change immediately. The GPU work itself doesn't need the lock held.
-        std::vector<std::pair<uint8_t, std::vector<std::pair<uint32_t, uint32_t>>>> work;
+        std::vector<std::pair<PeImageAspectFlags, std::vector<std::pair<uint32_t, uint32_t>>>> work;
         {
             std::lock_guard<std::mutex> lk(tex->stateMutex);
             for (uint8_t a : aspects)
@@ -529,7 +551,9 @@ namespace pwgpu
                     continue;
                 for (const auto &p : pairs)
                     tex->uninitializedSubresources.erase(MakeSubresourceKey(p.first, p.second, a));
-                work.emplace_back(a, std::move(pairs));
+
+                const PeImageAspectFlags aspectMask = ZeroInitAspectMask(tex, a, pairs);
+                work.emplace_back(aspectMask, std::move(pairs));
             }
             if (work.empty())
                 return;
@@ -540,16 +564,7 @@ namespace pwgpu
         pe::CommandBuffer *cmd = q->peQueue->AcquireCommandBuffer();
         cmd->Begin();
         for (const auto &entry : work)
-        {
-            PeImageAspectFlags aspectMask = PE_IMAGE_ASPECT_NONE;
-            if (entry.first == kAspectDepth)
-                aspectMask = PE_IMAGE_ASPECT_DEPTH;
-            else if (entry.first == kAspectStencil)
-                aspectMask = PE_IMAGE_ASPECT_STENCIL;
-            else
-                aspectMask = PE_IMAGE_ASPECT_COLOR;
-            RecordZeroInitTextureSubresources(cmd, tex, entry.second, aspectMask);
-        }
+            RecordZeroInitTextureSubresources(cmd, tex, entry.second, entry.first);
         cmd->End();
         q->peQueue->Submit(1, &cmd, nullptr, nullptr);
         const uint64_t serial = q->peQueue->GetSubmissionCount();
