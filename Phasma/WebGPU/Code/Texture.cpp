@@ -1153,11 +1153,12 @@ extern "C"
 
                 // A depth texel is (D, 0, 0, 1). The Intel UHD 770 driver feeds a G, B or A source to the
                 // depth comparison as 0 instead of applying the swizzle to the comparison result, so those
-                // sources are spelled as the constants they are.
+                // sources are spelled as the constants they are. An identity view stays identity, which
+                // Vulkan requires of an attachment view.
                 const bool depthView =
                     pwgpu::HasDepthAspect(resolved.format) &&
                     resolved.aspect != WGPUTextureAspect_StencilOnly;
-                if (depthView)
+                if (depthView && view->hasNonIdentitySwizzle)
                 {
                     auto toDepthConstant = [](vk::ComponentSwizzle s)
                     {
