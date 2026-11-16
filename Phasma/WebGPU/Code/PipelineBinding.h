@@ -1,6 +1,8 @@
 #pragma once
 
+#include <array>
 #include <cstddef>
+#include <cstring>
 
 #include "API/RHITypes.h"
 
@@ -51,6 +53,41 @@ namespace pwgpu
         size_t indexBufferOffset = 0;
         PeIndexType indexBufferType = PE_INDEX_TYPE_UINT32;
     };
+
+    // GPUBindingCommandsMixin's [[immediate_data]] and [[immediate_slots_set]].
+    struct WebGPUImmediates
+    {
+        // The maxImmediateSize exposed (the WebGPU default); one slotsSet bit per 4 bytes.
+        static constexpr uint32_t kMaxSize = 64;
+
+        std::array<uint8_t, kMaxSize> data{};
+        uint64_t slotsSet = 0;
+
+        // The device-timeline steps of setImmediates. Returns false when the call must invalidate the encoder.
+        bool Set(uint32_t maxImmediateSize, uint32_t offset, const void *bytes, size_t size)
+        {
+            const bool aligned = offset % 4 == 0 && size % 4 == 0;
+            if (!aligned || offset > maxImmediateSize || size > maxImmediateSize - offset)
+                return false;
+
+            if (size == 0)
+                return true;
+
+            std::memcpy(data.data() + offset, bytes, size);
+            for (size_t slot = offset / 4; slot < (offset + size) / 4; ++slot)
+                slotsSet |= 1ull << slot;
+
+            return true;
+        }
+
+        // "Validate immediate data": every slot the pipeline's shaders read has been set.
+        bool Covers(uint64_t pipelineSlots) const { return (slotsSet & pipelineSlots) == pipelineSlots; }
+    };
+
+    // Records the immediate data a layout declares, before a draw or dispatch (nothing for a layout without any).
+    void PushWebGPUImmediates(pe::CommandBuffer *cmd,
+                              const WGPUPipelineLayoutImpl *layout,
+                              const WebGPUImmediates &immediates);
 
     bool BindWebGPURenderPipeline(pe::CommandBuffer *cmd,
                                   WGPURenderPipelineImpl *pipeline,

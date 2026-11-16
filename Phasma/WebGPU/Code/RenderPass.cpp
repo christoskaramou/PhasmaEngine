@@ -1204,6 +1204,33 @@ extern "C"
         rpe->usedBuffers.push_back(buffer);
     }
 
+    void wgpuRenderPassEncoderSetImmediates(WGPURenderPassEncoder rpe, uint32_t offset, void const *data, size_t size)
+    {
+        if (!RenderingActive(rpe, "wgpuRenderPassEncoderSetImmediates"))
+            return;
+
+        if (!rpe->immediates.Set(rpe->device->limits.maxImmediateSize, offset, data, size))
+        {
+            ReportPassValidation(rpe, "setImmediates: the range must be 4-byte aligned and within maxImmediateSize");
+            rpe->invalid = true;
+        }
+    }
+
+    // "Validate immediate data" for a draw, then records the data. False (and an invalid pass) when a slot the
+    // pipeline's shaders read is unset.
+    static bool ApplyImmediates(WGPURenderPassEncoder rpe)
+    {
+        if (!rpe->immediates.Covers(rpe->pipeline->immediateSlots))
+        {
+            ReportPassValidation(rpe, "draw: immediate data the pipeline reads has not been set");
+            rpe->invalid = true;
+            return false;
+        }
+
+        pwgpu::PushWebGPUImmediates(rpe->cmd, rpe->pipeline->layout, rpe->immediates);
+        return true;
+    }
+
     void wgpuRenderPassEncoderDraw(WGPURenderPassEncoder rpe, uint32_t vertexCount,
                                    uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
@@ -1215,7 +1242,7 @@ extern "C"
             rpe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rpe))
+        if (!ValidateBindGroupCompat(rpe) || !ApplyImmediates(rpe))
             return;
         if (!ValidateDrawVertexState(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers,
                                      firstVertex, vertexCount, firstInstance, instanceCount, false))
@@ -1253,7 +1280,7 @@ extern "C"
             rpe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rpe))
+        if (!ValidateBindGroupCompat(rpe) || !ApplyImmediates(rpe))
             return;
         if (!ValidateDrawVertexState(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers,
                                      0, 0, firstInstance, instanceCount, true))
@@ -1338,7 +1365,7 @@ extern "C"
             rpe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rpe))
+        if (!ValidateBindGroupCompat(rpe) || !ApplyImmediates(rpe))
             return;
         if (!ValidateDrawBindPresence(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers))
         {
@@ -1433,7 +1460,7 @@ extern "C"
             rpe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rpe))
+        if (!ValidateBindGroupCompat(rpe) || !ApplyImmediates(rpe))
             return;
         if (!ValidateDrawBindPresence(rpe->pipeline->vertexBufferLayouts, rpe->boundVertexBuffers))
         {
@@ -1752,6 +1779,7 @@ extern "C"
         }
 
         rpe->pipeline = nullptr;
+        rpe->immediates.slotsSet = 0;
         rpe->bindingStateInvalidated = true;
         rpe->bindingCache = {};
     }

@@ -220,6 +220,9 @@ namespace pwgpu::Wgsl
             for (size_t b = 0; b < view.statically_used_count; ++b)
                 entryPoint.staticallyUsed.push_back(ToBinding(view.statically_used[b]));
 
+            entryPoint.immediateSize = view.immediate_size;
+            entryPoint.immediateSlots = view.immediate_slots;
+
             WGPUShaderModuleImpl::EntryPoint moduleEntryPoint{};
             moduleEntryPoint.name = entryPoint.name;
             moduleEntryPoint.executionModel = ExecutionModelFromStage(entryPoint.stage);

@@ -637,6 +637,29 @@ extern "C"
         return true;
     }
 
+    void wgpuComputePassEncoderSetImmediates(WGPUComputePassEncoder cpe, uint32_t offset, void const *data, size_t size)
+    {
+        if (!PassOpen(cpe, "wgpuComputePassEncoderSetImmediates"))
+            return;
+
+        if (!cpe->immediates.Set(cpe->device->limits.maxImmediateSize, offset, data, size))
+        {
+            ReportPassValidation(cpe, "setImmediates: the range must be 4-byte aligned and within maxImmediateSize");
+            cpe->invalid = true;
+        }
+    }
+
+    // "Validate immediate data" for a dispatch; false (and an invalid pass) when a slot the shader reads is unset.
+    static bool ValidateImmediates(WGPUComputePassEncoder cpe)
+    {
+        if (cpe->immediates.Covers(cpe->pipeline->immediateSlots))
+            return true;
+
+        ReportPassValidation(cpe, "compute pass: immediate data the pipeline reads has not been set");
+        cpe->invalid = true;
+        return false;
+    }
+
     static void ValidateDispatchUsageScope(WGPUComputePassEncoder cpe, WGPUBuffer indirectBuffer = nullptr)
     {
         if (!cpe->pipeline || !cpe->pipeline->layout)
@@ -724,11 +747,12 @@ extern "C"
             return;
         }
 
-        if (!ValidateBindGroupCompat(cpe))
+        if (!ValidateBindGroupCompat(cpe) || !ValidateImmediates(cpe))
             return;
 
         ValidateDispatchUsageScope(cpe);
         EmitDispatchResourceBarriers(cpe);
+        pwgpu::PushWebGPUImmediates(cpe->cmd, cpe->pipeline->layout, cpe->immediates);
 
         if (!pwgpu::DispatchWebGPUCompute(cpe->cmd, x, y, z))
             cpe->invalid = true;
@@ -799,7 +823,7 @@ extern "C"
             return;
         }
 
-        if (!ValidateBindGroupCompat(cpe))
+        if (!ValidateBindGroupCompat(cpe) || !ValidateImmediates(cpe))
             return;
 
         // ponytail: pe::CommandBuffer has no DispatchIndirect; DX12 needs an indirect
@@ -822,7 +846,11 @@ extern "C"
         // ponytail: without device addresses (no bufferDeviceAddress) the counts are dispatched unchecked; such a
         // device needs a descriptor-bound variant of the validation shader.
         vk::CommandBuffer vkCmd = pe::GetVulkanCommandBuffer(cpe->cmd);
-        if (pe::Buffer *arguments = ValidatedIndirectArguments(cpe, buffer, offset))
+        pe::Buffer *arguments = ValidatedIndirectArguments(cpe, buffer, offset);
+
+        // After the validation dispatch, whose own push constants replace the ones of the pass.
+        pwgpu::PushWebGPUImmediates(cpe->cmd, cpe->pipeline->layout, cpe->immediates);
+        if (arguments)
             vkCmd.dispatchIndirect(pe::GetVulkanBuffer(arguments), 0);
         else
             vkCmd.dispatchIndirect(pe::GetVulkanBuffer(buffer->peBuffer), offset);

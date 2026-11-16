@@ -1,10 +1,11 @@
 #include "WGPULimits.h"
 #include "API/RHI.h"
+#include "PipelineBinding.h"
 
 namespace pwgpu
 {
 
-    void FillLimitsFromCore(WGPULimits &out, const pe::GpuLimits &limits)
+    void FillLimitsFromCore(WGPULimits &out, const pe::GpuLimits &limits, PeGraphicsApi api)
     {
         out.nextInChain = nullptr;
 
@@ -53,7 +54,9 @@ namespace pwgpu
         out.maxComputeWorkgroupSizeY = std::min(limits.maxComputeWorkgroupSizeY, 1024u);
         out.maxComputeWorkgroupSizeZ = std::min(limits.maxComputeWorkgroupSizeZ, 64u);
         out.maxComputeWorkgroupsPerDimension = limits.maxComputeWorkgroupsPerDimension;
-        out.maxImmediateSize = 0;
+
+        // ponytail: immediates are Vulkan push constants; DX12 needs a root-constant path before it can expose them.
+        out.maxImmediateSize = api == PE_GRAPHICS_API_VULKAN ? WebGPUImmediates::kMaxSize : 0;
 
         const uint32_t perStage = out.maxSampledTexturesPerShaderStage +
                                   out.maxSamplersPerShaderStage +
@@ -273,7 +276,11 @@ namespace pwgpu
     {
         const WGPULimits defaults = DefaultLimits();
         if (!requested)
-            return defaults;
+        {
+            WGPULimits out = defaults;
+            out.maxImmediateSize = std::min(out.maxImmediateSize, adapterLim.maxImmediateSize);
+            return out;
+        }
 
         WGPULimits out{};
         const WGPULimits &req = *requested;
@@ -309,6 +316,9 @@ namespace pwgpu
         PWGPU_RESOLVE_MAX(maxComputeWorkgroupSizeZ);
         PWGPU_RESOLVE_MAX(maxComputeWorkgroupsPerDimension);
         PWGPU_RESOLVE_MAX(maxImmediateSize);
+
+        // The one default an adapter may fall short of (see FillLimitsFromCore).
+        out.maxImmediateSize = std::min(out.maxImmediateSize, adapterLim.maxImmediateSize);
         out.nextInChain = nullptr;
         return out;
     }

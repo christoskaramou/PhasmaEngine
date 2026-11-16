@@ -22,5 +22,7 @@ struct WGPUPipelineLayoutImpl
     std::vector<WGPUBindGroupLayoutImpl *> bindGroupLayouts;
     std::vector<PeBackendHandle> ownedEmptyBackendLayouts;
     WGPUBindingModel bindingModel = WGPUBindingModel::Classic;
+    // Bytes of immediate data; on Vulkan one push-constant range of this size covering every stage.
+    uint32_t immediateSize = 0;
     bool invalid = false;
 };

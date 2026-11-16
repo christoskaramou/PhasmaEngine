@@ -38,6 +38,7 @@ struct WGPUComputePassEncoderImpl
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
     std::vector<std::vector<uint32_t>> currentDynamicOffsets;
     pwgpu::WebGPUBindingCache bindingCache;
+    pwgpu::WebGPUImmediates immediates;
     bool usageScopeValid = true;
 };
 

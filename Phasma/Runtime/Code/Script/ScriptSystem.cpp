@@ -495,6 +495,19 @@ namespace pe
         // arg atan2(y, 1) == atan(y).
         m_lua.script("local atan2 = math.atan2 "
                      "math.atan = function(y, x) return atan2(y, x or 1) end");
+#else
+        // Lua 5.4 (the browser player) rejects math.randomseed(x) for a float without an integer representation;
+        // LuaJIT takes any number, and game scripts seed with fractional clocks.
+        m_lua.script("local seed, floor, kind = math.randomseed, math.floor, math.type "
+                     "math.randomseed = function(x, ...) "
+                     "if kind(x) == 'float' then x = floor(x % 4294967296) end "
+                     "return seed(x, ...) end");
+
+        // The Lua 5.1 names game scripts written against LuaJIT still call; 5.4 dropped them.
+        m_lua.script("math.atan2 = math.atan2 or math.atan "
+                     "math.pow = math.pow or function(x, y) return x ^ y end "
+                     "unpack = unpack or table.unpack "
+                     "loadstring = loadstring or load");
 #endif
 
         // Logging

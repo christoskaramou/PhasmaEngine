@@ -27,6 +27,8 @@ extern "C"
         const char *stage;
         const NagaBindingView *statically_used;
         size_t statically_used_count;
+        uint32_t immediate_size;
+        uint64_t immediate_slots;
     } NagaEntryPointView;
 
     typedef struct NagaOverrideView

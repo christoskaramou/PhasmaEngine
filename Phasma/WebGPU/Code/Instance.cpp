@@ -459,7 +459,7 @@ extern "C"
 
         {
             WGPULimits adapterLim{};
-            pwgpu::FillLimitsFromCore(adapterLim, rhi->GetGpuLimits());
+            pwgpu::FillLimitsFromCore(adapterLim, rhi->GetGpuLimits(), rhi->GetApi());
             std::string badField;
             if (pwgpu::ValidateAdapterLimits(adapterLim, badField) != WGPUStatus_Success)
             {

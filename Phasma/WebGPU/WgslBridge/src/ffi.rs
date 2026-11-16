@@ -34,6 +34,8 @@ pub struct NagaEntryPointView {
     pub stage: *const c_char,
     pub statically_used: *const NagaBindingView,
     pub statically_used_count: usize,
+    pub immediate_size: u32,
+    pub immediate_slots: u64,
 }
 
 #[repr(C)]
@@ -80,6 +82,8 @@ struct EntryPointOwned {
     stage: CString,
     _statically_used: Vec<BindingOwned>,
     statically_used_views: Vec<NagaBindingView>,
+    immediate_size: u32,
+    immediate_slots: u64,
 }
 
 struct OverrideOwned {
@@ -182,6 +186,8 @@ impl EntryPointOwned {
             stage: make_cstring(entry_point.stage),
             _statically_used: statically_used,
             statically_used_views,
+            immediate_size: entry_point.immediate_size,
+            immediate_slots: entry_point.immediate_slots,
         }
     }
 
@@ -195,6 +201,8 @@ impl EntryPointOwned {
                 self.statically_used_views.as_ptr()
             },
             statically_used_count: self.statically_used_views.len(),
+            immediate_size: self.immediate_size,
+            immediate_slots: self.immediate_slots,
         }
     }
 }
@@ -428,6 +436,8 @@ pub unsafe extern "C" fn naga_result_entry_point(
             stage: ptr::null(),
             statically_used: ptr::null(),
             statically_used_count: 0,
+            immediate_size: 0,
+            immediate_slots: 0,
         });
     unsafe {
         *out = view;

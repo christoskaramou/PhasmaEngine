@@ -374,6 +374,14 @@ namespace pwgpu
         if (aspectMask & PE_IMAGE_ASPECT_STENCIL)
             vkAspectMask |= vk::ImageAspectFlagBits::eStencil;
 
+        // stencil8 without S8_UINT lives in a combined depth-stencil VkFormat whose depth aspect is unused. Intel's
+        // UHD 770 Vulkan driver can crash in a stencil-only vkCmdClearDepthStencilImage of such an image, and
+        // clearing the unused depth too is harmless, so both aspects are cleared.
+        const bool combinedStencil8 = tex->format == WGPUTextureFormat_Stencil8 && tex->device &&
+                                      tex->device->resolvedStencil8 != VK_FORMAT_S8_UINT;
+        if (combinedStencil8)
+            vkAspectMask |= vk::ImageAspectFlagBits::eDepth;
+
         // Compute bounding box for the layout transition. A layout transition on
         // already-initialized neighbors is safe (data is preserved); only the actual zero
         // operations below are data-destructive, and they list exact subresources.
@@ -528,6 +536,7 @@ namespace pwgpu
         }
 
         WGPUQueueImpl *q = tex->device->queue;
+        q->RecyclePendingSubmits();
         pe::CommandBuffer *cmd = q->peQueue->AcquireCommandBuffer();
         cmd->Begin();
         for (const auto &entry : work)
@@ -845,6 +854,9 @@ extern "C"
         WGPUTextureUsage viewUsage = static_cast<WGPUTextureUsage>(resolved.usage);
         if ((viewUsage & ~texture->usage) != 0)
             return reportValidation("view usage must be a subset of texture usage");
+
+        if ((texture->usage & WGPUTextureUsage_TransientAttachment) && viewUsage != texture->usage)
+            return reportValidation("a view of a TRANSIENT_ATTACHMENT texture must have the texture's usage");
 
         const bool tier1 =
             texture->device &&

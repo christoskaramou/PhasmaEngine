@@ -52,7 +52,7 @@ def private_player(build, work, name="player"):
 
 def bake_probes(player, project, seconds):
     """Runs the player with ray tracing until GlobalIlluminationPass logs its bake of the startup scene."""
-    settings = {"project_manifest": str(Path(project).resolve() / "phasma_project.json"), "bake_gi": True}
+    settings = {"project_manifest": str(Path(project).resolve() / "phasma_project.json"), "bake_gi": True, "audio_muted": True}
     (player / "phasma_settings.json").write_text(json.dumps(settings), encoding="utf-8")
     env = dict(os.environ)
     env.pop("PHASMA_CAPS_PROFILE", None)
@@ -80,7 +80,13 @@ def bake_probes(player, project, seconds):
 
 def run_player(player, project, seconds):
     if project:
-        settings = {"project_manifest": str(Path(project).resolve() / "phasma_project.json")}
+        # A copy without Assets/Save, which the exporter leaves out too: the developer's saved game settings (a
+        # bloom or shadow toggle) would hide passes whose shaders the browser, starting from defaults, then misses.
+        clean = player.parent / "project"
+        saves = Path(project).resolve() / "Assets"
+        shutil.copytree(project, clean, ignore=lambda folder, names: ["Save"] if Path(folder).resolve() == saves else [])
+        settings = {"project_manifest": str(clean / "phasma_project.json"), "audio_muted": True,
+                    "bake_web_shaders": True}
         (player / "phasma_settings.json").write_text(json.dumps(settings), encoding="utf-8")
 
     env = dict(os.environ, PHASMA_CAPS_PROFILE="webgpu", PHASMA_SPIRV_TARGET="1.2")
@@ -110,6 +116,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--build", default=str(ROOT / "build-p1-desktop" / "Release"))
     parser.add_argument("--project", default="")
+    parser.add_argument("--keep", action="store_true",
+                        help="add to the modules already in --out (keys cover source and defines, so old ones are inert)")
     parser.add_argument("--seconds", type=int, default=40)
     parser.add_argument("--out", default=str(ROOT / "build-wasm-player" / "web-shader-cache"))
     parser.add_argument("--gi", action="store_true", help="bake static GI probes for the project's startup scene")
@@ -142,11 +150,11 @@ def main():
             print(convert.stderr.strip())
 
         out = Path(args.out) / "ShaderCache"
-        if out.exists():
+        if out.exists() and not args.keep:
             shutil.rmtree(out)
 
         for folder in ("_spv", "_wgsl"):
-            shutil.copytree(cache / folder, out / folder)
+            shutil.copytree(cache / folder, out / folder, dirs_exist_ok=True)
 
         # The log maps each key to its source, for reading the converter's failures.
         shutil.copy2(player / "PhasmaEngine.log", Path(args.out) / "bake.log")

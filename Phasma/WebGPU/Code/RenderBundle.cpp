@@ -975,6 +975,41 @@ extern "C"
         rbe->nativeOps.push_back(std::move(op));
     }
 
+    void wgpuRenderBundleEncoderSetImmediates(WGPURenderBundleEncoder rbe, uint32_t offset, void const *data, size_t size)
+    {
+        if (!EncoderOpen(rbe, "wgpuRenderBundleEncoderSetImmediates"))
+            return;
+
+        if (!rbe->immediates.Set(rbe->device->limits.maxImmediateSize, offset, data, size))
+        {
+            ReportEncoderValidation(rbe, "setImmediates: the range must be 4-byte aligned and within maxImmediateSize");
+            rbe->invalid = true;
+        }
+    }
+
+    // "Validate immediate data" for a draw, then records the data for the replay. False (and an invalid encoder)
+    // when a slot the pipeline's shaders read is unset.
+    static bool ApplyImmediates(WGPURenderBundleEncoder rbe)
+    {
+        if (!rbe->immediates.Covers(rbe->pipeline->immediateSlots))
+        {
+            ReportEncoderValidation(rbe, "draw: immediate data the pipeline reads has not been set");
+            rbe->invalid = true;
+            return false;
+        }
+
+        WGPUPipelineLayoutImpl *layout = rbe->pipeline->layout;
+        if (!layout || layout->immediateSize == 0)
+            return true;
+
+        // ponytail: bundles with immediate data replay inline; add a native op carrying the bytes if their
+        // secondary command buffers are ever wanted. The retained pipeline keeps the layout alive.
+        rbe->vulkanNativeEligible = false;
+        rbe->commands.push_back([layout, immediates = rbe->immediates](pe::CommandBuffer *cmd, pwgpu::WebGPUBindingCache *)
+                                { pwgpu::PushWebGPUImmediates(cmd, layout, immediates); });
+        return true;
+    }
+
     void wgpuRenderBundleEncoderDraw(WGPURenderBundleEncoder rbe, uint32_t vertexCount,
                                      uint32_t instanceCount, uint32_t firstVertex, uint32_t firstInstance)
     {
@@ -985,7 +1020,7 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rbe))
+        if (!ValidateBindGroupCompat(rbe) || !ApplyImmediates(rbe))
             return;
         if (!ValidateDrawVertexState(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers,
                                      firstVertex, vertexCount, firstInstance, instanceCount, false))
@@ -1031,7 +1066,7 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rbe))
+        if (!ValidateBindGroupCompat(rbe) || !ApplyImmediates(rbe))
             return;
         if (!ValidateDrawVertexState(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers,
                                      0, 0, firstInstance, instanceCount, true))
@@ -1107,7 +1142,7 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rbe))
+        if (!ValidateBindGroupCompat(rbe) || !ApplyImmediates(rbe))
             return;
         if (!ValidateDrawBindPresence(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers))
         {
@@ -1187,7 +1222,7 @@ extern "C"
             rbe->invalid = true;
             return;
         }
-        if (!ValidateBindGroupCompat(rbe))
+        if (!ValidateBindGroupCompat(rbe) || !ApplyImmediates(rbe))
             return;
         if (!ValidateDrawBindPresence(rbe->pipeline->vertexBufferLayouts, rbe->boundVertexBuffers))
         {

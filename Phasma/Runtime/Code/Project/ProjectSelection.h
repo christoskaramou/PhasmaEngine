@@ -10,6 +10,7 @@ namespace pe
     inline constexpr const char *kStartupSceneSettingsKey = "startup_scene";
     inline constexpr const char *kAudioMutedSettingsKey = "audio_muted";
     inline constexpr const char *kBakeGiSettingsKey = "bake_gi";
+    inline constexpr const char *kBakeWebShadersSettingsKey = "bake_web_shaders";
 
     enum class ProjectSelectionSource : uint8_t
     {
@@ -41,6 +42,8 @@ namespace pe
     // "audio_muted": true starts every run from these settings silent (test and review launches).
     [[nodiscard]] bool ReadRuntimeAudioMuted(const std::filesystem::path &settingsPath = {});
     [[nodiscard]] bool ReadRuntimeBakeGi();
+    // "bake_web_shaders": true (tools/bake_web_shaders.py) initialises every render pass once, enabled or not.
+    [[nodiscard]] bool ReadRuntimeBakeWebShaders();
     [[nodiscard]] bool WriteProjectSelection(const std::filesystem::path &settingsPath,
                                              const ProjectConfig &project,
                                              std::string *error = nullptr);

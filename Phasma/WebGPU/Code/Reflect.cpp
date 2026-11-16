@@ -1403,6 +1403,7 @@ namespace pwgpu
 
     WGPUPipelineLayoutImpl *BuildAutoPipelineLayout(WGPUDeviceImpl *device,
                                                     const std::vector<AutoLayoutStageInput> &stages,
+                                                    uint32_t immediateSize,
                                                     std::string &errMsg)
     {
         std::map<uint32_t, std::map<uint32_t, ReflectedBinding>> merged;
@@ -1575,6 +1576,7 @@ namespace pwgpu
         pl->device = device;
         device->refCount.fetch_add(1, std::memory_order_relaxed);
         pl->bindGroupLayouts.resize(numSets, nullptr);
+        pl->immediateSize = immediateSize;
 
         for (uint32_t s = 0; s < numSets; ++s)
         {

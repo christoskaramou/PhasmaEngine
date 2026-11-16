@@ -44,7 +44,7 @@ namespace pwgpu
         lim.maxComputeWorkgroupSizeY = 256;
         lim.maxComputeWorkgroupSizeZ = 64;
         lim.maxComputeWorkgroupsPerDimension = 65535;
-        lim.maxImmediateSize = 0;
+        lim.maxImmediateSize = 64;
         return lim;
     }
 
@@ -52,7 +52,7 @@ namespace pwgpu
                                        const WGPULimits &requested,
                                        std::string &outFirstBadLimit);
 
-    void FillLimitsFromCore(WGPULimits &out, const pe::GpuLimits &limits);
+    void FillLimitsFromCore(WGPULimits &out, const pe::GpuLimits &limits, PeGraphicsApi api);
 
     // Spec §4.2.1 default-or-better sweep: maximum limits must be ≥ default,
     // alignment limits must be ≤ default and power-of-two.

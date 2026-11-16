@@ -203,14 +203,17 @@ namespace pe
 
         if (totalSize > 0 && sb->Size() < totalSize)
         {
-            Buffer::Destroy(sb);
-            m_lightStorageBuffers[frameIndex] = Buffer::Create({
+            // Created before the old one is destroyed: the passes rebind when GetLightStorage returns a new pointer,
+            // and a backend that destroys at once (WebGPU) would hand the freed address straight back.
+            Buffer *grown = Buffer::Create({
                 .size = totalSize * 2,
                 .usage = PE_BUFFER_USAGE_STORAGE_BUFFER,
                 .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT,
                 .name = "lights_storage_buffer",
             });
-            sb = m_lightStorageBuffers[frameIndex];
+            Buffer::Destroy(sb);
+            m_lightStorageBuffers[frameIndex] = grown;
+            sb = grown;
         }
 
         // Upload packed light data to storage buffer

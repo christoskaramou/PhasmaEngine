@@ -376,6 +376,14 @@ namespace pe
         desc.vertex.bufferCount = input.buffers.size();
         desc.vertex.buffers = input.buffers.data();
         desc.primitive.topology = ToTopology(info.topology, info.name);
+
+        // WebGPU needs the index format of a strip pipeline up front, or indexed draws with it are invalid.
+        // ponytail: the engine's default 32-bit indices; PassInfo carries no index type, so a strip pipeline drawn
+        // with 16-bit indices needs one added there.
+        const bool strip = info.topology == PE_TOPOLOGY_LINE_STRIP || info.topology == PE_TOPOLOGY_TRIANGLE_STRIP;
+        if (strip)
+            desc.primitive.stripIndexFormat = WGPUIndexFormat_Uint32;
+
         desc.primitive.cullMode = ToCullMode(info.cullMode, info.name);
         // The engine's clockwise front faces: WebGPU and Vulkan both judge winding in framebuffer coordinates
         // (WebGPU section 23.2.5.4), and naga's Y flip keeps Vulkan's framebuffer image.

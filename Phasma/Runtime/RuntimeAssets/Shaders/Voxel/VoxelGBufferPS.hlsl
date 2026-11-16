@@ -70,7 +70,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Voxel input)
     float2 previousNDC = input.prevPositionCS.xy / input.prevPositionCS.w;
     currentNDC -= float2(pc.projJitter.x, pc.projJitter.y);
     previousNDC -= float2(pc.prevProjJitter.x, pc.prevProjJitter.y);
-    output.velocity = previousNDC - currentNDC;
+    output.velocity = GBufferVelocity(previousNDC - currentNDC, 1.0f);
 #endif
 
     return output;

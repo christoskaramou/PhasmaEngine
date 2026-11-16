@@ -2,16 +2,22 @@
 
 #include "BindGroup.h"
 #include "Device.h"
+#include "PipelineBinding.h"
 #include "PipelineLayout.h"
 #include "API/Buffer.h"
 #include "API/RHI.h"
 #include "API/Vulkan/RHI_Vulkan.h"
-
+#include "API/Vulkan/VulkanCommandBufferImpl.h"
 
 namespace pwgpu
 {
     namespace
     {
+        // The stages of a layout's immediate-data push-constant range; vkCmdPushConstants must name the same set.
+        constexpr vk::ShaderStageFlags kImmediateStages = vk::ShaderStageFlagBits::eVertex |
+                                                          vk::ShaderStageFlagBits::eFragment |
+                                                          vk::ShaderStageFlagBits::eCompute;
+
         bool IsDescriptorBufferEligible(const WGPUBindGroupLayoutImpl *bgl)
         {
             if (!bgl || !bgl->device || !bgl->device->descriptorBuffer.enabled)
@@ -150,6 +156,21 @@ namespace pwgpu
         return bgl->descriptorBufferLayout != 0 && bgl->descriptorBufferLayoutSize != 0;
     }
 
+    void PushWebGPUImmediates(pe::CommandBuffer *cmd,
+                              const WGPUPipelineLayoutImpl *layout,
+                              const WebGPUImmediates &immediates)
+    {
+        if (!cmd || !layout || layout->immediateSize == 0 || !layout->backendLayout)
+            return;
+
+        const vk::PipelineLayout vkLayout{PeFromBackendHandle<VkPipelineLayout>(layout->backendLayout)};
+        pe::GetVulkanCommandBuffer(cmd).pushConstants(vkLayout,
+                                                      kImmediateStages,
+                                                      0,
+                                                      layout->immediateSize,
+                                                      immediates.data.data());
+    }
+
     bool CreateWebGPUPipelineLayoutBackend(WGPUPipelineLayoutImpl *pl)
     {
         if (!pl || !pl->device)
@@ -209,6 +230,14 @@ namespace pwgpu
             vk::PipelineLayoutCreateInfo ci{};
             ci.setLayoutCount = static_cast<uint32_t>(vkSetLayouts.size());
             ci.pSetLayouts = vkSetLayouts.empty() ? nullptr : vkSetLayouts.data();
+
+            const vk::PushConstantRange immediates{kImmediateStages, 0, pl->immediateSize};
+            if (pl->immediateSize > 0)
+            {
+                ci.pushConstantRangeCount = 1;
+                ci.pPushConstantRanges = &immediates;
+            }
+
             vk::PipelineLayout layout = pe::VulkanRhi::Device().createPipelineLayout(ci);
             pl->backendLayout = PeToBackendHandle(static_cast<VkPipelineLayout>(layout));
         }

@@ -70,6 +70,7 @@ namespace pwgpu
 
     WGPUPipelineLayoutImpl *BuildAutoPipelineLayout(WGPUDeviceImpl *device,
                                                     const std::vector<AutoLayoutStageInput> &stages,
+                                                    uint32_t immediateSize,
                                                     std::string &errMsg);
 
     struct ComputeWorkgroupInfo

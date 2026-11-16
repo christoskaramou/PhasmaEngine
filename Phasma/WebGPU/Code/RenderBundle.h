@@ -129,6 +129,7 @@ struct WGPURenderBundleEncoderImpl
 
     std::vector<WGPUBindGroupImpl *> currentBindGroups;
     std::vector<std::vector<uint32_t>> currentDynamicOffsets;
+    pwgpu::WebGPUImmediates immediates;
 
     std::vector<VertexBufferBinding> boundVertexBuffers;
 };

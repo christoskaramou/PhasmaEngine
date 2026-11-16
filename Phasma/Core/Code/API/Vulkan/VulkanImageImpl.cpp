@@ -15,6 +15,13 @@ namespace pe
 {
     vk::Format ToVkFormat(::PeFormat format)
     {
+        // ETC2/EAC/ASTC are declared in Vulkan's order, which is contiguous.
+        if (format >= PE_FORMAT_ETC2_R8G8B8_UNORM && format <= PE_FORMAT_ASTC_12x12_SRGB)
+        {
+            const int offset = static_cast<int>(format) - static_cast<int>(PE_FORMAT_ETC2_R8G8B8_UNORM);
+            return static_cast<vk::Format>(VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK + offset);
+        }
+
         switch (format)
         {
         case PE_FORMAT_UNDEFINED:
@@ -162,6 +169,13 @@ namespace pe
 
     ::PeFormat FromVkFormat(vk::Format format)
     {
+        const int vkFormat = static_cast<int>(format);
+        if (vkFormat >= VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK && vkFormat <= VK_FORMAT_ASTC_12x12_SRGB_BLOCK)
+        {
+            const int offset = vkFormat - VK_FORMAT_ETC2_R8G8B8_UNORM_BLOCK;
+            return static_cast<::PeFormat>(PE_FORMAT_ETC2_R8G8B8_UNORM + offset);
+        }
+
         switch (format)
         {
         case vk::Format::eUndefined:

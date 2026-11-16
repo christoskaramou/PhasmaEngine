@@ -356,6 +356,18 @@ struct PS_INPUT_Color
     float4 color : TEXCOORD0;
 };
 
+// The transparent G-buffer passes alpha-blend every target, and WebGPU rejects a blend that reads source alpha from
+// an output without one, so the web profile's velocity carries the alpha it blends with (as MaterialForwardMain's).
+// ponytail: elsewhere velocity stays float2 and its blend alpha is undefined; use the float4 form there too if the
+// transparent passes' velocity ever needs to be exact.
+#ifdef PE_WEB_PROFILE
+#define GBUFFER_VELOCITY_TYPE float4
+#define GBufferVelocity(velocity, alpha) float4(velocity, 0.0, alpha)
+#else
+#define GBUFFER_VELOCITY_TYPE float2
+#define GBufferVelocity(velocity, alpha) (velocity)
+#endif
+
 struct PS_OUTPUT_Gbuffer
 {
     float4 normal : SV_TARGET0;
@@ -368,7 +380,7 @@ struct PS_OUTPUT_Gbuffer
     uint4 visibility : SV_TARGET5;
 #endif
 #else
-    float2 velocity : SV_TARGET3;
+    GBUFFER_VELOCITY_TYPE velocity : SV_TARGET3;
     float4 emissive : SV_TARGET4;
     float transparency : SV_TARGET5;
 #ifdef GBUFFER_VISIBILITY

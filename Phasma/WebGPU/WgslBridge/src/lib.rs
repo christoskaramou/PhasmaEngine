@@ -529,25 +529,6 @@ fn validate_subgroup_enable_source(source: &str) -> Vec<WgslMessage> {
 
     let scan = mask_comments_preserve_len(source);
     let mut errors = Vec::new();
-
-    // subgroup_id and num_subgroups need the subgroup_id language feature, which is not advertised.
-    // ponytail: rejected outright; advertising subgroup_id needs `requires subgroup_id;` lowered for naga 29.
-    let mut pos = 0usize;
-    while let Some((attr_start, _, close, _, args)) =
-        find_attribute_call_from(&scan, "builtin", pos)
-    {
-        let name = args.first().map(|arg| arg.trim()).unwrap_or_default();
-        if name == "subgroup_id" || name == "num_subgroups" {
-            errors.push(wgsl_error_at(
-                source,
-                attr_start,
-                close + 1 - attr_start,
-                "@builtin(subgroup_id) and @builtin(num_subgroups) require the subgroup_id language feature",
-            ));
-        }
-        pos = close + 1;
-    }
-
     if source_enables_subgroups(&scan) {
         return errors;
     }
@@ -586,7 +567,13 @@ fn blank_preserving_newlines(out: &mut [u8], start: usize, end: usize) {
 // has checked the "subgroups" feature, so `subgroups` is blanked out of each enable list before naga parses.
 // Byte length and newlines are kept, so later error spans still point into the original source.
 fn strip_subgroups_enable_source(source: &str) -> String {
-    if !source.contains("subgroups") {
+    strip_directive_name_source(source, "enable", "subgroups")
+}
+
+// Blanks `name` out of every `directive` list (`enable a, name;`, `requires name;`), dropping a directive
+// left empty.
+fn strip_directive_name_source(source: &str, directive: &str, name: &str) -> String {
+    if !source.contains(name) {
         return source.to_string();
     }
 
@@ -594,8 +581,8 @@ fn strip_subgroups_enable_source(source: &str) -> String {
     let bytes = scan.as_bytes();
     let mut out = source.as_bytes().to_vec();
     let mut pos = 0usize;
-    while let Some(enable_pos) = find_keyword_from(&scan, "enable", pos) {
-        pos = enable_pos + "enable".len();
+    while let Some(enable_pos) = find_keyword_from(&scan, directive, pos) {
+        pos = enable_pos + directive.len();
         let Some(rel_end) = scan[pos..].find(';') else {
             break;
         };
@@ -625,7 +612,7 @@ fn strip_subgroups_enable_source(source: &str) -> String {
             idents.push((start, p));
         }
 
-        let is_subgroups = |&(start, stop): &(usize, usize)| &scan[start..stop] == "subgroups";
+        let is_subgroups = |&(start, stop): &(usize, usize)| &scan[start..stop] == name;
         if !idents.iter().any(is_subgroups) {
             continue;
         }
@@ -649,6 +636,213 @@ fn strip_subgroups_enable_source(source: &str) -> String {
     }
 
     String::from_utf8(out).unwrap_or_else(|_| source.to_string())
+}
+
+// Source passes for WGSL language features naga 29 does not list. Their `requires` directives are blanked: naga
+// parses `var<immediate>` and the subgroup_id and num_subgroups builtins without one. Swizzle assignments are
+// rewritten into component assignments.
+fn lower_language_features_source(source: &str) -> String {
+    let source = strip_directive_name_source(source, "requires", "immediate_address_space");
+    let source = strip_directive_name_source(&source, "requires", "swizzle_assignment");
+    let source = strip_directive_name_source(&source, "requires", "subgroup_id");
+    lower_swizzle_assignments_source(&source)
+}
+
+// The component indices of one swizzle group (`zx` is [2, 0]), or None when it is not a swizzle.
+fn swizzle_indices(group: &str) -> Option<Vec<usize>> {
+    if !(1..=4).contains(&group.len()) {
+        return None;
+    }
+
+    ["xyzw", "rgba"].iter().find_map(|scheme| {
+        group
+            .bytes()
+            .map(|c| scheme.bytes().position(|s| s == c))
+            .collect()
+    })
+}
+
+// Whether `name` is declared with a type somewhere (`name: T`), so `.name` may be a struct member.
+fn is_declared_with_type(scan: &str, name: &str) -> bool {
+    let bytes = scan.as_bytes();
+    let mut pos = 0usize;
+    while let Some(found) = find_keyword_from(scan, name, pos) {
+        pos = found + name.len();
+        let after = skip_ws_and_comments(bytes, pos);
+        if bytes.get(after) == Some(&b':') && bytes.get(after + 1) != Some(&b':') {
+            return true;
+        }
+    }
+    false
+}
+
+const SWIZZLE_ASSIGN_OPS: &[&str] = &[
+    "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "|=", "^=", "=",
+];
+
+// The assignment operator at `pos`, if any (`==` is a comparison).
+fn swizzle_assign_op(scan: &str, pos: usize) -> Option<&'static str> {
+    let rest = &scan[pos..];
+    let op = SWIZZLE_ASSIGN_OPS
+        .iter()
+        .find(|op| rest.starts_with(**op))?;
+    if *op == "=" && rest[1..].starts_with('=') {
+        return None;
+    }
+    Some(op)
+}
+
+// The end of the expression starting at `start`: the `;` that closes its statement. None inside a `for (...)`
+// header or call, where the expression ends at an unbalanced `)`.
+fn swizzle_statement_end(bytes: &[u8], start: usize) -> Option<usize> {
+    let mut depth = 0i32;
+    for (offset, &c) in bytes[start..].iter().enumerate() {
+        match c {
+            b'(' | b'[' => depth += 1,
+            b')' | b']' => depth -= 1,
+            b';' if depth == 0 => return Some(start + offset),
+            b'{' | b'}' => return None,
+            _ => {}
+        }
+        if depth < 0 {
+            return None;
+        }
+    }
+    None
+}
+
+// Splits an assignment's left-hand side into its base and trailing swizzle groups (`a[i].zyx.yz` gives `a[i]` and
+// [zyx, yz]). A group that may be a struct member stays in the base.
+fn split_swizzle_chain<'a>(scan: &str, lhs: &'a str) -> (&'a str, Vec<&'a str>) {
+    let mut base = lhs.trim_end();
+    let mut groups = Vec::new();
+    loop {
+        let name_start = base
+            .bytes()
+            .rposition(|c| !is_ident_char(c))
+            .map_or(0, |index| index + 1);
+        let group = &base[name_start..];
+        let before = base[..name_start].trim_end();
+        let is_group = before.ends_with('.')
+            && swizzle_indices(group).is_some()
+            && !is_declared_with_type(scan, group);
+        if !is_group {
+            break;
+        }
+
+        groups.insert(0, group);
+        base = before[..before.len() - 1].trim_end();
+    }
+    (base, groups)
+}
+
+// The components of the base vector a swizzle chain selects, in order: `zyx.yz` is [1, 0]. None when a group
+// reaches past the one before it or the result repeats a component.
+fn compose_swizzle_chain(groups: &[&str]) -> Option<Vec<usize>> {
+    let mut selected = swizzle_indices(groups.first()?)?;
+    for group in &groups[1..] {
+        let indices = swizzle_indices(group)?;
+        if indices.iter().any(|&index| index >= selected.len()) {
+            return None;
+        }
+        selected = indices.iter().map(|&index| selected[index]).collect();
+    }
+
+    let repeats = (1..selected.len()).any(|i| selected[..i].contains(&selected[i]));
+    if repeats {
+        return None;
+    }
+    Some(selected)
+}
+
+// WGSL swizzle_assignment (`v.zx = e;`, `v.xy += e;`, `v.zyx.yz = e;`), which naga 29 rejects, becomes component
+// assignments: `{ let p = &(base); var r = (*p).zx; r = e; (*p).z = r.x; (*p).x = r.y; }`. As the spec orders it,
+// the vector pointer is taken once and before the right-hand side, the swizzle is loaded before it, and the
+// vector's other components are left alone. A bare identifier base is used directly, since it may be a pointer.
+// An invalid swizzle (repeated or out-of-range components) is left for naga to reject.
+// ponytail: text-based. A group that is also declared somewhere as a name with a type (`xy: f32`, so perhaps a
+// struct member) is not treated as a swizzle, and a `for (...)` header is left alone; resolve types if either
+// shows up in real shaders.
+fn lower_swizzle_assignments_source(source: &str) -> String {
+    let scan = mask_comments_preserve_len(source);
+    let bytes = scan.as_bytes();
+    let mut out = String::with_capacity(source.len());
+    let mut copied = 0usize;
+    let mut site = 0usize;
+    let mut pos = 0usize;
+    while let Some(found) = scan[pos..].find('.') {
+        let dot = pos + found;
+        let mut group_end = dot + 1;
+        while group_end < bytes.len() && is_ident_char(bytes[group_end]) {
+            group_end += 1;
+        }
+        pos = group_end.max(dot + 1);
+
+        let op_pos = skip_ws_and_comments(bytes, group_end);
+        let Some(op) = swizzle_assign_op(&scan, op_pos) else {
+            continue;
+        };
+        let Some(end) = swizzle_statement_end(bytes, op_pos + op.len()) else {
+            continue;
+        };
+
+        let statement_start = scan[..dot]
+            .rfind(|c| matches!(c, ';' | '{' | '}'))
+            .map_or(0, |index| index + 1);
+        if statement_start < copied {
+            continue;
+        }
+
+        let lhs = scan[statement_start..group_end].trim_start();
+        let lhs_start = group_end - lhs.len();
+        let balanced = lhs.matches('(').count() == lhs.matches(')').count();
+        let (base, groups) = split_swizzle_chain(&scan, lhs);
+        let Some(selected) = compose_swizzle_chain(&groups) else {
+            continue;
+        };
+        if !balanced || base.is_empty() || (selected.len() == 1 && groups.len() == 1) {
+            continue;
+        }
+
+        const LETTERS: [char; 4] = ['x', 'y', 'z', 'w'];
+        let rhs = scan[op_pos + op.len()..end].trim();
+        let chain = groups.join(".");
+        let is_identifier = base.bytes().all(is_ident_char);
+        let target = if is_identifier {
+            base.to_string()
+        } else {
+            format!("(*_swz_p{site})")
+        };
+
+        let mut lowered = String::new();
+        if selected.len() == 1 {
+            lowered = format!("{base}.{} {op} {rhs};", LETTERS[selected[0]]);
+        } else {
+            lowered.push_str("{ ");
+            if !is_identifier {
+                lowered.push_str(&format!("let _swz_p{site} = &({base}); "));
+            }
+            lowered.push_str(&format!(
+                "var _swz_r{site} = {target}.{chain}; _swz_r{site} {op} {rhs}; "
+            ));
+            for (index, &component) in selected.iter().enumerate() {
+                lowered.push_str(&format!(
+                    "{target}.{} = _swz_r{site}.{}; ",
+                    LETTERS[component], LETTERS[index]
+                ));
+            }
+            lowered.push('}');
+        }
+
+        out.push_str(&source[copied..lhs_start]);
+        out.push_str(&lowered);
+        copied = end + 1;
+        pos = end + 1;
+        site += 1;
+    }
+
+    out.push_str(&source[copied..]);
+    out
 }
 
 // Source passes that make WGSL subgroup code acceptable to naga 29.
@@ -5930,6 +6124,58 @@ pub struct EntryPointMeta {
     pub name: String,
     pub stage: String,
     pub statically_used: Vec<BindingRef>,
+    // The statically used `var<immediate>`: SizeOf its store type (0 when there is none) and a bit per 32-bit
+    // slot that holds data (WGSL AccessibleSlots: padding slots stay clear).
+    pub immediate_size: u32,
+    pub immediate_slots: u64,
+}
+
+fn mark_immediate_slots(
+    module: &naga::Module,
+    ty: naga::Handle<naga::Type>,
+    offset: u32,
+    slots: &mut u64,
+) {
+    let mut mark = |start: u32, size: u32| {
+        for slot in (start / 4)..(start + size).div_ceil(4).min(64) {
+            *slots |= 1u64 << slot;
+        }
+    };
+
+    match module.types[ty].inner {
+        naga::TypeInner::Scalar(scalar) => mark(offset, scalar.width as u32),
+        naga::TypeInner::Vector { size, scalar } => mark(offset, size as u32 * scalar.width as u32),
+        naga::TypeInner::Matrix {
+            columns,
+            rows,
+            scalar,
+        } => {
+            let column = rows as u32 * scalar.width as u32;
+            let stride = if rows == naga::VectorSize::Tri {
+                4 * scalar.width as u32
+            } else {
+                column
+            };
+            for index in 0..columns as u32 {
+                mark(offset + index * stride, column);
+            }
+        }
+        naga::TypeInner::Array {
+            base,
+            size: naga::ArraySize::Constant(count),
+            stride,
+        } => {
+            for index in 0..count.get() {
+                mark_immediate_slots(module, base, offset + index * stride, slots);
+            }
+        }
+        naga::TypeInner::Struct { ref members, .. } => {
+            for member in members {
+                mark_immediate_slots(module, member.ty, offset + member.offset, slots);
+            }
+        }
+        _ => {}
+    }
 }
 
 #[derive(Clone)]
@@ -14402,7 +14648,9 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         return Err(frontend_errors);
     }
     let strip = strip_diagnostic_directives(&rename_continuing_shadows_source(
-        &split_minus_minus_source(&lower_subgroups_source(source)),
+        &split_minus_minus_source(&lower_subgroups_source(&lower_language_features_source(
+            source,
+        ))),
     ));
     if strip.has_error {
         return Err(strip.messages);
@@ -14757,10 +15005,24 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
                 access: access.clone(),
             })
             .collect();
+        let mut immediate_size = 0;
+        let mut immediate_slots = 0;
+        // From naga's own analysis: the text scan above also counts comments and shadowing locals.
+        let ep_info = info.get_entry_point(entry_points.len());
+        let immediate = module.global_variables.iter().find(|&(handle, gv)| {
+            gv.space == naga::AddressSpace::Immediate && !ep_info[handle].is_empty()
+        });
+        if let Some((_, gv)) = immediate {
+            immediate_size = module.types[gv.ty].inner.size(module.to_ctx());
+            mark_immediate_slots(&module, gv.ty, 0, &mut immediate_slots);
+        }
+
         entry_points.push(EntryPointMeta {
             name: ep.name.clone(),
             stage: stage.to_string(),
             statically_used: ep_used,
+            immediate_size,
+            immediate_slots,
         });
     }
 
@@ -15444,14 +15706,15 @@ fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
         .is_empty());
         assert!(validate_subgroup_enable_source("fn foo() { let subgroupAny = true; }").is_empty());
         assert!(validate_subgroup_enable_source("fn subgroupAny() {}").is_empty());
-        assert!(!validate_subgroup_enable_source(
-            "enable subgroups;\n@compute @workgroup_size(1) fn main(@builtin(subgroup_id) id: u32) {}"
-        )
-        .is_empty());
-        assert!(!validate_subgroup_enable_source(
-            "enable subgroups;\n@compute @workgroup_size(1) fn main(@builtin( num_subgroups ) n: u32) {}"
-        )
-        .is_empty());
+
+        // The subgroup_id language feature: both builtins compile, with or without the directive.
+        for requires in ["", "requires subgroup_id;\n"] {
+            let source = format!(
+                "{requires}enable subgroups;\n@compute @workgroup_size(4, 2) \
+                 fn main(@builtin(subgroup_id) id: u32, @builtin(num_subgroups) count: u32) {{}}"
+            );
+            assert!(compile_with_meta(&source).is_ok_and(|result| result.spirv.is_some()));
+        }
     }
 
     #[test]
@@ -15669,6 +15932,95 @@ fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
             }
             assert!(compiled.ok().and_then(|r| r.spirv).is_some());
         }
+    }
+
+    #[test]
+    fn swizzle_assignments_lower_to_component_assignments() {
+        let compiles = |body: &str| {
+            let source = format!(
+                "requires swizzle_assignment;\n\
+                 struct S {{ rg: f32, v: vec4f }}\n\
+                 var<private> arr: array<vec4u, 2>;\n\
+                 const const_vec = vec4f();\n\
+                 fn foo() -> u32 {{ return 0u; }}\n\
+                 fn bar() -> vec4f {{ return vec4f(); }}\n\
+                 @fragment fn main() {{\n\
+                   var v = vec4f(); var u = vec4u(); var s: S;\n\
+                   {body}\n\
+                 }}\n"
+            );
+            compile_with_meta(&source).is_ok_and(|result| result.spirv.is_some())
+        };
+
+        for body in [
+            "v.xyz = vec3<f32>(1);",
+            "v.zx = vec2(8, 9);",
+            "v.xy = vec2(v.y, v.x);",
+            "v.rgb = vec3f(v.r, v.g, v.b) / 10;",
+            "v.zyx.yz = vec2f(5.0, 6.0);",
+            "v.xy.x = 5;",
+            "u.xy *= vec2u(6, 7);",
+            "u.zx += vec2u(100);",
+            "arr[foo()].xy = vec2u(4, 5);",
+            "arr[foo()].xy += vec2u(4, 5);",
+            "let ptr = &v; ptr.yx = vec2f(4.0, 5.0);",
+            "s.v.xy = vec2f(1.0); s.rg = 2.0;",
+            "var b = vec3<bool>(); b.xz = vec2<bool>(false, false);",
+        ] {
+            assert!(compiles(body), "should compile: {body}");
+        }
+
+        for body in [
+            "vec4f().xyz = vec3(0.0);",
+            "const_vec.xyz = vec3(0.0);",
+            "bar().xyz = vec3(0.0);",
+            "v.xx = vec2f();",
+            "v.xy = vec3f();",
+            "var w = vec3f(); w.xyzw = vec4f();",
+            "v.xy = vec2i();",
+            "v.xr = vec2f();",
+            "let p = &v.xy;",
+            "u.xy[0] = 1;",
+        ] {
+            assert!(!compiles(body), "should not compile: {body}");
+        }
+
+        // The pointer is taken once and before the right-hand side.
+        let lowered = lower_swizzle_assignments_source("fn f() { arr[foo()].xy += bar(); }");
+        assert_eq!(lowered.matches("foo()").count(), 1);
+        assert!(lowered.find("foo()").unwrap() < lowered.find("bar()").unwrap());
+    }
+
+    #[test]
+    fn immediate_reflection_reports_size_and_slots() {
+        let source = "requires immediate_address_space;
+            struct S { a: u32, b: vec3f, c: mat3x3f, d: array<vec2u, 2> }
+            var<immediate> data: S;
+            @group(0) @binding(0) var<storage, read_write> out: u32;
+            fn helper() -> u32 { return data.a; }
+            @compute @workgroup_size(1) fn used() { out = helper(); }
+            @compute @workgroup_size(1) fn unused() { out = 1u; // data is only named here
+            }
+";
+
+        let compiled = compile_with_meta(source).ok().expect("compile");
+        assert!(compiled.spirv.is_some());
+
+        let used = compiled
+            .entry_points
+            .iter()
+            .find(|e| e.name == "used")
+            .unwrap();
+        // a at 0, b at 16..28, c columns at 32, 48, 64 (12 bytes each), d at 80..96; size 96.
+        assert_eq!(used.immediate_size, 96);
+        assert_eq!(used.immediate_slots, 0b1111_0111_0111_0111_0111_0001);
+
+        let unused = compiled
+            .entry_points
+            .iter()
+            .find(|e| e.name == "unused")
+            .unwrap();
+        assert_eq!((unused.immediate_size, unused.immediate_slots), (0, 0));
     }
 
     #[test]
@@ -16546,7 +16898,9 @@ pub fn bake_wgsl_with_constants(
         return None;
     }
     let strip = strip_diagnostic_directives(&rename_continuing_shadows_source(
-        &split_minus_minus_source(&lower_subgroups_source(source)),
+        &split_minus_minus_source(&lower_subgroups_source(&lower_language_features_source(
+            source,
+        ))),
     ));
     if strip.has_error {
         return None;

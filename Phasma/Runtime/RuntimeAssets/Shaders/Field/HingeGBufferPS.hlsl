@@ -120,7 +120,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Hinge input)
     float2 previousNDC = input.prevPositionCS.xy / input.prevPositionCS.w;
     currentNDC -= pc.projJitter;
     previousNDC -= pc.prevProjJitter;
-    output.velocity = previousNDC - currentNDC;
+    output.velocity = GBufferVelocity(previousNDC - currentNDC, 1.0f);
 #endif
     return output;
 }

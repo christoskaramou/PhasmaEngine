@@ -16,6 +16,8 @@ struct WGPUComputePipelineImpl
 
     PeBackendHandle backendPipeline = 0;
     WGPUPipelineLayoutImpl *layout = nullptr;
+    // The 32-bit immediate-data slots the pipeline's shaders read; a draw or dispatch needs every one set.
+    uint64_t immediateSlots = 0;
 
     std::string entryPoint;
     uint64_t workgroupInvocations = 1;

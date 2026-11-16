@@ -2,6 +2,7 @@
 #include "API/Command.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "Project/ProjectSelection.h"
 #include "Render/SceneRenderTargets.h"
 #include "Render/ScriptRenderPasses.h"
 #include "RenderPasses/AabbsPass.h"
@@ -135,6 +136,32 @@ namespace pe
         {
             if (component)
                 static_cast<T *>(component)->SetScene(&scene);
+        }
+
+        // The screen-space passes a game switches with render settings, all of which the web profile supports.
+        // ponytail: an explicit list; passes outside it (culling, ray tracing, OpenPBR) have variants the web
+        // profile cannot compile. Add a pass here when a browser game misses its shader.
+        bool IsWebSettingsPass(SceneRenderGraphPassId id)
+        {
+            switch (id)
+            {
+            case SceneRenderGraphPassId::SSAO:
+            case SceneRenderGraphPassId::SSR:
+            case SceneRenderGraphPassId::FXAA:
+            case SceneRenderGraphPassId::TAA:
+            case SceneRenderGraphPassId::Sharpen:
+            case SceneRenderGraphPassId::Upsample:
+            case SceneRenderGraphPassId::Tonemap:
+            case SceneRenderGraphPassId::ColorGrading:
+            case SceneRenderGraphPassId::BloomBF:
+            case SceneRenderGraphPassId::BloomH:
+            case SceneRenderGraphPassId::BloomV:
+            case SceneRenderGraphPassId::DOF:
+            case SceneRenderGraphPassId::MotionBlur:
+                return true;
+            default:
+                return false;
+            }
         }
 
         void InitSceneRenderGraphPassComponent(IRenderPassComponent *component, CommandBuffer *cmd)
@@ -362,11 +389,19 @@ namespace pe
                       passLastEnabledFrame.size() >= kSceneRenderGraphPassCount,
                   "Scene render graph pass init state span is too small");
 
+        // The web shader bake initialises the settings-driven passes once: the browser player cannot compile a
+        // shader, so a pass the game only switches on later (a settings menu, a level) must be in the bake
+        // already. A pass that stays disabled is released again by ReleaseDisabledSceneRenderGraphPassComponents.
+        static const bool bakeDisabledPasses = ReadRuntimeBakeWebShaders();
+        static std::array<bool, kSceneRenderGraphPassCount> baked{};
+
         const uint32_t frame = RHII.GetFrameCounter();
         for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
         {
             const size_t index = static_cast<size_t>(desc.id);
-            if (!isPassEnabled(desc.id))
+            const bool bakeNow = bakeDisabledPasses && !baked[index] && IsWebSettingsPass(desc.id);
+            baked[index] = true;
+            if (!isPassEnabled(desc.id) && !bakeNow)
                 continue;
 
             passLastEnabledFrame[index] = frame;

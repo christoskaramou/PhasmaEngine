@@ -9,7 +9,14 @@ struct PushConstants
 
 [[vk::push_constant]] ConstantBuffer<PushConstants> pc;
 
+// WGSL has no arrays of storage textures: the web profile binds the one mip each dispatch writes.
+#ifdef PE_WEB_PROFILE
+[[vk::image_format(PE_SKY_FORMAT)]][[vk::binding(0)]] RWTexture2D<float4> outMip : register(u0);
+#define OUT_MIP outMip
+#else
 [[vk::image_format(PE_SKY_FORMAT)]][[vk::binding(0)]] RWTexture2D<float4> outMips[13] : register(u0);
+#define OUT_MIP outMips[pc.mipLevel]
+#endif
 #ifdef PE_ENV_FROM_CUBE
 [[vk::binding(1)]] TextureCube<float4> inSource : register(t1);
 [[vk::binding(2)]] SamplerState samplerSource : register(s2);
@@ -60,5 +67,5 @@ void main(uint3 id : SV_DispatchThreadID)
             radiance += SourceRadiance(min(origin + uint2(x, y), lastTexel));
     }
 
-    outMips[pc.mipLevel][id.xy] = float4(radiance / float(footprint * footprint), 1.0);
+    OUT_MIP[id.xy] = float4(radiance / float(footprint * footprint), 1.0);
 }

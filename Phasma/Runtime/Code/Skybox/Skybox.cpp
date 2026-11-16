@@ -78,27 +78,44 @@ namespace pe
                     cubeMap->CreateUAV(PE_IMAGE_VIEW_TYPE_2D_ARRAY, mip);
             }
 
-            PassInfo *passInfo = new PassInfo();
-            passInfo->name = "Skybox_PrefilterCubemap_pipeline";
-            passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/PrefilterCubemap.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
-            passInfo->Update();
-
-            auto &descriptors = passInfo->GetDescriptors(RHII.GetFrameIndex());
-            Descriptor *descriptor = descriptors[0];
-
             std::vector<ImageView *> mipViews(mipLevels);
             for (uint32_t mip = 0; mip < mipLevels; ++mip)
                 mipViews[mip] = cubeMap->GetUAV(mip);
 
-            descriptor->SetImageViews(0, mipViews);
-            descriptor->SetImageView(1, equiImage->GetSRV());
-            descriptor->SetSampler(2, equiImage->GetSampler());
-            descriptor->Update();
+            // WGSL has no arrays of storage textures, so the web profile's shader binds the one mip it writes and
+            // every mip gets its own pass.
+            const bool passPerMip = SceneUsesWebProfile();
+            const auto bindPass = [&](const std::vector<ImageView *> &views)
+            {
+                PassInfo *passInfo = new PassInfo();
+                passInfo->name = "Skybox_PrefilterCubemap_pipeline";
+                passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Compute/PrefilterCubemap.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = std::vector<Define>{}});
+                passInfo->Update();
+
+                Descriptor *descriptor = passInfo->GetDescriptors(RHII.GetFrameIndex())[0];
+                if (views.size() == 1)
+                    descriptor->SetImageView(0, views[0]);
+                else
+                    descriptor->SetImageViews(0, views);
+
+                descriptor->SetImageView(1, equiImage->GetSRV());
+                descriptor->SetSampler(2, equiImage->GetSampler());
+                descriptor->Update();
+
+                cmd->BindPipeline(*passInfo);
+                cmd->AddAfterWaitCallback([passInfo]()
+                                          { delete passInfo; });
+            };
 
             cmd->BeginDebugRegion("Skybox Prefilter");
-            cmd->BindPipeline(*passInfo);
+            if (!passPerMip)
+                bindPass(mipViews);
+
             for (uint32_t mip = 1; mip < mipLevels; ++mip)
             {
+                if (passPerMip)
+                    bindPass({mipViews[mip]});
+
                 const float roughness = static_cast<float>(mip) / static_cast<float>(mipLevels - 1);
                 const uint32_t faceSize = std::max(1u, cubeMap->GetWidth() >> mip);
                 PrefilterPushConstants constants{};
@@ -113,9 +130,6 @@ namespace pe
                 cmd->Dispatch((faceSize + 7u) / 8u, (faceSize + 7u) / 8u, cubeMap->GetArrayLayers());
             }
             cmd->EndDebugRegion();
-
-            cmd->AddAfterWaitCallback([passInfo]()
-                                      { delete passInfo; });
         }
 
         // The OpenPBR radiance pyramid is a lat-long image in PE's equirect convention (EquirectangularToCubemap.hlsl), so
@@ -152,7 +166,8 @@ namespace pe
                                         const std::vector<Define> &defines,
                                         ImageView *input,
                                         Sampler *inputSampler,
-                                        Image *output)
+                                        Image *output,
+                                        uint32_t onlyMip = UINT32_MAX)
         {
             PassInfo *pass = new PassInfo();
             pass->name = shader + "_pipeline";
@@ -169,6 +184,9 @@ namespace pe
                 output->CreateUAV(PE_IMAGE_VIEW_TYPE_2D, mip);
                 views[mip] = output->GetUAV(mip);
             }
+
+            if (onlyMip != UINT32_MAX)
+                views = {views[onlyMip]};
 
             Descriptor *descriptor = pass->GetDescriptors(RHII.GetFrameIndex())[0];
             if (views.size() == 1)
@@ -198,15 +216,27 @@ namespace pe
         {
             const std::vector<Define> defines = sourceIsCube ? std::vector<Define>{{"PE_ENV_FROM_CUBE", "1"}}
                                                              : std::vector<Define>{};
-            BindOpenPBREnvironmentPass(cmd,
-                                       "OpenPBREnvPyramid",
-                                       defines,
-                                       source->GetSRV(),
-                                       sourceIsCube ? source->GetSampler() : nullptr,
-                                       radiance);
+            // As in PrefilterSkyboxMips: the web profile's shader binds one mip, so every mip gets its own pass.
+            const bool passPerMip = SceneUsesWebProfile();
+            const auto bindPass = [&](uint32_t onlyMip)
+            {
+                BindOpenPBREnvironmentPass(cmd,
+                                           "OpenPBREnvPyramid",
+                                           defines,
+                                           source->GetSRV(),
+                                           sourceIsCube ? source->GetSampler() : nullptr,
+                                           radiance,
+                                           onlyMip);
+            };
+
+            if (!passPerMip)
+                bindPass(UINT32_MAX);
 
             for (uint32_t mip = 0; mip < radiance->GetMipLevels(); ++mip)
             {
+                if (passPerMip)
+                    bindPass(mip);
+
                 cmd->SetConstantAt(0, mip);
                 cmd->SetConstantAt(1, radiance->GetWidth());
                 cmd->SetConstantAt(2, radiance->GetHeight());

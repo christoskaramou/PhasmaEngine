@@ -2320,7 +2320,15 @@ namespace pe
                     .memoryUsage = PE_MEMORY_USAGE_CPU_TO_GPU_PERSISTENT_DEVICE,
                     .name = "Scene_meshConstants",
                 });
-                if (m_meshConstants && m_meshCount > 0)
+                if (m_meshConstants && m_meshCount > 0 && RHII.GetApi() == PE_GRAPHICS_API_WEBGPU)
+                {
+                    // A host-visible WebGPU buffer is uploaded from its CPU shadow, which a GPU copy into it would
+                    // bypass (and the backend refuses), so the old contents move shadow to shadow.
+                    m_meshConstants->Map();
+                    BufferRange previous{m_meshConstants->Data(), m_meshCount * sizeof(Mesh_Constants), 0};
+                    newMc->Copy(1, &previous, true);
+                }
+                else if (m_meshConstants && m_meshCount > 0)
                 {
                     CommandBuffer *c = q->AcquireCommandBuffer();
                     c->Begin();

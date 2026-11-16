@@ -159,6 +159,45 @@ namespace
         return false;
     }
 
+    // The immediate data a pipeline's stages statically use: the largest SizeOf over the stages and the union of
+    // their accessible 32-bit slots. Both stay zero for SPIR-V modules, which carry no reflection.
+    struct PipelineImmediates
+    {
+        uint32_t size = 0;
+        uint64_t slots = 0;
+
+        void Add(const WGPUShaderModuleImpl *module, const std::string &entryPoint)
+        {
+            if (!module)
+                return;
+
+            for (const auto &ep : module->reflection.entryPoints)
+            {
+                if (ep.name != entryPoint)
+                    continue;
+
+                size = std::max(size, ep.immediateSize);
+                slots |= ep.immediateSlots;
+            }
+        }
+
+        // The default layout's immediateSize (W3C "default pipeline layout").
+        uint32_t LayoutSize() const { return (size + 3u) & ~3u; }
+
+        // An explicit layout must cover the data ("validating GPUProgrammableStage"); a default layout is created
+        // through createPipelineLayout, which holds it to maxImmediateSize. Returns the error, or empty.
+        std::string Validate(const WGPUDeviceImpl *device, const WGPUPipelineLayoutImpl *explicitLayout) const
+        {
+            if (explicitLayout && explicitLayout->immediateSize < size)
+                return "the layout's immediateSize is smaller than the shader's immediate data";
+
+            if (!explicitLayout && LayoutSize() > device->limits.maxImmediateSize)
+                return "the shader's immediate data exceeds maxImmediateSize";
+
+            return {};
+        }
+    };
+
     void AttachReflectionToStage(pwgpu::LayoutCompatStageInput &stage,
                                  const WGPUShaderModuleImpl *module,
                                  std::set<pwgpu::BindingKey> &usedOut,
@@ -1342,6 +1381,9 @@ extern "C"
             const uint64_t fillSize = size & ~uint64_t(3);
             if (fillSize > 0)
             {
+                // Device-side submits must retire finished work too: a workload that only creates and destroys
+                // resources never calls queue.submit, and its command buffers and deferred deletions pile up.
+                device->queue->RecyclePendingSubmits();
                 pe::CommandBuffer *cmd = device->queue->peQueue->AcquireCommandBuffer();
                 cmd->Begin();
                 cmd->FillBuffer(buf->peBuffer, 0, static_cast<size_t>(fillSize), 0);
@@ -1672,8 +1714,10 @@ extern "C"
             else
                 peUsage |= PE_IMAGE_USAGE_COLOR_ATTACHMENT;
         }
-        if (usage & WGPUTextureUsage_TransientAttachment)
-            peUsage |= PE_IMAGE_USAGE_TRANSIENT_ATTACHMENT;
+
+        // TRANSIENT_ATTACHMENT is a hint and is not passed on: a Vulkan transient image may have attachment usages
+        // only (VUID-VkImageCreateInfo-usage-00963), and zero-initialising the texture needs TRANSFER_DST.
+        // ponytail: no lazily allocated memory; zero-initialise transient textures through a render pass to add it.
 
         if (!peUsage)
             peUsage = PE_IMAGE_USAGE_TRANSFER_SRC;
@@ -1740,6 +1784,7 @@ extern "C"
         }
         else if (zeroInitViaClearImage && device->queue && device->queue->peQueue)
         {
+            device->queue->RecyclePendingSubmits();
             pe::CommandBuffer *cmd = device->queue->peQueue->AcquireCommandBuffer();
             cmd->Begin();
 
@@ -3075,6 +3120,7 @@ extern "C"
         if (dynamicStorageBuffers > limits.maxDynamicStorageBuffersPerPipelineLayout)
             return makeInvalid("exceeds maxDynamicStorageBuffersPerPipelineLayout");
 
+        pl->immediateSize = descriptor->immediateSize;
         if (!pwgpu::CreateWebGPUPipelineLayoutBackend(pl))
             return makeInvalid("native pipeline layout creation failed");
 
@@ -3656,6 +3702,15 @@ extern "C"
         if (!computeBakedSpirv.empty())
             computeSpirv = &computeBakedSpirv;
 
+        PipelineImmediates immediates;
+        immediates.Add(shaderModule, entryPointName);
+        if (const std::string immediateErr = immediates.Validate(device, pipeLayout); !immediateErr.empty())
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createComputePipeline: " + immediateErr));
+            return MakeInvalidComputePipeline(device, labelStr);
+        }
+
         if (autoLayout)
         {
             std::vector<pwgpu::AutoLayoutStageInput> stages(1);
@@ -3670,7 +3725,7 @@ extern "C"
             AttachReflectionToStage(stages[0], shaderModule, csUsedAuto, csUsedNamesAuto,
                                     csUsedResourcesAuto, csStorageFormatsAuto, entryPointName);
             std::string errMsg;
-            pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stages, errMsg);
+            pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stages, immediates.LayoutSize(), errMsg);
             if (!pipeLayout)
             {
                 std::string full = "createComputePipeline: " + errMsg;
@@ -3780,6 +3835,7 @@ extern "C"
         cp->backendPipeline = backendPipeline.backendPipeline;
         cp->layout = pipeLayout;
         cp->entryPoint = entryPointName;
+        cp->immediateSlots = immediates.slots;
         cp->workgroupInvocations = pipelineWorkgroupInvocations;
         pwgpu::RetainDevice(device);
         // Auto-built layout already has refCount=1 owned by cp; only AddRef for user-supplied layout.
@@ -4146,6 +4202,18 @@ extern "C"
             }
         }
 
+        PipelineImmediates immediates;
+        immediates.Add(vertModule, vertEntry);
+        if (hasFragment)
+            immediates.Add(fragModuleSrc, fragEntry);
+
+        if (const std::string immediateErr = immediates.Validate(device, pipeLayout); !immediateErr.empty())
+        {
+            device->reportError(WGPUErrorType_Validation,
+                                pwgpu::ToStringView("createRenderPipeline: " + immediateErr));
+            return MakeInvalidRenderPipeline(device, labelStr);
+        }
+
         if (autoLayout)
         {
             std::vector<pwgpu::AutoLayoutStageInput> stageInputs;
@@ -4173,7 +4241,7 @@ extern "C"
                                         fsUsedNamesAuto, fsUsedResourcesAuto,
                                         fsStorageFormatsAuto, fragEntry);
             std::string errMsg;
-            pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stageInputs, errMsg);
+            pipeLayout = pwgpu::BuildAutoPipelineLayout(device, stageInputs, immediates.LayoutSize(), errMsg);
             if (!pipeLayout)
             {
                 std::string full = "createRenderPipeline: " + errMsg;
@@ -4696,6 +4764,7 @@ extern "C"
             rp->label = labelStr;
         rp->backendPipeline = backendPipeline.backendPipeline;
         rp->layout = pipeLayout;
+        rp->immediateSlots = immediates.slots;
         rp->sampleCount = msCount;
         rp->vertexEntryPoint = vertEntry;
         rp->primitiveTopology = primTopology;

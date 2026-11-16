@@ -140,7 +140,7 @@ PS_OUTPUT_Gbuffer mainPS(PS_INPUT_Gbuffer input)
     float2 velocityNDC = previousNDC - currentNDC;
     
     // Store the velocity in the output
-    output.velocity = velocityNDC;
+    output.velocity = GBufferVelocity(velocityNDC, combinedColor.a >= 0.5f ? 1.0f : 0.0f);
 #endif
 
     return output;

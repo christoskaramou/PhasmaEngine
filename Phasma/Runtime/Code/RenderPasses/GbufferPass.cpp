@@ -469,8 +469,11 @@ namespace pe
             Buffer *voxelIndirect = m_scene->GetIndirectVoxels(frame);
             const bool hasVoxelIndirect = voxelIndirect != nullptr;
             const bool hasVoxelGeometry = m_scene->GetVoxelVertexBuffer() && m_scene->GetVoxelIndexBuffer();
-            const bool voxelDrawReady =
-                hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect && hasVoxelGeometry;
+            // The web profile does not draw voxels or terrain yet (Scene::BuildWebDraws): their buckets are drawn
+            // with an indirect count, which WebGPU lacks.
+            const bool countedDraws = !SceneUsesWebProfile();
+            const bool voxelDrawReady = countedDraws && hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag &&
+                                        hasVoxelIndirect && hasVoxelGeometry;
 
             cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "GbufferOpaquePass");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
@@ -524,7 +527,7 @@ namespace pe
             // Terrain: standard geometry drawn with the dedicated triplanar-splat pipeline from its
             // own cull bucket (index 8). Drawn last so it depth-tests against the opaque scene.
             Buffer *terrainIndirect = m_scene->GetIndirectTerrain(frame);
-            const bool terrainDrawReady = m_scene->HasTerrain() && m_terrainPassInfo &&
+            const bool terrainDrawReady = countedDraws && m_scene->HasTerrain() && m_terrainPassInfo &&
                                           m_terrainPassInfo->pFragShader && terrainIndirect != nullptr;
             if (terrainDrawReady)
             {
@@ -565,13 +568,12 @@ namespace pe
                 cmd->BindPipeline(*m_hingePassInfo);
                 const auto planes = HingeField::PlanesFromMatrix(camera->GetViewProjection());
                 hinges->ForEachVisible(planes, camera->GetPosition(), [&](uint32_t first, uint32_t count, uint32_t vertices)
-                {
+                                       {
                     hingeConstants.base = first;
                     hingeConstants.farLod = vertices == HingeField::kFarVertices ? 1u : 0u;
                     cmd->SetConstants(hingeConstants);
                     cmd->PushConstants();
-                    cmd->Draw(vertices, count, 0, 0);
-                });
+                    cmd->Draw(vertices, count, 0, 0); });
             }
 
             cmd->EndPass();

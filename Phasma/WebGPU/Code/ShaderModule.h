@@ -34,6 +34,9 @@ struct WGPUShaderReflectionMeta
         std::string name;
         std::string stage;
         std::vector<Binding> staticallyUsed;
+        // The statically used var<immediate>: SizeOf its store type and a bit per 32-bit slot holding data.
+        uint32_t immediateSize = 0;
+        uint64_t immediateSlots = 0;
     };
     // identifier = decimal(@id) if present, else name (§10.3.2.3).
     struct Override

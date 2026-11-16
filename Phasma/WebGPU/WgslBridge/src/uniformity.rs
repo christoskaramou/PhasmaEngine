@@ -11,6 +11,14 @@ use naga::{
 };
 
 const NON_UNIFORM: u64 = 1;
+
+// Differs between subgroups but not within one: @builtin(subgroup_id). Subgroup operations accept it (WGSL
+// subgroup_uniformity scope); everything else that needs uniformity treats it as non-uniform. The CTS expects
+// this even though the subgroup_uniformity language feature is not advertised.
+// ponytail: a summary keeps one requirement set, so a subgroup operation inside a called function still rejects a
+// subgroup_id-dependent argument; split the set per scope to lift that.
+const SUBGROUP_UNIFORM: u64 = 1 << 63;
+const ANY_NON_UNIFORM: u64 = NON_UNIFORM | SUBGROUP_UNIFORM;
 const MAX_PARAMS: usize = 31;
 
 fn param_value(k: usize) -> u64 {
@@ -145,6 +153,7 @@ impl Walker<'_> {
                 BuiltIn::WorkGroupId | BuiltIn::NumWorkGroups | BuiltIn::NumSubgroups,
             )) => 0,
             Some(Binding::BuiltIn(BuiltIn::SubgroupSize)) if self.is_compute_entry() => 0,
+            Some(Binding::BuiltIn(BuiltIn::SubgroupId)) => SUBGROUP_UNIFORM,
             _ => NON_UNIFORM,
         }
     }
@@ -372,7 +381,7 @@ impl Walker<'_> {
             .collect();
 
         let substitute = |mask: u64| -> u64 {
-            let mut out = mask & NON_UNIFORM;
+            let mut out = mask & ANY_NON_UNIFORM;
             for k in 0..values.len() {
                 if mask & param_value(k) != 0 {
                     out |= values[k];
@@ -629,7 +638,7 @@ impl Walker<'_> {
                     {
                         mask |= self.value(*operand);
                     }
-                    self.require(mask);
+                    self.require(mask & !SUBGROUP_UNIFORM);
                 }
                 self.values[result.index()] = NON_UNIFORM;
             }
@@ -695,10 +704,10 @@ fn analyze_function(
         }
     }
 
-    let violated = walker.required & NON_UNIFORM != 0;
+    let violated = walker.required & ANY_NON_UNIFORM != 0;
     let summary = Summary {
         requires_uniform_call: walker.requires_uniform_call,
-        required_args: walker.required & !NON_UNIFORM,
+        required_args: walker.required & !ANY_NON_UNIFORM,
         result: walker.result,
         control_after: walker.control_after,
         contents_out: walker.contents_out,

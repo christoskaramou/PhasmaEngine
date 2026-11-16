@@ -33,6 +33,8 @@ struct WGPURenderPipelineImpl
 
     PeBackendHandle backendPipeline = 0;
     WGPUPipelineLayoutImpl *layout = nullptr;
+    // The 32-bit immediate-data slots the pipeline's shaders read; a draw or dispatch needs every one set.
+    uint64_t immediateSlots = 0;
 
     bool writesDepth = false;
     bool writesStencil = false;

@@ -808,6 +808,9 @@ extern "C"
                 if (rt->texture->sampleCount != 1)
                     return makeInvalidPass(
                         "beginRenderPass: resolveTarget texture sampleCount must be 1");
+                if (rt->usage & WGPUTextureUsage_TransientAttachment)
+                    return makeInvalidPass(
+                        "beginRenderPass: resolveTarget must not be a TRANSIENT_ATTACHMENT view");
                 if (rt->format != view->format)
                     return makeInvalidPass(
                         "beginRenderPass: resolveTarget format must equal source view format");
@@ -847,6 +850,12 @@ extern "C"
             if (ca.storeOp != WGPUStoreOp_Store && ca.storeOp != WGPUStoreOp_Discard)
                 return makeInvalidPass(
                     "beginRenderPass: colorAttachment.storeOp must be store or discard");
+
+            // A transient attachment's contents exist only inside the pass.
+            const bool transient = (view->usage & WGPUTextureUsage_TransientAttachment) != 0;
+            if (transient && (ca.loadOp != WGPULoadOp_Clear || ca.storeOp != WGPUStoreOp_Discard))
+                return makeInvalidPass(
+                    "beginRenderPass: a TRANSIENT_ATTACHMENT color attachment must clear and discard");
         }
 
         // Color attachments must not alias; 3D compares depthSlice, 2D compares layer ranges.
@@ -936,6 +945,18 @@ extern "C"
 
             bool hasDepth = pwgpu::HasDepthAspect(dsView->format);
             bool hasStencil = pwgpu::HasStencilAspect(dsView->format);
+
+            if (dsView->usage & WGPUTextureUsage_TransientAttachment)
+            {
+                const bool depthKept = hasDepth && (dsa->depthLoadOp != WGPULoadOp_Clear ||
+                                                    dsa->depthStoreOp != WGPUStoreOp_Discard);
+                const bool stencilKept = hasStencil && (dsa->stencilLoadOp != WGPULoadOp_Clear ||
+                                                        dsa->stencilStoreOp != WGPUStoreOp_Discard);
+                if (depthKept || stencilKept)
+                    return makeInvalidPass(
+                        "beginRenderPass: a TRANSIENT_ATTACHMENT depth-stencil attachment must clear and discard "
+                        "each aspect");
+            }
 
             if (hasDepth && !dsa->depthReadOnly)
             {

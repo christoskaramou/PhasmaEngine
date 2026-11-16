@@ -522,7 +522,7 @@ extern "C"
     {
         if (!adapter || !adapter->rhi || !limits)
             return WGPUStatus_Error;
-        pwgpu::FillLimitsFromCore(*limits, adapter->rhi->GetGpuLimits());
+        pwgpu::FillLimitsFromCore(*limits, adapter->rhi->GetGpuLimits(), adapter->rhi->GetApi());
         return WGPUStatus_Success;
     }
 
@@ -575,7 +575,7 @@ extern "C"
         }
 
         WGPULimits adapterLim{};
-        pwgpu::FillLimitsFromCore(adapterLim, adapter->rhi->GetGpuLimits());
+        pwgpu::FillLimitsFromCore(adapterLim, adapter->rhi->GetGpuLimits(), adapter->rhi->GetApi());
 
         if (descriptor && descriptor->requiredLimits)
         {
