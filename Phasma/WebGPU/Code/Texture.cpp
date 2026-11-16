@@ -1151,6 +1151,30 @@ extern "C"
                 ivci.components.b = toVkSwizzle(sB, vk::ComponentSwizzle::eB);
                 ivci.components.a = toVkSwizzle(sA, vk::ComponentSwizzle::eA);
 
+                // A depth texel is (D, 0, 0, 1). The Intel UHD 770 driver feeds a G, B or A source to the
+                // depth comparison as 0 instead of applying the swizzle to the comparison result, so those
+                // sources are spelled as the constants they are.
+                const bool depthView =
+                    pwgpu::HasDepthAspect(resolved.format) &&
+                    resolved.aspect != WGPUTextureAspect_StencilOnly;
+                if (depthView)
+                {
+                    auto toDepthConstant = [](vk::ComponentSwizzle s)
+                    {
+                        if (s == vk::ComponentSwizzle::eG || s == vk::ComponentSwizzle::eB)
+                            return vk::ComponentSwizzle::eZero;
+
+                        if (s == vk::ComponentSwizzle::eA)
+                            return vk::ComponentSwizzle::eOne;
+
+                        return s;
+                    };
+                    ivci.components.r = toDepthConstant(ivci.components.r);
+                    ivci.components.g = toDepthConstant(ivci.components.g);
+                    ivci.components.b = toDepthConstant(ivci.components.b);
+                    ivci.components.a = toDepthConstant(ivci.components.a);
+                }
+
                 try
                 {
                     view->view = pe::VulkanImageViewImpl::Create(texture->image, ivci, viewName);

@@ -645,6 +645,8 @@ fn lower_language_features_source(source: &str) -> String {
     let source = strip_directive_name_source(source, "requires", "immediate_address_space");
     let source = strip_directive_name_source(&source, "requires", "swizzle_assignment");
     let source = strip_directive_name_source(&source, "requires", "subgroup_id");
+    let source =
+        strip_directive_name_source(&source, "requires", "unrestricted_pointer_parameters");
     lower_swizzle_assignments_source(&source)
 }
 
@@ -843,6 +845,686 @@ fn lower_swizzle_assignments_source(source: &str) -> String {
 
     out.push_str(&source[copied..]);
     out
+}
+
+// ---- WGSL unrestricted_pointer_parameters ----
+//
+// naga 29 only takes pointer arguments that are a whole function or private variable: a storage, uniform or
+// workgroup pointer parameter fails its validator, and a pointer to part of a variable panics its SPIR-V backend.
+// Both are lowered in the source:
+// - an argument rooted at a module-scope variable specializes the callee: `f(&buf.items[i])` calls a copy of `f`
+//   without the parameter, where its name stands for `(&buf.items[_ppi0])` and `_ppi0` is passed as `u32(i)`;
+// - an argument into a function-local variable is copied in and out around the statement
+//   (`var t = a[i]; f(&t); a[i] = t;`), which WGSL's alias rules make unobservable for per-invocation memory.
+// Functions that still have a storage, uniform or workgroup pointer parameter afterwards are removed: nothing
+// lowered calls them. Alias analysis runs on the source as written, since specialization erases the pointers.
+// ponytail: text-based. A parameter name shadowed inside its function, an `alias` of a pointer type, a local
+// sub-object argument in an `if`/`for`/`while` header and an index expression with side effects on a copied
+// argument are not handled (the shader then fails to compile); move this to the IR if they show up.
+
+struct PointerParam {
+    name: String,
+    text: String,
+    // The address space of a `ptr<...>` parameter.
+    space: Option<String>,
+}
+
+impl PointerParam {
+    fn is_shared(&self) -> bool {
+        matches!(
+            self.space.as_deref(),
+            Some("storage" | "uniform" | "workgroup")
+        )
+    }
+}
+
+struct PointerFn {
+    name: String,
+    decl_start: usize,
+    name_start: usize,
+    params_close: usize,
+    body_open: usize,
+    body_close: usize,
+    params: Vec<PointerParam>,
+}
+
+fn parse_pointer_fns(scan: &str) -> Vec<PointerFn> {
+    let bytes = scan.as_bytes();
+    let mut fns = Vec::new();
+    let mut pos = 0usize;
+    while let Some(keyword) = find_keyword_from(scan, "fn", pos) {
+        pos = keyword + 2;
+        let name_start = skip_ws_and_comments(bytes, keyword + 2);
+        let mut name_end = name_start;
+        while name_end < bytes.len() && is_ident_char(bytes[name_end]) {
+            name_end += 1;
+        }
+        let params_open = skip_ws_and_comments(bytes, name_end);
+        let Some(params_close) = find_matching_delimiter(scan, params_open, b'(', b')') else {
+            continue;
+        };
+        let Some(body_open) = scan[params_close..].find('{').map(|i| params_close + i) else {
+            continue;
+        };
+        let Some(body_close) = find_matching_delimiter(scan, body_open, b'{', b'}') else {
+            continue;
+        };
+
+        let params = split_top_level_type_args(&scan[params_open + 1..params_close])
+            .into_iter()
+            .filter(|text| !text.is_empty())
+            .map(|text| {
+                let (before, ty) = text.split_once(':').unwrap_or((text.as_str(), ""));
+                let name = before
+                    .trim_end()
+                    .rsplit(|c: char| !is_ident_char(c as u8))
+                    .next()
+                    .unwrap_or("")
+                    .to_string();
+                let ty = ty.trim();
+                let space = ty.strip_prefix("ptr").and_then(|rest| {
+                    let rest = rest.trim_start().strip_prefix('<')?;
+                    Some(split_top_level_type_args(rest).first()?.trim().to_string())
+                });
+                PointerParam {
+                    name,
+                    text: text.clone(),
+                    space,
+                }
+            })
+            .collect();
+
+        fns.push(PointerFn {
+            name: scan[name_start..name_end].to_string(),
+            decl_start: scan[..keyword]
+                .rfind(|c| matches!(c, '}' | ';'))
+                .map_or(0, |i| i + 1),
+            name_start,
+            params_close,
+            body_open,
+            body_close,
+            params,
+        });
+        pos = body_close + 1;
+    }
+    fns
+}
+
+// Names of the variables declared at module scope.
+fn module_scope_var_names(scan: &str) -> HashSet<String> {
+    let bytes = scan.as_bytes();
+    let mut names = HashSet::new();
+    let mut depth = 0i32;
+    let mut i = 0usize;
+    while i < bytes.len() {
+        match bytes[i] {
+            b'{' => depth += 1,
+            b'}' => depth -= 1,
+            b'v' if depth == 0 && find_keyword_from(scan, "var", i) == Some(i) => {
+                let mut start = skip_ws_and_comments(bytes, i + 3);
+                if bytes.get(start) == Some(&b'<') {
+                    start = match find_matching_angle(scan, start) {
+                        Some(close) => skip_ws_and_comments(bytes, close + 1),
+                        None => start,
+                    };
+                }
+                let mut end = start;
+                while end < bytes.len() && is_ident_char(bytes[end]) {
+                    end += 1;
+                }
+                names.insert(scan[start..end].to_string());
+                i = end;
+                continue;
+            }
+            _ => {}
+        }
+        i += 1;
+    }
+    names
+}
+
+// The initializer of the last `let name = ...;` in `body`.
+fn pointer_let_initializer(body: &str, name: &str) -> Option<String> {
+    let bytes = body.as_bytes();
+    let mut found = None;
+    let mut pos = 0usize;
+    while let Some(keyword) = find_keyword_from(body, "let", pos) {
+        pos = keyword + 3;
+        let start = skip_ws_and_comments(bytes, keyword + 3);
+        if !body[start..].starts_with(name)
+            || bytes
+                .get(start + name.len())
+                .is_some_and(|&c| is_ident_char(c))
+        {
+            continue;
+        }
+        let Some(equals) = body[start..].find('=').map(|i| start + i) else {
+            continue;
+        };
+        let Some(end) = body[equals..].find(';').map(|i| equals + i) else {
+            continue;
+        };
+        found = Some(body[equals + 1..end].trim().to_string());
+    }
+    found
+}
+
+// The place a pointer argument points at, as text valid in the caller: `&a.b[i]` gives `a.b[i]`, a pointer
+// parameter `p` gives `(*p)`, and a pointer `let` gives the place it was taken from.
+fn pointer_argument_place(
+    argument: &str,
+    caller: &PointerFn,
+    before_call: &str,
+    depth: u32,
+) -> Option<String> {
+    if depth > 8 {
+        return None;
+    }
+
+    let argument = trim_outer_parens(argument.trim());
+    let mut place = if let Some(rest) = argument.strip_prefix('&') {
+        rest.trim().to_string()
+    } else if !is_plain_identifier(argument) {
+        return None;
+    } else if caller.params.iter().any(|param| param.name == argument) {
+        format!("(*{argument})")
+    } else {
+        let initializer = pointer_let_initializer(before_call, argument)?;
+        return pointer_argument_place(&initializer, caller, before_call, depth + 1);
+    };
+
+    // A leading dereference of a pointer `let` becomes the place that pointer was taken from.
+    for _ in 0..8 {
+        let inner = place.trim_start_matches(|c: char| c == '(' || c.is_whitespace());
+        let Some(rest) = inner.strip_prefix('*') else {
+            break;
+        };
+        let rest = rest.trim_start();
+        let name_len = rest.bytes().take_while(|&c| is_ident_char(c)).count();
+        let name = &rest[..name_len];
+        if name.is_empty() || caller.params.iter().any(|param| param.name == name) {
+            break;
+        }
+        let Some(initializer) = pointer_let_initializer(before_call, name) else {
+            break;
+        };
+        let target = pointer_argument_place(&initializer, caller, before_call, depth + 1)?;
+        let star = place.find('*')?;
+        let after = star + 1 + (place[star + 1..].len() - rest.len()) + name_len;
+        place = format!("{}({target}){}", &place[..star], &place[after..]);
+    }
+    Some(place)
+}
+
+// The variable a place starts at, and whether it is reached through a pointer (`(*p)[2]`).
+fn place_root(place: &str) -> (&str, bool) {
+    let inner = place.trim_start_matches(|c: char| c == '(' || c.is_whitespace());
+    let through_pointer = inner.starts_with('*');
+    let inner = inner.trim_start_matches(|c: char| c == '*' || c == '(' || c.is_whitespace());
+    let len = inner.bytes().take_while(|&c| is_ident_char(c)).count();
+    (&inner[..len], through_pointer)
+}
+
+// Replaces every index of `place` that is not an integer literal by a `_ppiN` parameter, collecting the caller's
+// expressions for them.
+fn hoist_place_indices(place: &str, indices: &mut Vec<String>) -> String {
+    let mut out = String::with_capacity(place.len());
+    let mut pos = 0usize;
+    while let Some(open) = place[pos..].find('[').map(|i| pos + i) {
+        let Some(close) = find_matching_delimiter(place, open, b'[', b']') else {
+            break;
+        };
+        let index = place[open + 1..close].trim();
+        let digits = index.trim_end_matches(['u', 'i']);
+        let literal = !digits.is_empty() && digits.bytes().all(|c| c.is_ascii_digit());
+        out.push_str(&place[pos..=open]);
+        if literal {
+            out.push_str(index);
+        } else {
+            out.push_str(&format!("_ppi{}", indices.len()));
+            indices.push(format!("u32({index})"));
+        }
+        out.push(']');
+        pos = close + 1;
+    }
+    out.push_str(&place[pos..]);
+    out
+}
+
+// `body` with the pointer parameter `name` standing for a pointer to `place`.
+fn substitute_pointer_param(body: &str, name: &str, place: &str) -> String {
+    let scan = mask_comments_preserve_len(body);
+    let bytes = scan.as_bytes();
+    let mut out = String::with_capacity(body.len());
+    let mut copied = 0usize;
+    let mut pos = 0usize;
+    while let Some(found) = find_keyword_from(&scan, name, pos) {
+        pos = found + name.len();
+        let before = scan[..found].trim_end();
+        if before.ends_with('.') {
+            continue;
+        }
+
+        // `*p`, `p.member` and `p[i]` all mean the place itself.
+        let after = skip_ws_and_comments(bytes, pos);
+        let dereferenced = before.ends_with('*');
+        let accessed = matches!(bytes.get(after), Some(b'.' | b'['));
+        let start = if dereferenced {
+            before.len() - 1
+        } else {
+            found
+        };
+        out.push_str(&body[copied..start]);
+        if dereferenced || accessed {
+            out.push_str(&format!("({place})"));
+        } else {
+            out.push_str(&format!("(&{place})"));
+        }
+        copied = pos;
+    }
+    out.push_str(&body[copied..]);
+    out
+}
+
+// Whether `place` calls a function, so evaluating it twice could repeat a side effect.
+fn place_has_call(place: &str) -> bool {
+    place.char_indices().any(|(i, c)| {
+        c == '('
+            && place[..i]
+                .trim_end()
+                .bytes()
+                .last()
+                .is_some_and(is_ident_char)
+    })
+}
+
+// Lowers the first call that needs it and returns the new source; None when no call does.
+fn lower_one_pointer_call(
+    text: &str,
+    clones: &mut HashMap<String, String>,
+    counter: &mut usize,
+) -> Option<String> {
+    let scan = mask_comments_preserve_len(text);
+    let fns = parse_pointer_fns(&scan);
+    let globals = module_scope_var_names(&scan);
+
+    for caller in &fns {
+        if caller.params.iter().any(PointerParam::is_shared) {
+            continue;
+        }
+
+        let caller_body = &scan[caller.body_open + 1..caller.body_close];
+        let local = |name: &str| {
+            caller.params.iter().any(|param| param.name == name)
+                || function_body_declares_local_name(caller_body, name)
+        };
+
+        for callee in &fns {
+            if callee.params.iter().all(|param| param.space.is_none()) {
+                continue;
+            }
+
+            let mut pos = caller.body_open + 1;
+            while let Some(found) = find_keyword_from(&scan, &callee.name, pos) {
+                if found >= caller.body_close {
+                    break;
+                }
+                pos = found + callee.name.len();
+                let Some((arguments, close)) = find_call_args(&scan, found, callee.name.len())
+                else {
+                    continue;
+                };
+                if arguments.len() != callee.params.len() {
+                    continue;
+                }
+
+                // Per parameter: Some((place, specialize)) when the argument is lowered.
+                let before_call = &scan[caller.body_open + 1..found];
+                let caller_space = |name: &str| {
+                    caller
+                        .params
+                        .iter()
+                        .find(|param| param.name == name)
+                        .and_then(|param| param.space.as_deref())
+                };
+                let mut plans: Vec<Option<(String, bool)>> = Vec::new();
+                let mut supported = true;
+                for (param, argument) in callee.params.iter().zip(&arguments) {
+                    let Some(space) = param.space.as_deref() else {
+                        plans.push(None);
+                        continue;
+                    };
+
+                    // A whole variable, or a pointer of the parameter's own address space, is what naga takes.
+                    let bare = trim_outer_parens(argument.trim());
+                    let simple = is_plain_identifier(bare.strip_prefix('&').unwrap_or(bare).trim())
+                        && caller_space(bare).is_none_or(|from| from == space);
+                    if !param.is_shared() && simple {
+                        plans.push(None);
+                        continue;
+                    }
+
+                    let Some(place) = pointer_argument_place(argument, caller, before_call, 0)
+                    else {
+                        supported = false;
+                        break;
+                    };
+                    let (root, through_pointer) = place_root(&place);
+                    let module_scope = !through_pointer && globals.contains(root) && !local(root);
+                    if !module_scope && (param.is_shared() || place_has_call(&place)) {
+                        supported = false;
+                        break;
+                    }
+                    plans.push(Some((place, module_scope)));
+                }
+                if !supported || plans.iter().all(Option::is_none) {
+                    continue;
+                }
+
+                // Specialized parameters leave the call; copied ones point at a temporary.
+                let mut indices = Vec::new();
+                let mut places = Vec::new();
+                let mut retyped = Vec::new();
+                let mut call_arguments = Vec::new();
+                let mut copies_in = String::new();
+                let mut copies_out = String::new();
+                for ((param, argument), plan) in callee.params.iter().zip(&arguments).zip(&plans) {
+                    match plan {
+                        None => call_arguments.push(argument.clone()),
+                        Some((place, true)) => {
+                            places.push((param, hoist_place_indices(place, &mut indices)));
+                        }
+                        Some((place, false)) => {
+                            let temporary = format!("_ppt{}", *counter);
+                            *counter += 1;
+                            copies_in.push_str(&format!("var {temporary} = {place}; "));
+                            copies_out.push_str(&format!(" {place} = {temporary};"));
+                            call_arguments.push(format!("&{temporary}"));
+
+                            // The temporary is a function variable, so a private parameter becomes a
+                            // function one in the copy of the callee this call uses.
+                            if param.space.as_deref() != Some("function") {
+                                retyped.push(param);
+                            }
+                        }
+                    }
+                }
+                call_arguments.extend(indices.iter().cloned());
+
+                // The specialized copy of the callee, shared by calls with the same places.
+                let mut clone_text = None;
+                let mut callee_name = callee.name.clone();
+                if !places.is_empty() || !retyped.is_empty() {
+                    let key = places
+                        .iter()
+                        .fold(callee.name.clone(), |key, (param, place)| {
+                            format!("{key}|{}={place}", param.name)
+                        });
+                    let key = retyped
+                        .iter()
+                        .fold(key, |key, param| format!("{key}|{}=function", param.name));
+                    let shadowed = places.iter().any(|(_, place)| {
+                        let (root, _) = place_root(place);
+                        callee.params.iter().any(|param| param.name == root)
+                            || function_body_declares_local_name(
+                                &scan[callee.body_open + 1..callee.body_close],
+                                root,
+                            )
+                    });
+                    if shadowed {
+                        continue;
+                    }
+
+                    callee_name = match clones.get(&key) {
+                        Some(name) => name.clone(),
+                        None => {
+                            let name = format!("{}_pp{}", callee.name, *counter);
+                            *counter += 1;
+
+                            let mut params: Vec<String> = callee
+                                .params
+                                .iter()
+                                .filter(|param| !places.iter().any(|(p, _)| p.name == param.name))
+                                .map(|param| match retyped.iter().any(|p| p.name == param.name) {
+                                    true => param.text.replacen("private", "function", 1),
+                                    false => param.text.clone(),
+                                })
+                                .collect();
+                            params.extend((0..indices.len()).map(|i| format!("_ppi{i}: u32")));
+
+                            let mut body = text[callee.body_open..=callee.body_close].to_string();
+                            for (param, place) in &places {
+                                body = substitute_pointer_param(&body, &param.name, place);
+                            }
+                            clone_text = Some(format!(
+                                "\n{}{name}({}){}{body}\n",
+                                &text[callee.decl_start..callee.name_start],
+                                params.join(", "),
+                                &text[callee.params_close + 1..callee.body_open],
+                            ));
+                            clones.insert(key, name.clone());
+                            name
+                        }
+                    };
+                }
+
+                let call = format!("{callee_name}({})", call_arguments.join(", "));
+                let (start, end, replacement) = if copies_in.is_empty() {
+                    (found, close + 1, call)
+                } else {
+                    // The whole statement, so the copies sit before and after it.
+                    let start = scan[..found]
+                        .rfind(|c| matches!(c, ';' | '{' | '}'))
+                        .map_or(0, |i| i + 1);
+                    let prefix = &scan[start..found];
+                    let mut depth =
+                        prefix.matches('(').count() as i32 - prefix.matches(')').count() as i32;
+                    let mut end = None;
+                    for (offset, c) in scan[close + 1..].char_indices() {
+                        match c {
+                            '(' => depth += 1,
+                            ')' => depth -= 1,
+                            ';' if depth == 0 => {
+                                end = Some(close + 1 + offset);
+                                break;
+                            }
+                            ';' | '{' | '}' => break,
+                            _ => {}
+                        }
+                    }
+                    let Some(end) = end else {
+                        continue;
+                    };
+
+                    let lead = &text[start..found];
+                    let tail = &text[close + 1..end];
+                    let statement = match lead.trim_start().strip_prefix("return") {
+                        Some(value) if !value.starts_with(|c: char| is_ident_char(c as u8)) => {
+                            let result = format!("_ppr{}", *counter);
+                            *counter += 1;
+                            format!(
+                                " {copies_in}let {result} = {value}{call}{tail};{copies_out} return {result};"
+                            )
+                        }
+                        _ => format!(" {copies_in}{}{call}{tail};{copies_out}", lead.trim_start()),
+                    };
+                    (start, end + 1, statement)
+                };
+
+                // Two edits that never overlap: the call sits in the caller, the copy after the callee.
+                let insert = callee.body_close + 1;
+                let mut out = String::with_capacity(text.len() + 256);
+                match clone_text {
+                    Some(clone) if insert <= start => {
+                        out.push_str(&text[..insert]);
+                        out.push_str(&clone);
+                        out.push_str(&text[insert..start]);
+                        out.push_str(&replacement);
+                        out.push_str(&text[end..]);
+                    }
+                    Some(clone) => {
+                        out.push_str(&text[..start]);
+                        out.push_str(&replacement);
+                        out.push_str(&text[end..insert]);
+                        out.push_str(&clone);
+                        out.push_str(&text[insert..]);
+                    }
+                    None => {
+                        out.push_str(&text[..start]);
+                        out.push_str(&replacement);
+                        out.push_str(&text[end..]);
+                    }
+                }
+                return Some(out);
+            }
+        }
+    }
+    None
+}
+
+// The store type and address space a pointer expression has, from its root variable down its accesses. None for
+// a shape this does not follow (a pointer to a vector component or matrix column, which no parameter accepts).
+fn pointer_expression_type(
+    module: &naga::Module,
+    function: &naga::Function,
+    handle: naga::Handle<naga::Expression>,
+) -> Option<(naga::Handle<naga::Type>, naga::AddressSpace)> {
+    use naga::Expression as E;
+    let (base, element) = match function.expressions[handle] {
+        E::GlobalVariable(global) => {
+            let variable = &module.global_variables[global];
+            return Some((variable.ty, variable.space));
+        }
+        E::LocalVariable(local) => {
+            return Some((
+                function.local_variables[local].ty,
+                naga::AddressSpace::Function,
+            ));
+        }
+        E::FunctionArgument(index) => {
+            let ty = function.arguments.get(index as usize)?.ty;
+            return match module.types[ty].inner {
+                naga::TypeInner::Pointer { base, space } => Some((base, space)),
+                _ => None,
+            };
+        }
+        E::AccessIndex { base, index } => (base, Some(index as usize)),
+        E::Access { base, .. } => (base, None),
+        _ => return None,
+    };
+
+    let (ty, space) = pointer_expression_type(module, function, base)?;
+    match module.types[ty].inner {
+        naga::TypeInner::Struct { ref members, .. } => Some((members.get(element?)?.ty, space)),
+        naga::TypeInner::Array { base, .. } => Some((base, space)),
+        _ => None,
+    }
+}
+
+// Specialization erases pointer parameters, and with them naga's check that a pointer argument has the
+// parameter's store type, address space and access mode, so that check runs here on the source as written.
+fn validate_pointer_argument_types(module: &naga::Module) -> Vec<WgslMessage> {
+    let mut errors = Vec::new();
+    let callers = module
+        .functions
+        .iter()
+        .map(|(_, function)| function)
+        .chain(module.entry_points.iter().map(|entry| &entry.function));
+    for caller in callers {
+        for_each_statement(&caller.body, &mut |statement| {
+            let naga::Statement::Call {
+                function,
+                arguments,
+                ..
+            } = statement
+            else {
+                return;
+            };
+
+            let parameters = &module.functions[*function].arguments;
+            for (parameter, &argument) in parameters.iter().zip(arguments) {
+                let naga::TypeInner::Pointer { base, space } = module.types[parameter.ty].inner
+                else {
+                    continue;
+                };
+                let Some(actual) = pointer_expression_type(module, caller, argument) else {
+                    continue;
+                };
+                if actual != (base, space) {
+                    errors.push(wgsl_error(
+                        "a pointer argument does not match its parameter's store type, address space or access mode",
+                    ));
+                }
+            }
+        });
+    }
+    errors
+}
+
+// An atomic is only valid behind a read_write storage or a workgroup pointer. naga reports that for a function it
+// validates, which a function with such a parameter no longer is once it has been specialized or removed.
+fn validate_pointer_atomic_spaces(module: &naga::Module) -> Vec<WgslMessage> {
+    let invalid = module.types.iter().any(|(_, ty)| {
+        let naga::TypeInner::Pointer { base, space } = ty.inner else {
+            return false;
+        };
+        let writable = match space {
+            naga::AddressSpace::WorkGroup => true,
+            naga::AddressSpace::Storage { access } => access.contains(naga::StorageAccess::STORE),
+            _ => false,
+        };
+        !writable && type_contains_atomic(module, base, &mut HashSet::new())
+    });
+    match invalid {
+        true => vec![wgsl_error(
+            "atomic types require read_write storage or workgroup address space",
+        )],
+        false => Vec::new(),
+    }
+}
+
+// Returns the lowered source, the errors found, and whether alias analysis ran here. It runs on the source as
+// written: the lowered module has no pointer parameters left to alias, and its copies in and out read and write
+// every copied argument, which the analysis would take for the callee's own accesses.
+fn lower_pointer_parameters_source(source: &str) -> (String, Vec<WgslMessage>, bool) {
+    let source = strip_directive_name_source(source, "requires", "unrestricted_pointer_parameters");
+    if !source.contains("ptr") {
+        return (source, Vec::new(), false);
+    }
+
+    let parsed = wgsl::parse_str(&source).ok();
+    let errors = match parsed {
+        Some(ref module) => {
+            let mut errors = validate_alias_analysis(module);
+            errors.extend(validate_pointer_argument_types(module));
+            errors.extend(validate_pointer_atomic_spaces(module));
+            errors
+        }
+        None => Vec::new(),
+    };
+
+    let mut text = source;
+    let mut clones = HashMap::new();
+    let mut counter = 0usize;
+    for _ in 0..512 {
+        match lower_one_pointer_call(&text, &mut clones, &mut counter) {
+            Some(lowered) => text = lowered,
+            None => break,
+        }
+    }
+
+    let scan = mask_comments_preserve_len(&text);
+    let mut bytes = text.clone().into_bytes();
+    for function in parse_pointer_fns(&scan) {
+        if function.params.iter().any(PointerParam::is_shared) {
+            blank_preserving_newlines(&mut bytes, function.decl_start, function.body_close + 1);
+        }
+    }
+    (
+        String::from_utf8(bytes).unwrap_or(text),
+        errors,
+        parsed.is_some(),
+    )
 }
 
 // Source passes that make WGSL subgroup code acceptable to naga 29.
@@ -4783,62 +5465,6 @@ fn validate_size_attribute_source(source: &str) -> Vec<WgslMessage> {
     errors
 }
 
-fn argument_takes_composite_address(arg: &str) -> bool {
-    let s = trim_outer_parens(arg).trim();
-    let Some(rest) = s.strip_prefix('&') else {
-        return false;
-    };
-
-    let mut angle_depth = 0i32;
-    for b in rest.trim().bytes() {
-        match b {
-            b'<' => angle_depth += 1,
-            b'>' if angle_depth > 0 => angle_depth -= 1,
-            b'.' | b'[' if angle_depth == 0 => return true,
-            _ => {}
-        }
-    }
-    false
-}
-
-fn validate_unrestricted_pointer_parameter_source(source: &str) -> Vec<WgslMessage> {
-    if !source.contains('&') {
-        return Vec::new();
-    }
-
-    let scan = mask_comments_preserve_len(source);
-    if enable_directive_lists_extension(&scan, "unrestricted_pointer_parameters") {
-        return Vec::new();
-    }
-    let fn_names = enumerate_fn_names(&scan);
-    let mut errors = Vec::new();
-    for name in fn_names {
-        let mut pos = 0usize;
-        while let Some(rel) = scan[pos..].find(&name) {
-            let start = pos + rel;
-            let end = start + name.len();
-            if (start > 0 && is_ident_char(scan.as_bytes()[start - 1]))
-                || (end < scan.len() && is_ident_char(scan.as_bytes()[end]))
-            {
-                pos = end;
-                continue;
-            }
-            let Some((args, close)) = find_call_args(&scan, start, name.len()) else {
-                pos = end;
-                continue;
-            };
-            if args.iter().any(|arg| argument_takes_composite_address(arg)) {
-                errors.push(wgsl_error(
-                    "composite pointer arguments require unrestricted_pointer_parameters",
-                ));
-                break;
-            }
-            pos = close + 1;
-        }
-    }
-    errors
-}
-
 fn find_matching_angle(source: &str, open: usize) -> Option<usize> {
     let bytes = source.as_bytes();
     if open >= bytes.len() || bytes[open] != b'<' {
@@ -4951,32 +5577,6 @@ fn type_contains_override_sized_array(type_text: &str, override_names: &HashSet<
         if args
             .first()
             .is_some_and(|arg| type_contains_override_sized_array(arg, override_names))
-        {
-            return true;
-        }
-        pos = close + 1;
-    }
-    false
-}
-
-fn type_contains_sized_array(type_text: &str) -> bool {
-    if !type_text.contains("array") {
-        return false;
-    }
-
-    let mut pos = 0usize;
-    while let Some(rel) = type_text[pos..].find("array") {
-        let start = pos + rel;
-        let Some((args, _open, close)) = parse_type_application_args(type_text, "array", start)
-        else {
-            pos = start + "array".len();
-            continue;
-        };
-
-        if args.len() >= 2
-            || args
-                .first()
-                .is_some_and(|arg| type_contains_sized_array(arg))
         {
             return true;
         }
@@ -5147,9 +5747,25 @@ fn expr_directly_mentions_atomic_value(expr: &str, atomic_names: &HashSet<String
     if trimmed.starts_with('&') || trimmed.contains("atomic") {
         return false;
     }
-    atomic_names
-        .iter()
-        .any(|name| identifier_occurrence_count(trimmed, name) > 0)
+    // `&name` passes a pointer to the atomic (to a user function), which is not a use of its value.
+    atomic_names.iter().any(|name| {
+        let mut pos = 0usize;
+        while let Some(found) = find_keyword_from(trimmed, name, pos) {
+            // Address-of is the unary `&`: after an operand (`1i & a`) it is the bitwise operator instead.
+            let before = trimmed[..found].trim_end();
+            let operand_before = before.strip_suffix('&').is_some_and(|rest| {
+                rest.trim_end()
+                    .bytes()
+                    .last()
+                    .is_some_and(|c| is_ident_char(c) || c == b')' || c == b']')
+            });
+            if !before.ends_with('&') || operand_before {
+                return true;
+            }
+            pos = found + name.len();
+        }
+        false
+    })
 }
 
 fn switch_directly_uses_atomic_value(source: &str, atomic_names: &HashSet<String>) -> bool {
@@ -5778,46 +6394,6 @@ fn validate_div_rem_source(
     errors
 }
 
-fn rewrite_override_sized_array_counts_in_type(
-    type_text: &str,
-    override_names: &HashSet<String>,
-) -> String {
-    if override_names.is_empty() || !type_text.contains("array") {
-        return type_text.to_string();
-    }
-
-    let mut out = String::with_capacity(type_text.len());
-    let mut copy_pos = 0usize;
-    let mut search_pos = 0usize;
-    while let Some(rel) = type_text[search_pos..].find("array") {
-        let start = search_pos + rel;
-        let Some((args, open, close)) = parse_type_application_args(type_text, "array", start)
-        else {
-            search_pos = start + "array".len();
-            continue;
-        };
-
-        out.push_str(&type_text[copy_pos..open + 1]);
-        let mut rewritten_args = args;
-        if let Some(element) = rewritten_args.first_mut() {
-            *element = rewrite_override_sized_array_counts_in_type(element, override_names);
-        }
-        if rewritten_args.len() >= 2 && expr_mentions_override(&rewritten_args[1], override_names) {
-            rewritten_args[1] = "1".to_string();
-        }
-        out.push_str(&rewritten_args.join(", "));
-        out.push('>');
-        copy_pos = close + 1;
-        search_pos = close + 1;
-    }
-
-    if copy_pos == 0 {
-        return type_text.to_string();
-    }
-    out.push_str(&type_text[copy_pos..]);
-    out
-}
-
 fn validate_override_sized_array_source(source: &str) -> Vec<WgslMessage> {
     if !source.contains("override") || !source.contains("array") || !source.contains("ptr") {
         return Vec::new();
@@ -5848,58 +6424,6 @@ fn validate_override_sized_array_source(source: &str) -> Vec<WgslMessage> {
         pos = close + 1;
     }
     errors
-}
-
-fn source_has_entry_point_attribute(source: &str) -> bool {
-    let scan = mask_comments_preserve_len(source);
-    attr_slice_contains(&scan, "vertex")
-        || attr_slice_contains(&scan, "fragment")
-        || attr_slice_contains(&scan, "compute")
-}
-
-fn lower_no_entry_workgroup_pointer_params_source(source: &str) -> String {
-    if !source.contains("ptr")
-        || !source.contains("workgroup")
-        || source_has_entry_point_attribute(source)
-    {
-        return source.to_string();
-    }
-
-    let scan = mask_comments_preserve_len(source);
-    let override_names = collect_override_names(&scan);
-    let mut out = String::with_capacity(source.len());
-    let mut copy_pos = 0usize;
-    let mut search_pos = 0usize;
-    while let Some(rel) = scan[search_pos..].find("ptr") {
-        let start = search_pos + rel;
-        let Some((args, _open, close)) = parse_type_application_args(&scan, "ptr", start) else {
-            search_pos = start + "ptr".len();
-            continue;
-        };
-        if args.len() == 2
-            && normalize_type_name(&args[0]).to_ascii_lowercase() == "workgroup"
-            && type_contains_sized_array(&args[1])
-            && !type_text_contains_atomic_keyword(&args[1])
-        {
-            out.push_str(&source[copy_pos..start]);
-            out.push_str("ptr<function, ");
-            out.push_str(&rewrite_override_sized_array_counts_in_type(
-                &args[1],
-                &override_names,
-            ));
-            out.push('>');
-            copy_pos = close + 1;
-            search_pos = close + 1;
-            continue;
-        }
-        search_pos = close + 1;
-    }
-
-    if copy_pos == 0 {
-        return source.to_string();
-    }
-    out.push_str(&source[copy_pos..]);
-    out
 }
 
 fn normalize_var_template_trailing_commas_source(source: &str) -> String {
@@ -7373,6 +7897,275 @@ fn replace_gather_ids(
     }
 }
 
+// naga 29 gives f16 frexp a result struct whose `exp` is a 16-bit integer, which its validator then rejects
+// ("The Sint scalar width 2 is not supported"); WGSL says i32. The predeclared struct is retyped in place, so every
+// frexp of that type resolves to it. lower_f16_frexp_source covers calls inside functions before parsing; this
+// covers the ones it leaves alone (module-scope initializers).
+fn widen_f16_frexp_exponents(module: &mut naga::Module) {
+    const I16: naga::Scalar = naga::Scalar {
+        kind: naga::ScalarKind::Sint,
+        width: 2,
+    };
+    let narrow: Vec<_> = module
+        .types
+        .iter()
+        .filter_map(|(handle, ty)| {
+            let naga::TypeInner::Struct { ref members, .. } = ty.inner else {
+                return None;
+            };
+            let is_frexp = ty
+                .name
+                .as_deref()
+                .is_some_and(|name| name.starts_with("__frexp_result"));
+            let exp = members.get(1)?;
+            let size = match module.types[exp.ty].inner {
+                naga::TypeInner::Scalar(scalar) if scalar == I16 => None,
+                naga::TypeInner::Vector { size, scalar } if scalar == I16 => Some(size),
+                _ => return None,
+            };
+            (is_frexp && members.len() == 2).then_some((handle, size))
+        })
+        .collect();
+
+    for (handle, size) in narrow {
+        let inner = match size {
+            Some(size) => naga::TypeInner::Vector {
+                size,
+                scalar: naga::Scalar::I32,
+            },
+            None => naga::TypeInner::Scalar(naga::Scalar::I32),
+        };
+        let count = size.map_or(1, |size| size as u32);
+        // A type must precede its users, so the wider type is one already declared before the struct, or the
+        // narrow type itself retyped in place (nothing else uses naga's i16).
+        let wide = naga::Type { name: None, inner };
+        let narrow_type = match module.types[handle].inner {
+            naga::TypeInner::Struct { ref members, .. } => members[1].ty,
+            _ => continue,
+        };
+        let exp_type = match module.types.get(&wide) {
+            Some(existing) if existing.index() < handle.index() => existing,
+            Some(_) => continue,
+            None => {
+                module.types.replace(narrow_type, wide);
+                narrow_type
+            }
+        };
+
+        let mut ty = module.types[handle].clone();
+        if let naga::TypeInner::Struct {
+            ref mut members,
+            ref mut span,
+        } = ty.inner
+        {
+            // fract is `count` f16 values (a vec3 is padded to 4); exp is 4-byte aligned, a vec3 or vec4 16-byte.
+            let fract_size = 2 * if count == 3 { 4 } else { count };
+            let exp_align = if count >= 3 { 16 } else { 4 * count };
+            let exp_size = 4 * if count == 3 { 4 } else { count };
+            let offset = fract_size.next_multiple_of(exp_align);
+            members[1].ty = exp_type;
+            members[1].offset = offset;
+            *span = (offset + exp_size).next_multiple_of(exp_align);
+        }
+        module.types.replace(handle, ty);
+    }
+}
+
+// Whether a global expression calls frexp or modf anywhere beneath it.
+fn global_expression_calls_frexp_or_modf(
+    expressions: &naga::Arena<naga::Expression>,
+    handle: naga::Handle<naga::Expression>,
+) -> bool {
+    use naga::Expression as E;
+    match expressions[handle] {
+        E::Math {
+            fun,
+            arg,
+            arg1,
+            arg2,
+            arg3,
+        } => {
+            matches!(fun, naga::MathFunction::Frexp | naga::MathFunction::Modf)
+                || [Some(arg), arg1, arg2, arg3]
+                    .into_iter()
+                    .flatten()
+                    .any(|h| global_expression_calls_frexp_or_modf(expressions, h))
+        }
+        E::Compose { ref components, .. } => components
+            .iter()
+            .any(|&h| global_expression_calls_frexp_or_modf(expressions, h)),
+        E::Splat { value, .. } | E::As { expr: value, .. } | E::Unary { expr: value, .. } => {
+            global_expression_calls_frexp_or_modf(expressions, value)
+        }
+        E::AccessIndex { base, .. } | E::Swizzle { vector: base, .. } => {
+            global_expression_calls_frexp_or_modf(expressions, base)
+        }
+        E::Binary { left, right, .. } => {
+            global_expression_calls_frexp_or_modf(expressions, left)
+                || global_expression_calls_frexp_or_modf(expressions, right)
+        }
+        _ => false,
+    }
+}
+
+// Copies a global expression tree into a function, emitting what needs it. None for a kind it does not handle.
+fn copy_global_expression_into(
+    globals: &naga::Arena<naga::Expression>,
+    handle: naga::Handle<naga::Expression>,
+    function: &mut naga::Function,
+    prelude: &mut naga::Block,
+) -> Option<naga::Handle<naga::Expression>> {
+    use naga::Expression as E;
+    let copy = |h: naga::Handle<naga::Expression>,
+                function: &mut naga::Function,
+                prelude: &mut naga::Block| {
+        copy_global_expression_into(globals, h, function, prelude)
+    };
+
+    let expression = match globals[handle] {
+        E::Literal(_) | E::Constant(_) | E::Override(_) | E::ZeroValue(_) => {
+            let copied = globals[handle].clone();
+            return Some(function.expressions.append(copied, naga::Span::UNDEFINED));
+        }
+        E::Compose { ty, ref components } => {
+            let mut copied = Vec::with_capacity(components.len());
+            for &component in components {
+                copied.push(copy(component, function, prelude)?);
+            }
+            E::Compose {
+                ty,
+                components: copied,
+            }
+        }
+        E::Splat { size, value } => E::Splat {
+            size,
+            value: copy(value, function, prelude)?,
+        },
+        E::As {
+            expr,
+            kind,
+            convert,
+        } => E::As {
+            expr: copy(expr, function, prelude)?,
+            kind,
+            convert,
+        },
+        E::Unary { op, expr } => E::Unary {
+            op,
+            expr: copy(expr, function, prelude)?,
+        },
+        E::Binary { op, left, right } => E::Binary {
+            op,
+            left: copy(left, function, prelude)?,
+            right: copy(right, function, prelude)?,
+        },
+        E::AccessIndex { base, index } => E::AccessIndex {
+            base: copy(base, function, prelude)?,
+            index,
+        },
+        E::Swizzle {
+            size,
+            vector,
+            pattern,
+        } => E::Swizzle {
+            size,
+            vector: copy(vector, function, prelude)?,
+            pattern,
+        },
+        E::Math {
+            fun,
+            arg,
+            arg1,
+            arg2,
+            arg3,
+        } => {
+            let optional = |h: Option<naga::Handle<naga::Expression>>,
+                            function: &mut naga::Function,
+                            prelude: &mut naga::Block| {
+                match h {
+                    Some(h) => copy_global_expression_into(globals, h, function, prelude).map(Some),
+                    None => Some(None),
+                }
+            };
+            E::Math {
+                fun,
+                arg: copy_global_expression_into(globals, arg, function, prelude)?,
+                arg1: optional(arg1, function, prelude)?,
+                arg2: optional(arg2, function, prelude)?,
+                arg3: optional(arg3, function, prelude)?,
+            }
+        }
+        _ => return None,
+    };
+
+    let start = function.expressions.len();
+    let copied = function
+        .expressions
+        .append(expression, naga::Span::UNDEFINED);
+    prelude.push(
+        naga::Statement::Emit(function.expressions.range_from(start)),
+        naga::Span::UNDEFINED,
+    );
+    Some(copied)
+}
+
+// naga 29 cannot constant-evaluate frexp or modf, so `var<private> v = frexp(override_expression);` fails in
+// process_overrides (16 CTS cases). A private variable is per invocation, so such an initializer is cleared and
+// every entry point stores the value first thing instead, where the call is an ordinary runtime expression.
+fn defer_frexp_modf_private_initializers(module: &mut naga::Module) {
+    let deferred: Vec<_> = module
+        .global_variables
+        .iter()
+        .filter_map(|(handle, variable)| {
+            let init = variable.init?;
+            let defer = variable.space == naga::AddressSpace::Private
+                && global_expression_calls_frexp_or_modf(&module.global_expressions, init);
+            defer.then_some((handle, init))
+        })
+        .collect();
+
+    for (variable, init) in deferred {
+        let mut preludes = Vec::with_capacity(module.entry_points.len());
+        let mut scratch: Vec<naga::Function> = module
+            .entry_points
+            .iter()
+            .map(|entry| entry.function.clone())
+            .collect();
+        for function in scratch.iter_mut() {
+            let mut prelude = naga::Block::new();
+            let Some(value) = copy_global_expression_into(
+                &module.global_expressions,
+                init,
+                function,
+                &mut prelude,
+            ) else {
+                return;
+            };
+            let pointer = function.expressions.append(
+                naga::Expression::GlobalVariable(variable),
+                naga::Span::UNDEFINED,
+            );
+            prelude.push(
+                naga::Statement::Store { pointer, value },
+                naga::Span::UNDEFINED,
+            );
+            preludes.push(prelude);
+        }
+
+        module.global_variables[variable].init = None;
+        for ((entry, mut function), mut prelude) in
+            module.entry_points.iter_mut().zip(scratch).zip(preludes)
+        {
+            let body = std::mem::take(&mut function.body);
+            for (statement, span) in body.span_into_iter() {
+                prelude.push(statement, span);
+            }
+            function.body = prelude;
+            entry.function = function;
+        }
+    }
+}
+
 fn convert_signed_gather_ids(module: &mut naga::Module) {
     let functions: Vec<_> = module.functions.iter().map(|(h, _)| h).collect();
     for h in functions {
@@ -7994,6 +8787,11 @@ fn alias_effects(
         naga::Statement::Atomic { pointer, .. } => {
             if let Some(root) = pointer_root(&f.expressions, *pointer) {
                 fx.mark(root, true, true);
+            }
+        }
+        naga::Statement::WorkGroupUniformLoad { pointer, .. } => {
+            if let Some(root) = pointer_root(&f.expressions, *pointer) {
+                fx.mark(root, true, false);
             }
         }
         naga::Statement::Call {
@@ -12553,7 +13351,11 @@ fn lower_f16_frexp_source(source: &str) -> String {
         let nested = calls
             .last()
             .is_some_and(|&(_, _, last_close)| start < last_close);
-        if !abstract_literal && !nested {
+        // A module-scope initializer cannot call the helper function; defer_frexp_modf_private_initializers
+        // handles those, and nothing can name their result's `exp` type.
+        let before = &scan[..start];
+        let in_function = before.matches('{').count() > before.matches('}').count();
+        if !abstract_literal && !nested && in_function {
             calls.push((start, open + 1, close));
         }
     }
@@ -14734,13 +15536,6 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         msgs.extend(bool_order_errors);
         return Err(msgs);
     }
-    let pointer_parameter_errors =
-        validate_unrestricted_pointer_parameter_source(&normalized_source);
-    if !pointer_parameter_errors.is_empty() {
-        let mut msgs = strip.messages;
-        msgs.extend(pointer_parameter_errors);
-        return Err(msgs);
-    }
     let override_sized_array_errors = validate_override_sized_array_source(&normalized_source);
     if !override_sized_array_errors.is_empty() {
         let mut msgs = strip.messages;
@@ -14788,7 +15583,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         return Err(msgs);
     }
     let size_lowered_source = lower_large_size_attribute_source(&normalized_source);
-    let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
+    let naga_source = size_lowered_source;
     let shadow_builtin_source = lower_shadow_builtin_abstract_args_source(&naga_source, None);
     let matrix_binary_source = lower_const_matrix_binary_source(&shadow_builtin_source, None);
     let bool_bitwise_source = lower_bool_bitwise_const_source(&matrix_binary_source);
@@ -14816,6 +15611,13 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     }
     let parse_source = lower_f16_frexp_source(&parse_source);
     let parse_source = lower_hex_f16_literals_source(&parse_source);
+    let (parse_source, pointer_errors, alias_checked) =
+        lower_pointer_parameters_source(&parse_source);
+    if !pointer_errors.is_empty() {
+        let mut msgs = strip.messages;
+        msgs.extend(pointer_errors);
+        return Err(msgs);
+    }
     let mut module = match wgsl::parse_str(&parse_source) {
         Ok(m) => m,
         Err(e) => {
@@ -14830,6 +15632,8 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     clamp_image_sample_bias(&mut module);
     cloak_const_indices(&mut module, &parse_source);
     convert_signed_gather_ids(&mut module);
+    widen_f16_frexp_exponents(&mut module);
+    defer_frexp_modf_private_initializers(&mut module);
 
     // WGSL §17.6.2: integer e1 / e2 and e1 % e2 with v2 == 0 must be a
     // compilation error. naga 29 catches this for fully-const expressions
@@ -14842,7 +15646,9 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
     bridge_errors.extend(validate_bool_order_comparisons(&module));
     bridge_errors.extend(validate_derivative_types(&module));
     bridge_errors.extend(validate_f16_const_overflow(&module));
-    bridge_errors.extend(validate_alias_analysis(&module));
+    if !alias_checked {
+        bridge_errors.extend(validate_alias_analysis(&module));
+    }
     bridge_errors.extend(uniformity::validate(&module, source));
     bridge_errors.extend(validate_div_rem(&module));
     // WGSL §17.6.3.4 / §17.6.3.21: clamp(v, low, high) and smoothstep(e0,
@@ -15368,20 +16174,6 @@ const_assert ((((0)<<(64u))) == 0);
             call("pack4xU8Clamp", "vec4<u32>(1u, 300u, 0u, 255u)").as_deref(),
             Some("4278255361u")
         );
-    }
-
-    #[test]
-    fn no_entry_workgroup_pointer_params_are_sanitized_for_naga() {
-        let source = "override size = 1;\nfn f(a: ptr<workgroup, array<u32, size>>) {}\n";
-        let lowered = lower_no_entry_workgroup_pointer_params_source(source);
-        assert!(lowered.contains("ptr<function, array<u32, 1>>"));
-    }
-
-    #[test]
-    fn plain_workgroup_pointer_params_are_not_sanitized() {
-        let source = "fn f(a: ptr<workgroup, u32>) {}\n";
-        let lowered = lower_no_entry_workgroup_pointer_params_source(source);
-        assert!(lowered.contains("ptr<workgroup, u32>"));
     }
 
     #[test]
@@ -15932,6 +16724,130 @@ fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
             }
             assert!(compiled.ok().and_then(|r| r.spirv).is_some());
         }
+    }
+
+    #[test]
+    fn frexp_modf_override_initializers_bake() {
+        for (enable, call) in [
+            ("", "frexp(f32(o0))"),
+            ("", "modf(vec2<f32>(o0, o0))"),
+            (
+                "enable f16;\n",
+                "frexp(vec3<f16>(f16(o0), f16(o0), f16(o0)))",
+            ),
+        ] {
+            let source = format!(
+                "{enable}override o0 : f32;\nvar<private> v = {call};\n\
+                 @compute @workgroup_size(1) fn main() {{ _ = v; }}\n"
+            );
+            assert!(compile_with_meta(&source).is_ok(), "{call}");
+
+            let mut constants = HashMap::new();
+            constants.insert("o0".to_string(), -215.5f64);
+            let baked = bake_wgsl_with_constants(&source, constants, Some("main"));
+            assert!(baked.is_some_and(|words| !words.is_empty()), "bake {call}");
+        }
+    }
+
+    #[test]
+    fn pointer_parameters_are_specialized_or_copied() {
+        let compiles =
+            |source: &str| compile_with_meta(source).is_ok_and(|result| result.spirv.is_some());
+
+        // Whole variables in every shared address space, forwarded through two functions.
+        for (space, declaration) in [
+            (
+                "storage, T, read",
+                "@group(0) @binding(0) var<storage, read> input : T;",
+            ),
+            (
+                "uniform, T",
+                "@group(0) @binding(0) var<uniform> input : T;",
+            ),
+            ("workgroup, T", "var<workgroup> input : T;"),
+        ] {
+            let source = format!(
+                "requires unrestricted_pointer_parameters;\n\
+                 alias T = array<vec4i, 4>;\n{declaration}\n\
+                 @group(0) @binding(1) var<storage, read_write> output : T;\n\
+                 fn f1(p : ptr<{space}>) {{ output = *p; }}\n\
+                 fn f0(p : ptr<{space}>) {{ f1(p); }}\n\
+                 @compute @workgroup_size(1) fn main() {{ f0(&input); }}\n"
+            );
+            assert!(compiles(&source), "{space}");
+        }
+
+        // Sub-objects: members, constant and dynamic elements, atomics, and a function-local element.
+        assert!(compiles(
+            "alias T3 = atomic<i32>; alias T2 = array<T3, 2>; alias T1 = array<T2, 3>; alias T = array<T1, 2>;\n\
+             @group(0) @binding(0) var<storage, read_write> input : T;\n\
+             @group(0) @binding(1) var<storage, read_write> output : T;\n\
+             fn f2(in : ptr<storage, T2, read_write>, out : ptr<storage, T2, read_write>) {\n\
+               let v = atomicLoad(&(*in)[0]); atomicStore(&(*out)[1], v); }\n\
+             fn f1(in : ptr<storage, T1, read_write>, out : ptr<storage, T1, read_write>) {\n\
+               f2(&(*in)[0], &(*out)[1]); f2(&(*in)[2], &(*out)[0]); }\n\
+             fn f0(in : ptr<storage, T, read_write>, out : ptr<storage, T, read_write>) { f1(&(*in)[1], &(*out)[0]); }\n\
+             @compute @workgroup_size(1) fn main() { f0(&input, &output); }\n"
+        ));
+        assert!(compiles(
+            "@group(0) @binding(0) var<uniform> input : array<vec4i, 4>;\n\
+             @group(0) @binding(1) var<storage, read_write> output : array<vec4i, 4>;\n\
+             struct S { i : i32 }\n\
+             var<private> P1 = S(10);\n\
+             var<workgroup> W3 : atomic<i32>;\n\
+             fn sum(f : ptr<function, i32>, w : ptr<workgroup, atomic<i32>>, p : ptr<private, i32>,\n\
+                    u : ptr<uniform, vec4i>) -> vec4i { return vec4(*f + atomicLoad(w) + *p) + *u; }\n\
+             fn bump(p : ptr<function, i32>) { *p += 1; }\n\
+             @compute @workgroup_size(1) fn main(@builtin(local_invocation_index) i : u32) {\n\
+               var F = array(0, 1000, 2000, 3000);\n\
+               output[0] = sum(&F[2], &W3, &P1.i, &input[i]);\n\
+               bump(&F[i]);\n\
+               let r = sum(&F[1], &W3, &P1.i, &input[1]);\n\
+               output[1] = r;\n\
+             }\n"
+        ));
+
+        // No access through either pointer: the copies in and out must not count as aliasing writes.
+        assert!(compiles(
+            "fn callee(pa : ptr<function, i32>, pb : ptr<function, i32>) -> i32 { return 0; }\n\
+             fn index(pa : ptr<function, array<i32, 4>>, pb : ptr<function, array<i32, 4>>) -> i32 {\n\
+               return callee(&(*pa)[0], &(*pb)[0]); }\n\
+             @compute @workgroup_size(1) fn main() { var x : array<i32, 4>; _ = index(&x, &x); }\n"
+        ));
+        assert!(!compiles(
+            "fn foo(p : ptr<storage, atomic<i32>, read>) { atomicAdd(p, 1); }\n@compute @workgroup_size(1) fn main() {}\n"
+        ));
+        assert!(!compiles(
+            "@group(0) @binding(0) var<storage, read_write> s : u32;\nfn f(p : ptr<function, u32>) {}\n\
+             @compute @workgroup_size(1) fn main() { f(&s); }\n"
+        ));
+
+        // An unused function with a shared pointer parameter is valid; aliasing still is not.
+        assert!(compiles(
+            "fn unused(p : ptr<storage, u32, read_write>) { *p = 1u; }\n@compute @workgroup_size(1) fn main() {}\n"
+        ));
+        assert!(!compiles(
+            "var<private> a : array<i32, 4>;\n\
+             fn f(p : ptr<private, i32>, q : ptr<private, i32>) { *p = *q; }\n\
+             @compute @workgroup_size(1) fn main() { f(&a[0], &a[1]); }\n"
+        ));
+
+        // The copy is written back for a function-local element, and the index is evaluated in the caller.
+        let (lowered, _, _) = lower_pointer_parameters_source(
+            "@group(0) @binding(0) var<storage, read_write> s : array<u32, 8>;\n\
+             fn set(p : ptr<storage, u32, read_write>) { *p = 1u; }\n\
+             fn bump(p : ptr<function, u32>) { *p += 1u; }\n\
+             fn main_body(i : u32) { var a : array<u32, 4>; bump(&a[i]); set(&s[i + 1u]); }\n",
+        );
+        assert!(
+            lowered.contains("var _ppt") && lowered.contains("a[i] = _ppt"),
+            "{lowered}"
+        );
+        assert!(
+            lowered.contains("u32(i + 1u)") && lowered.contains("(s[_ppi0]) = 1u"),
+            "{lowered}"
+        );
+        assert!(!lowered.contains("ptr<storage"), "{lowered}");
     }
 
     #[test]
@@ -16947,9 +17863,6 @@ pub fn bake_wgsl_with_constants(
     if !validate_bool_order_comparison_source(&normalized_source).is_empty() {
         return None;
     }
-    if !validate_unrestricted_pointer_parameter_source(&normalized_source).is_empty() {
-        return None;
-    }
     if !validate_override_sized_array_source(&normalized_source).is_empty() {
         return None;
     }
@@ -16972,7 +17885,7 @@ pub fn bake_wgsl_with_constants(
         return None;
     }
     let size_lowered_source = lower_large_size_attribute_source(&normalized_source);
-    let naga_source = lower_no_entry_workgroup_pointer_params_source(&size_lowered_source);
+    let naga_source = size_lowered_source;
     let shadow_builtin_source =
         lower_shadow_builtin_abstract_args_source(&naga_source, Some(&constants));
     let matrix_binary_source =
@@ -17004,17 +17917,26 @@ pub fn bake_wgsl_with_constants(
     }
     let parse_source = lower_f16_frexp_source(&parse_source);
     let parse_source = lower_hex_f16_literals_source(&parse_source);
+    let (parse_source, pointer_errors, alias_checked) =
+        lower_pointer_parameters_source(&parse_source);
+    if !pointer_errors.is_empty() {
+        return None;
+    }
     let mut module = wgsl::parse_str(&parse_source).ok()?;
     clamp_image_sample_bias(&mut module);
     cloak_const_indices(&mut module, &parse_source);
     convert_signed_gather_ids(&mut module);
+    widen_f16_frexp_exponents(&mut module);
+    defer_frexp_modf_private_initializers(&mut module);
     let mut bridge_errors = validate_storage_atomic_access(&module);
     bridge_errors.extend(validate_subgroup_gather_ids(&module));
     bridge_errors.extend(validate_stage_resource_restrictions(&module, &parse_source));
     bridge_errors.extend(validate_bool_order_comparisons(&module));
     bridge_errors.extend(validate_derivative_types(&module));
     bridge_errors.extend(validate_f16_const_overflow(&module));
-    bridge_errors.extend(validate_alias_analysis(&module));
+    if !alias_checked {
+        bridge_errors.extend(validate_alias_analysis(&module));
+    }
     if !bridge_errors.is_empty() {
         return None;
     }

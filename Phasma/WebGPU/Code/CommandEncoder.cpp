@@ -2090,8 +2090,14 @@ extern "C"
         copyInfo.srcBuffer = pe::GetVulkanBuffer(src->buffer->peBuffer);
         copyInfo.dstImage = pe::GetVulkanImage(dst->texture->image);
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-        copyInfo.regionCount = 1;
-        copyInfo.pRegions = &region;
+
+        // Depth and stencil blocks are one texel, so a layer is rows of bufferRowLength texels.
+        const uint64_t rowTexels = region.bufferRowLength ? region.bufferRowLength : copySize->width;
+        const uint64_t layerRows = region.bufferImageHeight ? region.bufferImageHeight : copySize->height;
+        const std::vector<vk::BufferImageCopy2> regions =
+            pwgpu::SplitDepthStencilLayers(region, rowTexels * footprint * layerRows);
+        copyInfo.regionCount = static_cast<uint32_t>(regions.size());
+        copyInfo.pRegions = regions.data();
 
         pwgpu::FlushPendingBarriers(enc->cmd);
         pe::GetVulkanCommandBuffer(enc->cmd).copyBufferToImage2(copyInfo);
@@ -2563,6 +2569,10 @@ extern "C"
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
         copyInfo.regionCount = 1;
         copyInfo.pRegions = &region;
+
+        const std::vector<vk::ImageCopy2> regions = pwgpu::SplitDepthStencilLayers(region);
+        copyInfo.regionCount = static_cast<uint32_t>(regions.size());
+        copyInfo.pRegions = regions.data();
 
         pwgpu::FlushPendingBarriers(enc->cmd);
         pe::GetVulkanCommandBuffer(enc->cmd).copyImage2(copyInfo);

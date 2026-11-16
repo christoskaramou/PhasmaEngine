@@ -595,4 +595,48 @@ namespace pwgpu
         }
     }
 
+    // Intel's UHD 770 Vulkan driver rotates the layers of a multi-layer depth or stencil transfer that starts
+    // above layer 0 (a three-layer copy or upload to layers 1..3 lands as 3, 1, 2), while one region per layer is
+    // correct on every driver. These give the regions to issue: the one passed in, or one per layer.
+    inline bool NeedsDepthStencilLayerSplit(const vk::ImageSubresourceLayers &layers)
+    {
+        const vk::ImageAspectFlags depthStencil = vk::ImageAspectFlagBits::eDepth | vk::ImageAspectFlagBits::eStencil;
+        return layers.layerCount > 1 && static_cast<bool>(layers.aspectMask & depthStencil);
+    }
+
+    inline std::vector<vk::ImageCopy2> SplitDepthStencilLayers(const vk::ImageCopy2 &region)
+    {
+        if (!NeedsDepthStencilLayerSplit(region.srcSubresource) || region.dstSubresource.layerCount <= 1)
+            return {region};
+
+        std::vector<vk::ImageCopy2> regions(region.srcSubresource.layerCount, region);
+        for (uint32_t layer = 0; layer < regions.size(); ++layer)
+        {
+            regions[layer].srcSubresource.baseArrayLayer += layer;
+            regions[layer].srcSubresource.layerCount = 1;
+            regions[layer].dstSubresource.baseArrayLayer += layer;
+            regions[layer].dstSubresource.layerCount = 1;
+        }
+
+        return regions;
+    }
+
+    // layerBytes is the distance in the buffer from one layer's data to the next.
+    inline std::vector<vk::BufferImageCopy2> SplitDepthStencilLayers(const vk::BufferImageCopy2 &region,
+                                                                     uint64_t layerBytes)
+    {
+        if (!NeedsDepthStencilLayerSplit(region.imageSubresource))
+            return {region};
+
+        std::vector<vk::BufferImageCopy2> regions(region.imageSubresource.layerCount, region);
+        for (uint32_t layer = 0; layer < regions.size(); ++layer)
+        {
+            regions[layer].bufferOffset += layer * layerBytes;
+            regions[layer].imageSubresource.baseArrayLayer += layer;
+            regions[layer].imageSubresource.layerCount = 1;
+        }
+
+        return regions;
+    }
+
 } // namespace pwgpu

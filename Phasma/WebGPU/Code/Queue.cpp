@@ -995,8 +995,10 @@ extern "C"
         copyInfo.srcBuffer = pe::GetVulkanBuffer(alloc.buffer);
         copyInfo.dstImage = pe::GetVulkanImage(image);
         copyInfo.dstImageLayout = vk::ImageLayout::eTransferDstOptimal;
-        copyInfo.regionCount = 1;
-        copyInfo.pRegions = &region;
+
+        const std::vector<vk::BufferImageCopy2> regions = pwgpu::SplitDepthStencilLayers(region, tightBytesPerImage);
+        copyInfo.regionCount = static_cast<uint32_t>(regions.size());
+        copyInfo.pRegions = regions.data();
 
         pwgpu::FlushPendingBarriers(cmd);
         pe::GetVulkanCommandBuffer(cmd).copyBufferToImage2(copyInfo);
