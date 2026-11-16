@@ -8374,6 +8374,123 @@ fn strip_workgroup_explicit_layout(words: &mut Vec<u32>) {
     *words = stripped;
 }
 
+fn wrap_sample_mask_in_array(words: &mut Vec<u32>) {
+    // Vulkan requires a BuiltIn SampleMask variable to be an array of 32-bit integers
+    // (VUID-SampleMask-SampleMask-04359). naga 29 declares a scalar, which Intel's shader
+    // compiler crashes on, so the variable becomes a one-element array and every load or
+    // store of it goes through element 0.
+    const OP_TYPE_INT: u32 = 21;
+    const OP_TYPE_ARRAY: u32 = 28;
+    const OP_TYPE_POINTER: u32 = 32;
+    const OP_CONSTANT: u32 = 43;
+    const OP_VARIABLE: u32 = 59;
+    const OP_LOAD: u32 = 61;
+    const OP_STORE: u32 = 62;
+    const OP_ACCESS_CHAIN: u32 = 65;
+    const OP_DECORATE: u32 = 71;
+    const DECORATION_BUILT_IN: u32 = 11;
+    const BUILT_IN_SAMPLE_MASK: u32 = 20;
+
+    let mut masks: HashSet<u32> = HashSet::new();
+    let mut int_types: HashSet<u32> = HashSet::new();
+    let mut pointers: HashMap<u32, (u32, u32)> = HashMap::new();
+    let mut i = 5usize; // SPIR-V header
+    while i < words.len() {
+        let word_count = (words[i] >> 16) as usize;
+        let opcode = words[i] & 0xffff;
+        if word_count == 0 || i + word_count > words.len() {
+            return;
+        }
+
+        match opcode {
+            OP_DECORATE
+                if word_count >= 4
+                    && words[i + 2] == DECORATION_BUILT_IN
+                    && words[i + 3] == BUILT_IN_SAMPLE_MASK =>
+            {
+                masks.insert(words[i + 1]);
+            }
+            OP_TYPE_INT if word_count >= 4 => {
+                int_types.insert(words[i + 1]);
+            }
+            OP_TYPE_POINTER if word_count >= 4 => {
+                pointers.insert(words[i + 1], (words[i + 2], words[i + 3]));
+            }
+            _ => {}
+        }
+        i += word_count;
+    }
+
+    if masks.is_empty() {
+        return;
+    }
+
+    let mut next_id = words[3];
+    // Variable id -> (pointer type of its element, id of the constant 0).
+    let mut elements: HashMap<u32, (u32, u32)> = HashMap::new();
+    let mut rewritten = Vec::with_capacity(words.len() + 32);
+    rewritten.extend_from_slice(&words[..5]);
+    let mut i = 5usize;
+    while i < words.len() {
+        let word_count = (words[i] >> 16) as usize;
+        let opcode = words[i] & 0xffff;
+        let mut instruction = words[i..i + word_count].to_vec();
+        match opcode {
+            OP_VARIABLE if word_count >= 4 && masks.contains(&words[i + 2]) => {
+                let scalar_pointer = words[i + 1];
+                let scalar = pointers
+                    .get(&scalar_pointer)
+                    .filter(|(_, pointee)| int_types.contains(pointee));
+                if let Some(&(class, scalar)) = scalar {
+                    let one = next_id;
+                    let zero = next_id + 1;
+                    let array = next_id + 2;
+                    let array_pointer = next_id + 3;
+                    next_id += 4;
+
+                    rewritten.extend_from_slice(&[(4 << 16) | OP_CONSTANT, scalar, one, 1]);
+                    rewritten.extend_from_slice(&[(4 << 16) | OP_CONSTANT, scalar, zero, 0]);
+                    rewritten.extend_from_slice(&[(4 << 16) | OP_TYPE_ARRAY, array, scalar, one]);
+                    rewritten.extend_from_slice(&[
+                        (4 << 16) | OP_TYPE_POINTER,
+                        array_pointer,
+                        class,
+                        array,
+                    ]);
+                    instruction[1] = array_pointer;
+                    elements.insert(words[i + 2], (scalar_pointer, zero));
+                }
+            }
+            OP_LOAD | OP_STORE => {
+                let pointer_operand = if opcode == OP_LOAD { 3 } else { 1 };
+                let element = instruction
+                    .get(pointer_operand)
+                    .and_then(|variable| elements.get(variable).map(|e| (*variable, *e)));
+                if let Some((variable, (scalar_pointer, zero))) = element {
+                    let access = next_id;
+                    next_id += 1;
+
+                    rewritten.extend_from_slice(&[
+                        (5 << 16) | OP_ACCESS_CHAIN,
+                        scalar_pointer,
+                        access,
+                        variable,
+                        zero,
+                    ]);
+                    instruction[pointer_operand] = access;
+                }
+            }
+            _ => {}
+        }
+
+        rewritten.extend_from_slice(&instruction);
+        i += word_count;
+    }
+
+    rewritten[3] = next_id;
+    *words = rewritten;
+}
+
 fn rewrite_signed_mod_to_remainder(words: &mut Vec<u32>) {
     // WGSL signed `%` is remainder-style: the result has the sign of the left
     // operand. Some Vulkan stacks miscompile OpSRem as unsigned modulo, so
@@ -15736,6 +15853,7 @@ pub fn compile_with_meta(source: &str) -> std::result::Result<WgslCompileResult,
         .map(|mut words| {
             strip_workgroup_explicit_layout(&mut words);
             rewrite_signed_mod_to_remainder(&mut words);
+            wrap_sample_mask_in_array(&mut words);
             restore_local_sizes(&mut words, &real_local_sizes);
             words
         });
@@ -16723,6 +16841,41 @@ fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
                 panic!("{text:?}");
             }
             assert!(compiled.ok().and_then(|r| r.spirv).is_some());
+        }
+    }
+
+    #[test]
+    fn sample_mask_variables_are_arrays() {
+        // Each word triple is OpDecorate id BuiltIn SampleMask; the decorated variable must point to an array.
+        let source = "struct O { @location(0) c: vec4f, @builtin(sample_mask) mask: u32, }
+            @fragment fn fs(@builtin(sample_mask) m: u32) -> O { var o: O; o.c = vec4f(1); o.mask = m; return o; }";
+        let words = compile_with_meta(source).ok().unwrap().spirv.unwrap();
+        let mut masks = Vec::new();
+        let mut arrays = HashSet::new();
+        let mut pointees = HashMap::new();
+        let mut variable_types = HashMap::new();
+        let mut i = 5usize;
+        while i < words.len() {
+            let word_count = (words[i] >> 16) as usize;
+            match words[i] & 0xffff {
+                71 if words[i + 2] == 11 && words[i + 3] == 20 => masks.push(words[i + 1]),
+                28 => {
+                    arrays.insert(words[i + 1]);
+                }
+                32 => {
+                    pointees.insert(words[i + 1], words[i + 3]);
+                }
+                59 => {
+                    variable_types.insert(words[i + 2], words[i + 1]);
+                }
+                _ => {}
+            }
+            i += word_count;
+        }
+
+        assert_eq!(masks.len(), 2);
+        for mask in masks {
+            assert!(arrays.contains(&pointees[&variable_types[&mask]]));
         }
     }
 
@@ -18033,6 +18186,7 @@ pub fn bake_wgsl_with_constants(
     .flatten()?;
     strip_workgroup_explicit_layout(&mut words);
     rewrite_signed_mod_to_remainder(&mut words);
+    wrap_sample_mask_in_array(&mut words);
     restore_local_sizes(&mut words, &real_local_sizes);
     Some(words)
 }

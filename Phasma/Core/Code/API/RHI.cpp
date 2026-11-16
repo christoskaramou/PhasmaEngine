@@ -1865,7 +1865,12 @@ namespace pe
         m_gpuLimits.maxVertexBuffers = limits.maxVertexInputBindings;
         m_gpuLimits.maxBufferSize = limits.maxStorageBufferRange;
         m_gpuLimits.maxVertexAttributes = limits.maxVertexInputAttributes;
-        m_gpuLimits.maxVertexBufferArrayStride = limits.maxVertexInputBindingStride;
+
+        // An attribute may sit anywhere inside the stride, so the stride is also bound by the largest
+        // attribute offset (the Intel UHD 770 reports a stride of 4095 and an offset of 2047).
+        m_gpuLimits.maxVertexBufferArrayStride =
+            std::min(limits.maxVertexInputBindingStride, limits.maxVertexInputAttributeOffset + 1);
+
         m_gpuLimits.maxInterStageShaderVariables = limits.maxVertexOutputComponents / 4;
         m_gpuLimits.maxColorAttachments = limits.maxColorAttachments;
         m_gpuLimits.maxComputeWorkgroupStorageSize = limits.maxComputeSharedMemorySize;

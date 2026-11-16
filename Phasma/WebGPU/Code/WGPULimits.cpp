@@ -42,7 +42,9 @@ namespace pwgpu
         out.maxVertexBuffers = std::min(limits.maxVertexBuffers, 8u);
         out.maxBufferSize = std::min<uint64_t>(limits.maxBufferSize, kMaxBufferBytes);
         out.maxVertexAttributes = std::min(limits.maxVertexAttributes, 30u);
-        out.maxVertexBufferArrayStride = limits.maxVertexBufferArrayStride;
+
+        // arrayStride must be a multiple of 4, so the limit is one too (the Intel UHD 770 reports 4095).
+        out.maxVertexBufferArrayStride = limits.maxVertexBufferArrayStride & ~3u;
         out.maxInterStageShaderVariables = std::min(limits.maxInterStageShaderVariables, 28u);
         out.maxColorAttachments = limits.maxColorAttachments;
 
