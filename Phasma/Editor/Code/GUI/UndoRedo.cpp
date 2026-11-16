@@ -1,4 +1,5 @@
 #include "UndoRedo.h"
+#include "Camera/Camera.h"
 #include "Scene/Scene.h"
 #include "rapidjson/document.h"
 
@@ -7,6 +8,43 @@ namespace pe
     // ---------------------------------------------------------------------------
     // DiffSnapshots — compare two JSON snapshots and return a one-line label
     // ---------------------------------------------------------------------------
+    static void StripCameraPose(rapidjson::Document &doc, const std::string &cameraNode)
+    {
+        if (!doc.IsObject() || !doc.HasMember("nodes") || !doc["nodes"].IsArray())
+            return;
+
+        for (auto &node : doc["nodes"].GetArray())
+        {
+            if (!node.HasMember("name") || cameraNode != node["name"].GetString())
+                continue;
+
+            node.RemoveMember("local_matrix");
+            if (node.HasMember("camera"))
+                node["camera"].RemoveMember("euler");
+        }
+    }
+
+    // Flying the viewport moves its camera's node every frame; that is navigation, not a scene edit.
+    static bool OnlyCameraMoved(const std::string &before, const std::string &after, const std::string &cameraNode)
+    {
+        rapidjson::Document bDoc, aDoc;
+        bDoc.Parse(before.c_str(), before.size());
+        aDoc.Parse(after.c_str(), after.size());
+        if (bDoc.HasParseError() || aDoc.HasParseError())
+            return false;
+
+        StripCameraPose(bDoc, cameraNode);
+        StripCameraPose(aDoc, cameraNode);
+        return bDoc == aDoc;
+    }
+
+    static std::string ActiveCameraNodeName(Scene &scene)
+    {
+        const Camera *camera = scene.GetCameras().empty() ? nullptr : scene.GetActiveCamera();
+        NodeId *node = camera ? camera->GetNodeId() : nullptr;
+        return node ? scene.GetNodeName(node) : std::string{};
+    }
+
     static std::string DiffSnapshots(const std::string &before, const std::string &after)
     {
         rapidjson::Document bDoc, aDoc;
@@ -226,7 +264,8 @@ namespace pe
 
         std::string current = scene.TakeSnapshot();
 
-        if (m_hasIdleSnapshot && m_settleFrames == 0 && current != m_idleSnapshot)
+        const bool changed = m_hasIdleSnapshot && m_settleFrames == 0 && current != m_idleSnapshot;
+        if (changed && !OnlyCameraMoved(m_idleSnapshot, current, ActiveCameraNodeName(scene)))
         {
             // The edit that just finished, whatever made it (gizmo, panel, shortcut or an MCP tool).
             std::string action = DiffSnapshots(m_idleSnapshot, current);
