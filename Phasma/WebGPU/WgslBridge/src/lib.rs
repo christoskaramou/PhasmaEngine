@@ -7657,8 +7657,8 @@ fn identifier_occurrence_count(source: &str, name: &str) -> usize {
 }
 
 fn is_explicit_layout_decoration(decoration: u32) -> bool {
-    // SPIR-V Decoration: RowMajor=4, ColMajor=5, ArrayStride=6, MatrixStride=7.
-    matches!(decoration, 4 | 5 | 6 | 7)
+    // SPIR-V Decoration: RowMajor=4, ColMajor=5, ArrayStride=6, MatrixStride=7, Offset=35.
+    matches!(decoration, 4 | 5 | 6 | 7 | 35)
 }
 
 fn collect_type_closure(id: u32, type_children: &HashMap<u32, Vec<u32>>, out: &mut HashSet<u32>) {
@@ -8250,8 +8250,10 @@ fn strip_workgroup_explicit_layout(words: &mut Vec<u32>) {
     }
 
     // Vulkan forbids explicit layout decorations on Workgroup storage types.
-    // Naga emits ArrayStride for WGSL workgroup arrays; remove those decorations
-    // only from types reachable from OpVariable(..., Workgroup) and from no buffer.
+    // Naga emits ArrayStride for WGSL workgroup arrays and Offset for struct members; remove
+    // those decorations only from types reachable from OpVariable(..., Workgroup) and from no
+    // buffer. Stripping the strides but keeping the offsets made Intel's UHD 770 driver overlap
+    // the members of a workgroup struct.
     // ponytail: a type a buffer shares (`wg = storage_array;`) keeps its layout,
     // since stripping it breaks the buffer side; cloning the type chain and copying
     // with OpCopyLogical would satisfy both.
@@ -16876,6 +16878,23 @@ fn load(t: texture_external, c: vec2u) -> vec4f { return textureLoad(t, c); }
         assert_eq!(masks.len(), 2);
         for mask in masks {
             assert!(arrays.contains(&pointees[&variable_types[&mask]]));
+        }
+    }
+
+    #[test]
+    fn workgroup_structs_have_no_explicit_layout() {
+        // No buffer in the module, so no OpMemberDecorate ... Offset (35) may survive.
+        let source = "struct S { a: array<u32, 10>, data: array<i32, 3>, b: array<u32, 10> }
+            var<workgroup> s: S;
+            @compute @workgroup_size(1) fn main() { s.data[2] = 7; s.b[0] = s.a[1]; }";
+        let words = compile_with_meta(source).ok().unwrap().spirv.unwrap();
+        let mut i = 5usize;
+        while i < words.len() {
+            let word_count = (words[i] >> 16) as usize;
+            let opcode = words[i] & 0xffff;
+            assert!(!(opcode == 72 && words[i + 3] == 35), "member Offset left");
+            assert!(!(opcode == 71 && words[i + 2] == 6), "ArrayStride left");
+            i += word_count;
         }
     }
 
