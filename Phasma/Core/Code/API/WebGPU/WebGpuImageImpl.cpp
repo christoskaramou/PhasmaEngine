@@ -424,6 +424,13 @@ namespace pe
         viewDesc.arrayLayerCount = is3D ? 1 : desc.layerCount;
         viewDesc.aspect = ToWgpuAspect(desc.aspectMask);
         viewDesc.usage = WGPUTextureUsage_None; // inherit the texture's usage
+
+        // A view in the texture's sRGB twin (Image::GetSrgbSRV) cannot inherit StorageBinding: no sRGB format has it.
+        const bool reinterprets = viewDesc.format != WGPUTextureFormat_Undefined &&
+                                  viewDesc.format != wgpuTextureGetFormat(texture);
+        if (reinterprets)
+            viewDesc.usage = wgpuTextureGetUsage(texture) & ~WGPUTextureUsage_StorageBinding;
+
         m_view = wgpuTextureCreateView(texture, &viewDesc);
     }
 } // namespace pe
