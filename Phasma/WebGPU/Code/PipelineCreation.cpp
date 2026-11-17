@@ -1181,6 +1181,32 @@ namespace pwgpu
                 }
             }
 
+            // Intel's UHD 770 driver ignores alpha-to-coverage when target 0 writes no channel, so occlusion
+            // queries count every sample. Blending 0 * source + 1 * destination with all channels writable
+            // stores the same colors and keeps the coverage (WebGPU requires target 0 to be blendable here).
+            // Intel only: NVIDIA's driver does the opposite and drops the coverage for that blend.
+            const uint32_t kIntelVendorId = 0x8086;
+            const bool maskedAlphaToCoverage =
+                desc.device->adapterVendorID == kIntelVendorId &&
+                descriptor.multisample.alphaToCoverageEnabled &&
+                !blendAttachments.empty() &&
+                !blendAttachments[0].colorWriteMask;
+            if (maskedAlphaToCoverage)
+            {
+                vk::PipelineColorBlendAttachmentState &keep = blendAttachments[0];
+                keep.blendEnable = VK_TRUE;
+                keep.colorBlendOp = vk::BlendOp::eAdd;
+                keep.srcColorBlendFactor = vk::BlendFactor::eZero;
+                keep.dstColorBlendFactor = vk::BlendFactor::eOne;
+                keep.alphaBlendOp = vk::BlendOp::eAdd;
+                keep.srcAlphaBlendFactor = vk::BlendFactor::eZero;
+                keep.dstAlphaBlendFactor = vk::BlendFactor::eOne;
+                keep.colorWriteMask = vk::ColorComponentFlagBits::eR |
+                                      vk::ColorComponentFlagBits::eG |
+                                      vk::ColorComponentFlagBits::eB |
+                                      vk::ColorComponentFlagBits::eA;
+            }
+
             vk::PipelineColorBlendStateCreateInfo colorBlendState{};
             colorBlendState.logicOpEnable = VK_FALSE;
             colorBlendState.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
