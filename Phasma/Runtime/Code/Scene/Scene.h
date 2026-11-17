@@ -530,6 +530,8 @@ namespace pe
         // Web profile: one indirect draw per shadow caster slot ShadowCullCS wrote for the current cascade, the
         // Transmission casters for the tint maps or every other standard mesh for the depth maps.
         void DrawWebShadowCasters(CommandBuffer *cmd, bool tints);
+        // Web profile: one draw per live opaque voxel section, read at its slot in `slotDraws` (a cull's output).
+        void DrawWebVoxels(CommandBuffer *cmd, Buffer *slotDraws);
         Buffer *GetCullingCountersBuffer(uint32_t frame) const { return m_cullingCountersBuffers[frame]; }
         Buffer *GetIndirectOpaqueSS(uint32_t frame) const { return m_indirectOpaqueSS[frame]; }
         Buffer *GetIndirectAlphaCutSS(uint32_t frame) const { return m_indirectAlphaCutSS[frame]; }

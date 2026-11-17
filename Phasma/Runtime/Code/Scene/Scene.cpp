@@ -1852,12 +1852,12 @@ namespace pe
         for (std::vector<WebDraw> &draws : m_webDraws)
             draws.clear();
 
-        // ponytail: voxels and terrain have their own pipelines and cull buckets, which the web profile does not
-        // draw yet; per-mesh draws for them are the upgrade.
+        // ponytail: terrain has its own pipeline and cull bucket, which the web profile does not draw yet; per-mesh
+        // draws for it, like DrawWebVoxels, are the upgrade.
         static bool warned = false;
-        if (!warned && (HasArenaVoxels() || HasTerrain()))
-            PE_WARN("[Scene] the web profile does not draw voxels or terrain yet");
-        warned = warned || HasArenaVoxels() || HasTerrain();
+        if (!warned && HasTerrain())
+            PE_WARN("[Scene] the web profile does not draw terrain yet");
+        warned = warned || HasTerrain();
 
         const vec3 camera = m_cameras.empty() ? vec3(0.f) : m_cameras[0]->GetPosition();
         for (uint32_t i = 0; i < GetNodeCount(); i++)
@@ -1929,6 +1929,21 @@ namespace pe
         {
             for (const WebDraw &draw : m_webDraws[bucket])
                 cmd->DrawIndexedIndirect(draws, static_cast<size_t>(draw.slot) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE, 1);
+        }
+    }
+
+    void Scene::DrawWebVoxels(CommandBuffer *cmd, Buffer *slotDraws)
+    {
+        // The cull wrote every slot's draw, voxel sections included; a culled section's draw has zero instances.
+        // Water sections are left to the transparent pass.
+        // ponytail: one draw call per section; merge neighbouring slots into multi-draws if a world's count hurts.
+        for (size_t i = 0; i < m_arenaSlots.size(); ++i)
+        {
+            const ArenaSlot &section = m_arenaSlots[i];
+            if (section.indexCount == 0 || section.transparent)
+                continue;
+
+            cmd->DrawIndexedIndirect(slotDraws, (m_arenaSlotBase + i) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE, 1);
         }
     }
 

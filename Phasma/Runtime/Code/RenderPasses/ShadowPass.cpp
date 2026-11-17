@@ -614,10 +614,13 @@ namespace pe
             keepAll.fill(vec4(0.f, 0.f, 0.f, 1.f));
 
             const uint32_t arenaBase = m_scene->GetArenaSlotBase();
-            const bool web = SceneUsesWebProfile(); // per-slot caster draws (WebGPU RHI spec decision 9), no voxels yet
-            const bool hasVoxels = !web && m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
-                                   m_scene->GetVoxelIndexBuffer() && m_voxelPassInfo &&
-                                   m_voxelPassInfo->pVertShader;
+            const bool web = SceneUsesWebProfile(); // per-slot caster draws (WebGPU RHI spec decision 9)
+            const bool voxelsReady = m_scene->HasArenaVoxels() && m_scene->GetVoxelVertexBuffer() &&
+                                     m_scene->GetVoxelIndexBuffer() && m_voxelPassInfo &&
+                                     m_voxelPassInfo->pVertShader;
+            // The web cull writes every slot, voxel sections included, into the regular list (Scene::DrawWebVoxels).
+            const bool hasVoxels = !web && voxelsReady;
+            const bool webVoxels = web && voxelsReady;
             const uint32_t meshCount = m_scene->GetMeshCount();
             const uint32_t regularCount = hasVoxels ? arenaBase : meshCount;
             const uint32_t voxelCount = hasVoxels ? meshCount - arenaBase : 0u;
@@ -664,7 +667,7 @@ namespace pe
                     else if (regularCount > 0)
                         cmd->DrawIndexedIndirectCount(regularIndirect, 0, counters, 0, regularCount);
 
-                    if (hasVoxels && voxelCount > 0)
+                    if (webVoxels || (hasVoxels && voxelCount > 0))
                     {
                         cmd->BindPipeline(*m_voxelPassInfo);
                         cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
@@ -672,7 +675,11 @@ namespace pe
                         cmd->PushConstants();
                         cmd->BindIndexBuffer(m_scene->GetVoxelIndexBuffer(), 0, PE_INDEX_TYPE_UINT16);
                         cmd->BindVertexBuffer(m_scene->GetVoxelVertexBuffer(), 0);
-                        cmd->DrawIndexedIndirectCount(voxelIndirect, 0, counters, sizeof(uint32_t), voxelCount);
+                        if (webVoxels)
+                            m_scene->DrawWebVoxels(cmd, regularIndirect);
+                        else
+                            cmd->DrawIndexedIndirectCount(voxelIndirect, 0, counters, sizeof(uint32_t), voxelCount);
+
                         cmd->BindPipeline(passInfo);
                         cmd->SetDepthBias(gSettings.depth_bias[0], gSettings.depth_bias[1], gSettings.depth_bias[2]);
                     }

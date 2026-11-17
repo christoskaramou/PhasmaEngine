@@ -469,11 +469,11 @@ namespace pe
             Buffer *voxelIndirect = m_scene->GetIndirectVoxels(frame);
             const bool hasVoxelIndirect = voxelIndirect != nullptr;
             const bool hasVoxelGeometry = m_scene->GetVoxelVertexBuffer() && m_scene->GetVoxelIndexBuffer();
-            // The web profile does not draw voxels or terrain yet (Scene::BuildWebDraws): their buckets are drawn
-            // with an indirect count, which WebGPU lacks.
+            // WebGPU has no indirect count: the web profile draws voxels per section (Scene::DrawWebVoxels) and does
+            // not draw terrain yet.
             const bool countedDraws = !SceneUsesWebProfile();
-            const bool voxelDrawReady = countedDraws && hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag &&
-                                        hasVoxelIndirect && hasVoxelGeometry;
+            const bool voxelDrawReady = hasArenaVoxels && hasVoxelAtlas && hasVoxelFrag && hasVoxelIndirect &&
+                                        hasVoxelGeometry;
 
             cmd->BeginPass(static_cast<uint32_t>(m_attachments.size()), m_attachments.data(), "GbufferOpaquePass");
             cmd->SetViewport(0.f, 0.f, m_depthStencilRT->GetWidth_f(), m_depthStencilRT->GetHeight_f());
@@ -517,11 +517,18 @@ namespace pe
                 cmd->SetConstants(pushConstants);
                 cmd->PushConstants();
 
-                cmd->DrawIndexedIndirectCount(voxelIndirect,
-                                              0,
-                                              m_scene->GetCullingCountersBuffer(frame),
-                                              7 * sizeof(uint32_t),
-                                              mesh);
+                if (countedDraws)
+                {
+                    cmd->DrawIndexedIndirectCount(voxelIndirect,
+                                                  0,
+                                                  m_scene->GetCullingCountersBuffer(frame),
+                                                  7 * sizeof(uint32_t),
+                                                  mesh);
+                }
+                else
+                {
+                    m_scene->DrawWebVoxels(cmd, m_scene->GetIndirectOpaqueSS(frame));
+                }
             }
 
             // Terrain: standard geometry drawn with the dedicated triplanar-splat pipeline from its
