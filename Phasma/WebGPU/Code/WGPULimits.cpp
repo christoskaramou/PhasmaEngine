@@ -28,7 +28,12 @@ namespace pwgpu
         out.maxStorageBuffersPerShaderStage = std::min(limits.maxStorageBuffersPerShaderStage, 16u);
         out.maxStorageTexturesPerShaderStage = std::min(limits.maxStorageTexturesPerShaderStage, 8u);
         out.maxUniformBuffersPerShaderStage = std::min(limits.maxUniformBuffersPerShaderStage, 12u);
-        out.maxUniformBufferBindingSize = limits.maxUniformBufferBindingSize;
+
+        // pe::Buffer rounds a uniform buffer up to the backend's uniform alignment and rejects one above the
+        // backend maximum, so the limit is rounded down to that alignment: the Intel UHD 770 reports
+        // 134,217,724 with an alignment of 64, and a buffer of exactly that size failed to allocate.
+        const uint64_t uniformAlignment = std::max(limits.minUniformBufferOffsetAlignment, 1u);
+        out.maxUniformBufferBindingSize = limits.maxUniformBufferBindingSize & ~(uniformAlignment - 1);
 
         // Adapter capability guarantees: maxStorageBufferBindingSize is a multiple of 4 and both offset
         // alignments are at least 32 bytes (Vulkan reports 2^32-1 and 16 on NVIDIA).
