@@ -46,7 +46,8 @@ namespace pe
         WGPULimits m_limits = WGPU_LIMITS_INIT;
         bool m_float32Filterable = false;
         bool m_textureCompressionBC = false;
-        uint32_t m_errorCount = 0; // uncaptured WebGPU errors, logged as they arrive
+        bool m_timestampQuery = false; // WebGpuPassTimer
+        uint32_t m_errorCount = 0;     // uncaptured WebGPU errors, logged as they arrive
 
         struct DummyTexture
         {

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "API/CommandBuffer_Internal.h"
+#include "API/WebGPU/WebGpuPassTimer.h"
 
 #include <webgpu/webgpu.h>
 
@@ -37,6 +38,7 @@ namespace pe
         // its GPU memory goes when they finish; a release alone leaves it to the browser's garbage collector.
         void DestroyAfterSubmit(WGPUBuffer buffer) { m_destroyAfterSubmit.push_back(buffer); }
         void DestroyTransientBuffers();
+        void ReadBackPassTimes() { m_passTimer.ReadBack(); } // after the submit
 
         void Begin() override;
         void End() override;
@@ -133,6 +135,8 @@ namespace pe
         // A compute pass opens at the first Dispatch and closes at the next command that is not one (decision 5).
         WGPURenderPassEncoder m_renderPass = nullptr;
         WGPUComputePassEncoder m_computePass = nullptr;
+        WebGpuPassTimer m_passTimer;
+        std::string m_region; // the last debug region opened outside a pass: names the compute passes it holds
         uint32_t m_attachmentWidth = 0;
         uint32_t m_attachmentHeight = 0;
         std::vector<WebGpuBufferImpl *> m_referenced;

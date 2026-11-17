@@ -101,8 +101,8 @@ namespace pe
         static uint32_t GetNumCaptures() { return 0; }
         static bool IsCaptureApiAvailable() { return false; }
         static void CollectGpuTrace(CommandBuffer *cmd);
-        static void SetGpuTimingEnabled(bool) {}
-        static bool IsGpuTimingEnabled() { return false; }
+        static void SetGpuTimingEnabled(bool enabled); // the browser backend times passes (WebGpuPassTimer)
+        static bool IsGpuTimingEnabled();
 
     private:
         friend class CommandBuffer;

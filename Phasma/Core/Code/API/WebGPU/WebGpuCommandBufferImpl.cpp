@@ -100,6 +100,7 @@ namespace pe
 
         // Recorded again or reset without a submit: nothing will read them.
         DestroyTransientBuffers();
+        m_passTimer.Reset();
 
         m_renderPass = nullptr;
         m_computePass = nullptr;
@@ -133,6 +134,7 @@ namespace pe
         for (; m_debugDepth > 0; --m_debugDepth)
             wgpuCommandEncoderPopDebugGroup(encoder);
 
+        m_passTimer.Resolve(encoder);
         m_commands = wgpuCommandEncoderFinish(encoder, nullptr);
         wgpuCommandEncoderRelease(m_encoder);
         m_encoder = nullptr;
@@ -294,6 +296,7 @@ namespace pe
 
         wgpuCommandEncoderPushDebugGroup(Encoder("BeginDebugRegion"), View(name));
         m_debugDepth++;
+        m_region = name;
     }
 
     void WebGpuCommandBufferImpl::InsertDebugLabel(const std::string &name)
@@ -423,6 +426,7 @@ namespace pe
         desc.colorAttachmentCount = colors.size();
         desc.colorAttachments = colors.data();
         desc.depthStencilAttachment = hasDepth ? &depth : nullptr;
+        desc.timestampWrites = m_passTimer.Add(name);
         m_renderPass = wgpuCommandEncoderBeginRenderPass(encoder, &desc);
         ResetPassState();
     }
@@ -653,7 +657,10 @@ namespace pe
         WebGpuPipelineImpl *pipeline = BoundPipeline(true, what);
         if (!m_computePass)
         {
-            m_computePass = wgpuCommandEncoderBeginComputePass(m_encoder, nullptr);
+            WGPUComputePassDescriptor desc = WGPU_COMPUTE_PASS_DESCRIPTOR_INIT;
+            desc.label = View(m_region);
+            desc.timestampWrites = m_passTimer.Add(m_region);
+            m_computePass = wgpuCommandEncoderBeginComputePass(m_encoder, &desc);
             ResetPassState();
         }
 

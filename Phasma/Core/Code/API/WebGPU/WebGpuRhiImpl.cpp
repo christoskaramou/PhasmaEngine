@@ -80,6 +80,10 @@ namespace pe
         if (m_textureCompressionBC)
             features.push_back(WGPUFeatureName_TextureCompressionBC);
 
+        m_timestampQuery = wgpuAdapterHasFeature(m_adapter, WGPUFeatureName_TimestampQuery);
+        if (m_timestampQuery)
+            features.push_back(WGPUFeatureName_TimestampQuery);
+
         // The defaults are below what the always-on passes need (G-buffer bytes per sample, sampled textures and
         // storage buffers per stage; P0 census), so request everything the adapter offers.
         WGPULimits adapterLimits = WGPU_LIMITS_INIT;

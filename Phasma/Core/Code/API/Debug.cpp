@@ -790,7 +790,6 @@ namespace pe
 #endif
     }
 
-#if PE_DEBUG_MODE && !defined(PE_WEB)
     void Debug::SetGpuTimingEnabled(bool enabled)
     {
         g_gpuTimingEnabled.store(enabled, std::memory_order_relaxed);
@@ -800,5 +799,4 @@ namespace pe
     {
         return g_gpuTimingEnabled.load(std::memory_order_relaxed);
     }
-#endif
 } // namespace pe

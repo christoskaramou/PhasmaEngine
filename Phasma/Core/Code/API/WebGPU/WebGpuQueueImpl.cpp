@@ -42,7 +42,10 @@ namespace pe
             wgpuQueueSubmit(WebGpuRhiImpl::Get()->m_queue, commands.size(), commands.data());
 
         for (WebGpuCommandBufferImpl *impl : submitted)
+        {
             impl->DestroyTransientBuffers();
+            impl->ReadBackPassTimes();
+        }
 
         for (WGPUCommandBuffer list : commands)
             wgpuCommandBufferRelease(list);

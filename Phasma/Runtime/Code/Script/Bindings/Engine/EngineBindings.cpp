@@ -1,10 +1,39 @@
 #include "Script/ScriptSystem.h"
 #include "Script/ScriptRuntimeHooks.h"
 #include "Script/Bindings/Settings/SettingsBindings.h"
+#include "API/Debug.h"
 #include "API/RHI.h"
 
 namespace pe
 {
+    namespace
+    {
+        // GPU time per pass name, summed from the backends' AfterCommandWait samples until Lua reads it.
+        struct GpuPassTotal
+        {
+            double ms = 0.0;
+            uint32_t runs = 0;
+        };
+
+        std::mutex s_gpuPassMutex;
+        std::map<std::string, GpuPassTotal> s_gpuPassTotals;
+
+        void CollectGpuPassTimes(const std::any &data)
+        {
+            const auto *samples = std::any_cast<std::vector<GpuTimerSample>>(&data);
+            if (!samples)
+                return;
+
+            std::lock_guard lock(s_gpuPassMutex);
+            for (const GpuTimerSample &sample : *samples)
+            {
+                GpuPassTotal &total = s_gpuPassTotals[sample.name];
+                total.ms += sample.timeMs;
+                total.runs++;
+            }
+        }
+    } // namespace
+
     static struct RuntimeEngineBindings
     {
         RuntimeEngineBindings()
@@ -28,6 +57,35 @@ namespace pe
                 });
                 engine.set_function("get_background_fps_cap", []() -> bool {
                     return FrameTimer::Instance().GetBackgroundCap();
+                });
+
+                // GPU time per pass: desktop timers, or timestamp queries in the browser (needs timestamp-query).
+                engine.set_function("set_gpu_timing", [](bool enabled) {
+                    static bool registered = false;
+                    if (enabled && !registered)
+                    {
+                        EventSystem::RegisterCallback(EventType::AfterCommandWait, CollectGpuPassTimes);
+                        registered = true;
+                    }
+
+                    Debug::SetGpuTimingEnabled(enabled);
+                });
+
+                // {name = {ms, runs}}: each pass's mean GPU time over its runs since the previous call.
+                engine.set_function("get_gpu_timings", [](sol::this_state ts) -> sol::table {
+                    sol::state_view lua(ts);
+                    sol::table passes = lua.create_table();
+                    std::lock_guard lock(s_gpuPassMutex);
+                    for (const auto &[name, total] : s_gpuPassTotals)
+                    {
+                        sol::table pass = lua.create_table();
+                        pass["ms"] = total.ms / total.runs;
+                        pass["runs"] = total.runs;
+                        passes[name] = pass;
+                    }
+
+                    s_gpuPassTotals.clear();
+                    return passes;
                 });
 
                 engine.set_function("compile_shaders", []() {
