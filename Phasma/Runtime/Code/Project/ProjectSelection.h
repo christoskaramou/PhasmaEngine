@@ -11,6 +11,7 @@ namespace pe
     inline constexpr const char *kAudioMutedSettingsKey = "audio_muted";
     inline constexpr const char *kBakeGiSettingsKey = "bake_gi";
     inline constexpr const char *kBakeWebShadersSettingsKey = "bake_web_shaders";
+    inline constexpr const char *kBakeWebEditorShadersSettingsKey = "bake_web_editor_shaders";
 
     enum class ProjectSelectionSource : uint8_t
     {
@@ -44,6 +45,9 @@ namespace pe
     [[nodiscard]] bool ReadRuntimeBakeGi();
     // "bake_web_shaders": true (tools/bake_web_shaders.py) initialises every render pass once, enabled or not.
     [[nodiscard]] bool ReadRuntimeBakeWebShaders();
+    // "bake_web_editor_shaders": true (bake_web_shaders.py --editor) also compiles the variants only the web editor
+    // can reach, such as LightingPS for every shadow size and cascade count the web profile allows.
+    [[nodiscard]] bool ReadRuntimeBakeWebEditorShaders();
     [[nodiscard]] bool WriteProjectSelection(const std::filesystem::path &settingsPath,
                                              const ProjectConfig &project,
                                              std::string *error = nullptr);

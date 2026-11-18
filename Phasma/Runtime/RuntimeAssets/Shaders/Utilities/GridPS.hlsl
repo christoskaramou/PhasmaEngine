@@ -46,8 +46,11 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     float2 dy = ddy(position);
     float2 footprint = max(sqrt(dx * dx + dy * dy), 1e-6);
 
-    // Derivatives must be evaluated before any depth/plane-dependent discard.
-    if (t < 0.0 || abs(direction.y) < 1e-6 || !all(isfinite(position)) || !all(isfinite(footprint)))
+    // Derivatives must be evaluated before any depth/plane-dependent discard. A bound test stands in for isfinite,
+    // which WGSL lacks: NaN fails the ordered comparison too.
+    const bool missesPlane = t < 0.0 || abs(direction.y) < 1e-6;
+    const bool finite = all(abs(position) < 1e30) && all(footprint < 1e30);
+    if (missesPlane || !finite)
         discard;
 
     uint depthWidth, depthHeight;

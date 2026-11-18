@@ -2,7 +2,9 @@
 
 #include "API/RHITypes.h"
 
+#include <array>
 #include <cstddef>
+#include <cstdint>
 
 namespace pe
 {
@@ -29,8 +31,14 @@ namespace pe
     // The device has no bindless textures (WebGPU, or Vulkan under PHASMA_CAPS_PROFILE=webgpu): the web profile's
     // shader variants and per-mesh draws (WebGPU RHI spec decision 6).
     bool SceneUsesWebProfile();
-    // Under the web profile, turns off the settings the web cannot run and caps num_cascades; called where they change.
+    // Under the web profile, turns off the settings the web cannot run, caps num_cascades and snaps the shadow settings
+    // to the lists below; called where they change.
     void ApplyWebProfileSettings();
+
+    // The shadow map sizes and cascade counts the web profile allows. Each pair is a LightingPS variant, and the web
+    // editor bake (tools/bake_web_shaders.py --editor) compiles all of them because the browser cannot.
+    inline constexpr std::array<uint32_t, 3> kWebShadowMapSizes{1024, 2048, 4096};
+    inline constexpr uint32_t kWebMaxShadowCascades = 4;
     // An sRGB-authored colour as the frame uses it: decoded in a linear-colour scene (values above 1 keep their
     // brightness), unchanged otherwise.
     vec3 SceneColor(const vec3 &srgb);

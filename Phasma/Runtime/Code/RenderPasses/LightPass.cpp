@@ -19,6 +19,7 @@
 #include "Base/Process.h"
 #include "Camera/Camera.h"
 #include "ForwardPlusLightCullingPass.h"
+#include "Project/ProjectSelection.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -438,13 +439,39 @@ namespace pe
         }
 
         // LightingPS's compile-time configuration, shared by the opaque lighting pass and material pass 2.
-        std::vector<Define> LightingDefines()
+        std::vector<Define> LightingDefines(uint32_t cascades, uint32_t shadowMapSize)
         {
-            return {Define{"SHADOWMAP_CASCADES", std::to_string(Settings::Get<SceneSettings>().num_cascades)},
-                    Define{"SHADOWMAP_SIZE", std::to_string((float)Settings::Get<SceneSettings>().shadow_map_size)},
-                    Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)Settings::Get<SceneSettings>().shadow_map_size)},
+            return {Define{"SHADOWMAP_CASCADES", std::to_string(cascades)},
+                    Define{"SHADOWMAP_SIZE", std::to_string((float)shadowMapSize)},
+                    Define{"SHADOWMAP_TEXEL_SIZE", std::to_string(1.0f / (float)shadowMapSize)},
                     Define{"FORWARD_PLUS_TILE_SIZE", std::to_string(ForwardPlusLightCullingPass::TileSize)},
                     Define{"FORWARD_PLUS_MAX_LIGHTS_PER_TILE", std::to_string(ForwardPlusLightCullingPass::MaxLightsPerTile)}};
+        }
+
+        std::vector<Define> LightingDefines()
+        {
+            const SceneSettings &settings = Settings::Get<SceneSettings>();
+            return LightingDefines(settings.num_cascades, settings.shadow_map_size);
+        }
+
+        // The web editor can switch to any shadow size and cascade count the web profile allows, and the browser
+        // cannot compile LightingPS for a new pair, so the editor bake compiles every pair once.
+        void BakeWebEditorLightingVariants()
+        {
+            if (!ReadRuntimeBakeWebEditorShaders())
+                return;
+
+            for (uint32_t cascades = 1; cascades <= kWebMaxShadowCascades; cascades++)
+            {
+                for (uint32_t size : kWebShadowMapSizes)
+                {
+                    Shader *shader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Gbuffer/LightingPS.hlsl",
+                                                     .entryPoint = "mainPS",
+                                                     .stage = PE_SHADER_STAGE_FRAGMENT,
+                                                     .defines = LightingDefines(cascades, size)});
+                    Shader::Destroy(shader);
+                }
+            }
         }
 
         // PushConstants_Lighting by dword index (Structures.hlsl), shared by the opaque lighting pass and pass 2.
@@ -527,6 +554,9 @@ namespace pe
 
     void LightOpaquePass::UpdatePassInfo()
     {
+        static std::once_flag webEditorBake;
+        std::call_once(webEditorBake, BakeWebEditorLightingVariants);
+
         const std::vector<Define> definesFrag = LightingDefines();
 
         // Opaque light pass

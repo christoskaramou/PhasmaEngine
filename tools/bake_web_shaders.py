@@ -13,8 +13,13 @@ With --gi (needs --project and global_illumination on in the scene), a first run
 beside the project's startup scene: the static probes the browser's lighting reads. Moving lights or geometry afterwards
 needs a new bake.
 
+With --editor (needs --project), the run also compiles the variants only the web editor can reach: LightingPS for every
+shadow map size and cascade count the web profile allows (kWebShadowMapSizes, SceneRenderTargets.h), about 0.5 MB each,
+and the grid and AABB overlays (IsWebEditorPass, SceneRenderGraph.cpp). Give it its own --out, so game exports that
+share a cache do not ship them.
+
 Usage: python tools/bake_web_shaders.py [--build build-p1-desktop/Release] [--project <dir>] [--seconds 40]
-                                        [--out build-wasm-player/web-shader-cache] [--gi] [--gi-seconds 240]
+                                        [--out build-wasm-player/web-shader-cache] [--gi] [--gi-seconds 240] [--editor]
 Exit 0 when every compiled module converts and any requested probe bake is written, 1 otherwise (the converted ones are
 still copied).
 """
@@ -78,7 +83,7 @@ def bake_probes(player, project, seconds):
     return False
 
 
-def run_player(player, project, seconds):
+def run_player(player, project, seconds, editor=False):
     if project:
         # A copy without Assets/Save, which the exporter leaves out too: the developer's saved game settings (a
         # bloom or shadow toggle) would hide passes whose shaders the browser, starting from defaults, then misses.
@@ -86,7 +91,7 @@ def run_player(player, project, seconds):
         saves = Path(project).resolve() / "Assets"
         shutil.copytree(project, clean, ignore=lambda folder, names: ["Save"] if Path(folder).resolve() == saves else [])
         settings = {"project_manifest": str(clean / "phasma_project.json"), "audio_muted": True,
-                    "bake_web_shaders": True}
+                    "bake_web_shaders": True, "bake_web_editor_shaders": editor}
         (player / "phasma_settings.json").write_text(json.dumps(settings), encoding="utf-8")
 
     env = dict(os.environ, PHASMA_CAPS_PROFILE="webgpu", PHASMA_SPIRV_TARGET="1.2")
@@ -122,9 +127,13 @@ def main():
     parser.add_argument("--out", default=str(ROOT / "build-wasm-player" / "web-shader-cache"))
     parser.add_argument("--gi", action="store_true", help="bake static GI probes for the project's startup scene")
     parser.add_argument("--gi-seconds", type=int, default=240)
+    parser.add_argument("--editor", action="store_true",
+                        help="also bake the variants only the web editor can reach (every allowed shadow size and cascade count)")
     args = parser.parse_args()
     if args.gi and not args.project:
         sys.exit("--gi needs --project: the bake is saved beside the project's scene")
+    if args.editor and not args.project:
+        sys.exit("--editor needs --project: the bake flags go in the settings written for the project")
 
     build = Path(args.build)
     if not (build / "PhasmaPlayer.exe").exists():
@@ -134,7 +143,7 @@ def main():
     try:
         probes_baked = not args.gi or bake_probes(private_player(build, work, "gi"), args.project, args.gi_seconds)
         player = private_player(build, work)
-        if not run_player(player, args.project, args.seconds):
+        if not run_player(player, args.project, args.seconds, args.editor):
             Path(args.out).mkdir(parents=True, exist_ok=True)
             if (player / "PhasmaEngine.log").exists():
                 shutil.copy2(player / "PhasmaEngine.log", Path(args.out) / "bake.log")

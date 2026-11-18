@@ -138,13 +138,15 @@ namespace pe
                 static_cast<T *>(component)->SetScene(&scene);
         }
 
-        // The screen-space passes a game switches with render settings, all of which the web profile supports.
+        // The passes a game switches with render settings (screen-space effects and shadows), all of which the web
+        // profile supports.
         // ponytail: an explicit list; passes outside it (culling, ray tracing, OpenPBR) have variants the web
         // profile cannot compile. Add a pass here when a browser game misses its shader.
         bool IsWebSettingsPass(SceneRenderGraphPassId id)
         {
             switch (id)
             {
+            case SceneRenderGraphPassId::Shadow:
             case SceneRenderGraphPassId::SSAO:
             case SceneRenderGraphPassId::SSR:
             case SceneRenderGraphPassId::FXAA:
@@ -162,6 +164,12 @@ namespace pe
             default:
                 return false;
             }
+        }
+
+        // The overlays only the editor switches on, baked for the web editor (bake_web_shaders.py --editor).
+        bool IsWebEditorPass(SceneRenderGraphPassId id)
+        {
+            return id == SceneRenderGraphPassId::Grid || id == SceneRenderGraphPassId::Aabbs;
         }
 
         void InitSceneRenderGraphPassComponent(IRenderPassComponent *component, CommandBuffer *cmd)
@@ -393,13 +401,15 @@ namespace pe
         // shader, so a pass the game only switches on later (a settings menu, a level) must be in the bake
         // already. A pass that stays disabled is released again by ReleaseDisabledSceneRenderGraphPassComponents.
         static const bool bakeDisabledPasses = ReadRuntimeBakeWebShaders();
+        static const bool bakeEditorPasses = ReadRuntimeBakeWebEditorShaders();
         static std::array<bool, kSceneRenderGraphPassCount> baked{};
 
         const uint32_t frame = RHII.GetFrameCounter();
         for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
         {
             const size_t index = static_cast<size_t>(desc.id);
-            const bool bakeNow = bakeDisabledPasses && !baked[index] && IsWebSettingsPass(desc.id);
+            const bool bakePass = IsWebSettingsPass(desc.id) || (bakeEditorPasses && IsWebEditorPass(desc.id));
+            const bool bakeNow = bakeDisabledPasses && !baked[index] && bakePass;
             baked[index] = true;
             if (!isPassEnabled(desc.id) && !bakeNow)
                 continue;

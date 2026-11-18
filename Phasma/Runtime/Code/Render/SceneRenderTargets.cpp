@@ -132,7 +132,19 @@ namespace pe
         const uint32_t sampled = RHII.GetGpuLimits().maxSampledTexturesPerShaderStage;
         const uint32_t cascades = sampled > 12 ? (sampled - 10) / 2 : 1;
         // Lighting.hlsl's web variant declares a depth and a tint map binding for up to 4 cascades.
-        settings.num_cascades = std::min({settings.num_cascades, cascades, 4u});
+        const uint32_t maxCascades = std::min(cascades, kWebMaxShadowCascades);
+        settings.num_cascades = std::clamp(settings.num_cascades, 1u, maxCascades);
+
+        // The browser has LightingPS only for the listed sizes. Take the largest that is not above the requested one,
+        // so snapping never costs more memory.
+        uint32_t shadowMapSize = kWebShadowMapSizes.front();
+        for (uint32_t size : kWebShadowMapSizes)
+        {
+            if (size <= settings.shadow_map_size)
+                shadowMapSize = size;
+        }
+
+        settings.shadow_map_size = shadowMapSize;
     }
 
     vec3 SceneColor(const vec3 &srgb)

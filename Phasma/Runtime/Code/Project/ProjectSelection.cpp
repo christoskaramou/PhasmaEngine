@@ -190,6 +190,11 @@ namespace pe
         return ReadRuntimeFlag(kBakeWebShadersSettingsKey, {});
     }
 
+    bool ReadRuntimeBakeWebEditorShaders()
+    {
+        return ReadRuntimeFlag(kBakeWebEditorShadersSettingsKey, {});
+    }
+
     bool WriteProjectSelection(const std::filesystem::path &settingsPath, const ProjectConfig &project, std::string *error)
     {
         const std::filesystem::path normalizedSettingsPath =
