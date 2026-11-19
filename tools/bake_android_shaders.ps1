@@ -79,6 +79,8 @@ function Get-BakeInputHashes {
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/Code") | Where-Object { $_.Extension -in ".cpp", ".h" }
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets/Shaders")
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets/PassInfo")
+        Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Runtime/RuntimeAssets/MaterialX")
+        Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Cook/Code/MaterialX")
         Get-ChildItem -File -Recurse (Join-Path $repoRoot "Phasma/Player/android/app/src/main/assets/Assets")
     )
     if ($ProjectPath) {
@@ -229,7 +231,6 @@ if (Test-Path $cacheSpv) { Remove-Item -Recurse -Force $cacheSpv }
 $env:PHASMA_SPIRV_TARGET = "1.2"
 $env:PHASMA_API = "vulkan"
 $overlayRoot = $null
-$overlayLinks = @()
 $savedEnv = @{}
 try {
     foreach ($bakeScene in $bakeScenes) {
@@ -253,13 +254,10 @@ try {
         $overlayAssets = Join-Path $overlayRoot "Assets"
         New-Item -ItemType Directory -Force -Path (Join-Path $overlayAssets "Save") | Out-Null
         foreach ($entry in Get-ChildItem $projectAssets) {
-            if ($entry.Name -in "Shaders", "PassInfo", "Save") { continue }
+            if ($entry.Name -in "Shaders", "PassInfo", "Save", "ArtSources") { continue }
             $target = Join-Path $overlayAssets $entry.Name
-            if ($entry.PSIsContainer) {
-                New-Item -ItemType Junction -Path $target -Target $entry.FullName | Out-Null
-                $overlayLinks += $target
-            }
-            else { Copy-Item $entry.FullName $target }
+            # Lua's fs.read rejects junctions resolving outside the temporary Assets root.
+            Copy-Item -LiteralPath $entry.FullName -Destination $target -Recurse
         }
         foreach ($dir in "Shaders", "PassInfo") {
             Copy-Item -Recurse (Join-Path $engineAssets $dir) (Join-Path $overlayAssets $dir)
@@ -297,19 +295,14 @@ try {
             if (-not ($log | Where-Object { $_ -match '\[CppScript\] module (re)?loaded' })) {
                 Fail "The C++ scripts never loaded for $sceneName; its scripted content is not baked. Check $logFile."
             }
-            $scriptError = $log | Where-Object { $_ -match '\[ERROR\] \[CppScript\]' } | Select-Object -First 1
-            if ($scriptError) { Fail "A C++ script failed in $sceneName ($scriptError); its later shaders are not baked." }
+            $scriptError = $log | Where-Object { $_ -match '\[ERROR\] \[(CppScript|Lua)\]' } | Select-Object -First 1
+            if ($scriptError) { throw "A script failed in $sceneName ($scriptError); its later shaders are not baked." }
         }
     }
 }
 finally {
     foreach ($name in $savedEnv.Keys) { [Environment]::SetEnvironmentVariable($name, $savedEnv[$name]) }
-    $unlinked = $true
-    foreach ($link in $overlayLinks) {
-        try { [System.IO.Directory]::Delete($link) }  # the junction only, never the game folder it points at
-        catch { $unlinked = $false; Write-Host "[bake] WARNING: could not remove junction $link; leaving $overlayRoot in place." -ForegroundColor Yellow }
-    }
-    if ($overlayRoot -and $unlinked -and (Test-Path $overlayRoot)) { Remove-Item -Recurse -Force $overlayRoot }
+    if ($overlayRoot -and (Test-Path -LiteralPath $overlayRoot)) { Remove-Item -LiteralPath $overlayRoot -Recurse -Force }
     if ($null -ne $settingsBackup) { Set-Content -Path $settingsPath -Value $settingsBackup -NoNewline -Encoding utf8 }
     else { Remove-Item $settingsPath -ErrorAction SilentlyContinue }
 }
@@ -369,6 +362,11 @@ if ($violations.Count -gt 0) {
 $currentBakeInputHashes = Get-BakeInputHashes
 if (($bakeInputHashes | ConvertTo-Json -Compress) -cne ($currentBakeInputHashes | ConvertTo-Json -Compress)) {
     Fail "Bake inputs changed while the cache was being generated. Run the bake again."
+}
+$moduleDir = Join-Path $repoRoot "Phasma/Player/android/prebaked/OpenPBR"
+New-Item -ItemType Directory -Force -Path $moduleDir | Out-Null
+foreach ($name in 'PeOpenPBRDefault.json', 'PeOpenPBRDefault.slang') {
+    Copy-Item -LiteralPath (Join-Path $binDir "RuntimeAssets/Shaders/MaterialX/Generated/$name") -Destination $moduleDir -Force
 }
 Write-TextUtf8NoBom $bakeManifest ([ordered]@{ version = 1; files = $bakeInputHashes } | ConvertTo-Json -Depth 4)
 Write-Host "[bake] manifest    : $bakeManifest"

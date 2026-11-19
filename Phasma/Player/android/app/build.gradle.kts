@@ -66,6 +66,8 @@ val androidShaderBakeInputs: () -> List<File> = {
         }.files)
         addAll(fileTree(engineRoot.resolve("Phasma/Runtime/RuntimeAssets/Shaders")).files)
         addAll(fileTree(engineRoot.resolve("Phasma/Runtime/RuntimeAssets/PassInfo")).files)
+        addAll(fileTree(engineRoot.resolve("Phasma/Runtime/RuntimeAssets/MaterialX")).files)
+        addAll(fileTree(engineRoot.resolve("Phasma/Cook/Code/MaterialX")).files)
         addAll(fileTree(rootProject.file("app/src/main/assets/Assets")).files)
         // The game's own shaders and passes (staged below) are baked too (tools/bake_android_shaders.ps1 -ProjectPath).
         if (gameAssets != null)
@@ -104,6 +106,16 @@ val stagedAssetsDir = layout.buildDirectory.dir("generated/phasmaAssets")
 val stagePhasmaAssets by tasks.registering(Sync::class) {
     inputs.files(androidShaderBakeInputs()).withPropertyName("androidShaderBakeInputs")
     inputs.file(prebakedSpvManifest).withPropertyName("androidShaderBakeManifest").optional()
+    // Keep the Android presentation settings, but boot the selected game's manifest scene.
+    val projectManifest = gameAssets?.parentFile?.resolve("phasma_project.json")?.takeIf { it.isFile }
+    val startup = projectManifest?.let { (JsonSlurper().parse(it) as Map<*, *>)["startup_scene"] as? String }
+    inputs.property("gameStartupScene", startup.orEmpty())
+    from("src/main/assets")
+    if (!startup.isNullOrBlank()) doLast {
+        val configPath = "Assets/editor_config.json"
+        val config = JsonSlurper().parse(project.file("src/main/assets/$configPath")) as Map<*, *>
+        destinationDir.resolve(configPath).writeText(groovy.json.JsonOutput.toJson(config + ("last_scene" to startup)))
+    }
 
     // Engine runtime assets (shaders, objects, particles, fonts, PassInfo) live in
     // Phasma/Runtime/RuntimeAssets after the 2026-06-13 RuntimeAssets carve;
@@ -120,6 +132,9 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
     from(prebakedSpvDir) {
         into("ShaderCache/spv")
     }
+    from(rootProject.file("prebaked/OpenPBR")) {
+        into("Assets/Shaders/MaterialX/Generated")
+    }
     from(prebakedModelsDir) {
         into("Assets/Models")
     }
@@ -131,6 +146,7 @@ val stagePhasmaAssets by tasks.registering(Sync::class) {
             into("Assets")
             exclude(
                 "Save/**",
+                "ArtSources/**",
                 "editor_config.json",
                 "editor_windows.json",
                 "imgui.ini"
@@ -238,7 +254,7 @@ android {
     }
 
     sourceSets.getByName("main") {
-        assets.srcDir(stagedAssetsDir)
+        assets.setSrcDirs(listOf(stagedAssetsDir))
         java.srcDir("src/main/java")
         if (sdl2RootPath.isNotBlank()) {
             java.srcDir(sdl2Root.resolve("android-project/app/src/main/java"))
