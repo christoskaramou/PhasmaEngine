@@ -1019,6 +1019,28 @@ namespace pe
                 return result;
             }
 
+            // The largest factor up to quad.textFit at which the quad's text still fits `maxWidth` x `maxHeight`
+            // without wrapping.
+            // ponytail: measures every text field stacked, so a quad that draws only one of several fields
+            // grows less than it could; measure per visual style if that shows.
+            static float FitTextBoost(ImFont *font, float textScale, const RuntimeUiQuadDesc &quad,
+                                      float maxWidth, float maxHeight)
+            {
+                float boost = quad.textFit;
+                while (boost > 1.0f)
+                {
+                    const float fontSize = ImGui::GetFontSize() * textScale * boost;
+                    const TextBlockMetrics block =
+                        MeasureTextBlock(font, fontSize, textScale * boost, quad, FLT_MAX, 1.0f, 48);
+                    if (block.width <= maxWidth && block.height <= maxHeight)
+                        return boost;
+
+                    boost *= 0.9f;
+                }
+
+                return 1.0f;
+            }
+
             // Wrapped text aligned in BOTH axes within the box [boxMin, boxMin+boxSize]
             // (inset by pad), plus a pixel (offX,offY) nudge. Returns block height.
             static float DrawAlignedText(ImDrawList *drawList, ImFont *font, float fontSize, const char *text,
@@ -1234,11 +1256,15 @@ namespace pe
                 const float scale = quad.fontScale > 0.0f ? quad.fontScale : 1.0f;
                 const float pad = TextPadPx(scale);
                 ImFont *font = ImGui::GetFont();
-                const float textScale = scale * (quad.textScale > 0.0f ? quad.textScale : 1.0f);
-                const float fontSize = ImGui::GetFontSize() * textScale;
                 const float textInsetRight = std::clamp(quad.textInsetRight, 0.0f, std::max(0.0f, size.x - pad));
                 const float textBoxWidth = std::max(1.0f, size.x - textInsetRight);
                 const float textWidth = std::max(1.0f, textBoxWidth - pad * 2.0f);
+                const float authoredTextScale = scale * (quad.textScale > 0.0f ? quad.textScale : 1.0f);
+                const float fitWidth = textWidth - 2.0f * std::abs(quad.textOffsetX);
+                const float fitHeight = size.y - pad - 2.0f * std::abs(quad.textOffsetY);
+                const float textScale =
+                    authoredTextScale * FitTextBoost(font, authoredTextScale, quad, fitWidth, fitHeight);
+                const float fontSize = ImGui::GetFontSize() * textScale;
                 const bool themed = quad.backgroundImage != nullptr;
                 // Theme plates must stay opaque. The 0.90 default tint lets the
                 // underlay fill muddy button_surface — idle looks wrong until hover

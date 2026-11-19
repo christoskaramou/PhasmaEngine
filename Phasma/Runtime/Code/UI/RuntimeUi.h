@@ -132,6 +132,7 @@ namespace pe
         bool noInput = false;
         float fontScale = 1.0f;
         float textScale = 1.0f;
+        float textFit = 1.0f; // text may grow by up to this while it stays inside the quad
         RuntimeUiTextAlignH textAlignH = RuntimeUiTextAlignH::Default;
         RuntimeUiTextAlignV textAlignV = RuntimeUiTextAlignV::Default;
         float textOffsetX = 0.0f;
@@ -213,6 +214,8 @@ namespace pe
         void SetReferenceSurface(float width, float height);
         void GetReferenceSurface(float &width, float &height) const;
         void SetFrameUiScale(float scale);
+        // Above 1 on a phone-sized display: overlay screens' quads are enlarged by up to this (RuntimeUiZoom.h).
+        void SetCompactZoom(float zoom) { m_compactZoom = zoom; }
         void SetFrameSafeArea(float minX, float minY, float width, float height);
         void SetFrameInputRect(float minX, float minY, float width, float height);
         void DisableFrameInput();
@@ -354,6 +357,16 @@ namespace pe
             float textInsetRight = 0.0f;
             RuntimeUiQuadVisualStyle visualStyle = RuntimeUiQuadVisualStyle::Card;
             bool fit = false;
+            // UI zoom: the quad's rect last frame and how often it has changed (a marker following the world changes
+            // every frame).
+            // ponytail: only a resize resets the count, so a plate that slides in counts as a marker for good; time
+            // it out if that shows.
+            float zoomX = 0.0f;
+            float zoomY = 0.0f;
+            float zoomWidth = 0.0f;
+            float zoomHeight = 0.0f;
+            bool zoomSeen = false;
+            uint8_t zoomMoves = 0;
         };
 
         struct Screen
@@ -390,6 +403,8 @@ namespace pe
         bool m_keyboardCaptureOverride = false;
         bool m_frameOpen = false;
         uint32_t m_frameSurfaceWidth = 0;
+        uint32_t m_zoomSurfaceWidth = 0; // the surface the quads' move counts belong to
+        uint32_t m_zoomSurfaceHeight = 0;
         uint32_t m_frameSurfaceHeight = 0;
         uint32_t m_physicalSurfaceWidth = 0;
         uint32_t m_physicalSurfaceHeight = 0;
@@ -398,6 +413,7 @@ namespace pe
         float m_frameFit = 1.0f;
         std::filesystem::path m_imagesWarmedScene; // SyncSceneWidgets loaded its authored images
         float m_frameUiScale = 1.0f;
+        float m_compactZoom = 1.0f;
         float m_textScale = 1.0f;
         RuntimeUiColor m_elementTint{};
         RuntimeUiColor m_backgroundTint{};

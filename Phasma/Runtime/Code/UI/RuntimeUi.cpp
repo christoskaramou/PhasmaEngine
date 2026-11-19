@@ -1,5 +1,6 @@
 #include "UI/RuntimeUi.h"
 #include "UI/RuntimeUiInputEvents.h"
+#include "UI/RuntimeUiZoom.h"
 #include "API/Command.h"
 #include "API/Image.h"
 #include "API/Queue.h"
@@ -8,11 +9,27 @@
 #include "Scene/SceneAccess.h"
 #include "Script/ScriptSystem.h"
 
+#if defined(PE_WEB)
+#include <emscripten.h>
+#endif
+
 namespace pe
 {
     namespace
     {
         RuntimeUiSystem *s_activeRuntimeUi = nullptr;
+
+        // A quad whose rect has changed this often is a marker (a health bar following a unit, a drag-select edge);
+        // a new layout changes it once or twice.
+        constexpr uint8_t kZoomMarkerMoves = 3;
+
+        // A short pulse when a quad is pressed: on a phone a touch gives no other sign that it landed.
+        void PressHaptic()
+        {
+#if defined(PE_WEB)
+            EM_ASM({ if (navigator.vibrate) navigator.vibrate(12); });
+#endif
+        }
 
         std::string MakeDefaultTitle(const std::string &screenId)
         {
@@ -1367,6 +1384,28 @@ namespace pe
         };
         std::vector<PendingAction> pendingActions;
 
+        // A resize moves every quad once; that is a new layout, not markers following the world.
+        const bool zoomSurfaceChanged =
+            m_frameSurfaceWidth != m_zoomSurfaceWidth || m_frameSurfaceHeight != m_zoomSurfaceHeight;
+        m_zoomSurfaceWidth = m_frameSurfaceWidth;
+        m_zoomSurfaceHeight = m_frameSurfaceHeight;
+
+        // Scene-authored panels keep their place; script quads drawn on them, from any screen, stay with them.
+        std::vector<RuntimeUiZoomRect> zoomPanels;
+        for (const Screen &screen : m_screens)
+        {
+            for (const Widget &widget : screen.widgets)
+            {
+                const bool panel = m_compactZoom > 1.0f &&
+                                   screen.visible &&
+                                   widget.visible &&
+                                   widget.type == WidgetType::Quad &&
+                                   widget.node;
+                if (panel)
+                    zoomPanels.push_back({widget.x, widget.y, widget.width, widget.height, false, true, true});
+            }
+        }
+
         for (Screen &screen : m_screens)
         {
             if (!screen.visible)
@@ -1386,11 +1425,60 @@ namespace pe
             desc.scrollable = screen.scrollable;
             desc.maxHeight = screen.maxHeight;
 
+            std::vector<RuntimeUiZoomPlacement> zoomed;
+            if (m_compactZoom > 1.0f)
+            {
+                std::vector<RuntimeUiZoomRect> rects;
+                rects.reserve(screen.widgets.size());
+                for (Widget &widget : screen.widgets)
+                {
+                    const bool quad = widget.visible && widget.type == WidgetType::Quad;
+                    if (zoomSurfaceChanged)
+                        widget.zoomMoves = 0;
+
+                    if (quad)
+                    {
+                        const bool changed = widget.x != widget.zoomX ||
+                                             widget.y != widget.zoomY ||
+                                             widget.width != widget.zoomWidth ||
+                                             widget.height != widget.zoomHeight;
+                        if (widget.zoomSeen && changed && widget.zoomMoves < kZoomMarkerMoves)
+                            ++widget.zoomMoves;
+
+                        widget.zoomSeen = true;
+                        widget.zoomX = widget.x;
+                        widget.zoomY = widget.y;
+                        widget.zoomWidth = widget.width;
+                        widget.zoomHeight = widget.height;
+                    }
+
+                    const bool scriptQuad = screen.overlay && quad && !widget.node;
+                    const bool hasText = !widget.label.empty() ||
+                                         !widget.title.empty() ||
+                                         !widget.subtitle.empty() ||
+                                         !widget.textValue.empty() ||
+                                         !widget.footer.empty();
+                    const bool content = hasText || !widget.noInput || widget.zoomMoves < kZoomMarkerMoves;
+                    rects.push_back({widget.x, widget.y, widget.width, widget.height, scriptQuad, false, content});
+                }
+
+                rects.insert(rects.end(), zoomPanels.begin(), zoomPanels.end());
+
+                zoomed = ZoomRuntimeUiQuads(rects,
+                                            static_cast<float>(m_frameSurfaceWidth),
+                                            static_cast<float>(m_frameSurfaceHeight),
+                                            m_compactZoom);
+            }
+
             const bool open = m_backend->BeginScreen(desc);
             if (open)
             {
+                size_t widgetIndex = 0;
                 for (Widget &widget : screen.widgets)
                 {
+                    const RuntimeUiZoomPlacement zoom = widgetIndex < zoomed.size() ? zoomed[widgetIndex]
+                                                                                    : RuntimeUiZoomPlacement{};
+                    ++widgetIndex;
                     if (!widget.visible)
                     {
                         widget.state = {};
@@ -1458,11 +1546,11 @@ namespace pe
                         quadDesc.footer = widget.footer.c_str();
                         quadDesc.image = widget.image;
                         quadDesc.backgroundImage = widget.backgroundImage;
-                        quadDesc.x = widget.x;
-                        quadDesc.y = widget.y;
+                        quadDesc.x = widget.x * zoom.scale + zoom.offsetX;
+                        quadDesc.y = widget.y * zoom.scale + zoom.offsetY;
                         quadDesc.z = widget.z;
-                        quadDesc.width = widget.width;
-                        quadDesc.height = widget.height;
+                        quadDesc.width = widget.width * zoom.scale;
+                        quadDesc.height = widget.height * zoom.scale;
                         quadDesc.fillColor = widget.fillColor;
                         quadDesc.borderColor = widget.borderColor;
                         quadDesc.accentColor = widget.accentColor;
@@ -1478,21 +1566,25 @@ namespace pe
                         quadDesc.noInput = widget.noInput;
                         // Same text proportions on desktop and Android: DPI is cancelled
                         // here, so do not reintroduce a platform readability bump.
-                        quadDesc.cornerRadius = widget.cornerRadius;
+                        quadDesc.cornerRadius = widget.cornerRadius * zoom.scale;
                         quadDesc.radialSegments = widget.radialSegments;
                         quadDesc.radialFilled = widget.radialFilled;
-                        quadDesc.fontScale = widget.fontScale / m_frameUiScale;
+                        quadDesc.fontScale = widget.fontScale * zoom.scale * zoom.textScale / m_frameUiScale;
                         quadDesc.textScale = m_textScale;
+                        quadDesc.textFit = zoom.textFit;
                         quadDesc.textAlignH = widget.textAlignH;
                         quadDesc.textAlignV = widget.textAlignV;
-                        quadDesc.textOffsetX = widget.textOffsetX;
-                        quadDesc.textOffsetY = widget.textOffsetY;
-                        quadDesc.textInsetRight = widget.textInsetRight;
+                        quadDesc.textOffsetX = widget.textOffsetX * zoom.scale;
+                        quadDesc.textOffsetY = widget.textOffsetY * zoom.scale;
+                        quadDesc.textInsetRight = widget.textInsetRight * zoom.scale;
                         quadDesc.visualStyle = widget.visualStyle;
                         quadDesc.fit = widget.fit;
                         const RuntimeUiWidgetState previousState = widget.state;
                         widget.state = m_backend->Quad(quadDesc);
                         const RuntimeUiWidgetState &s = widget.state;
+                        if (s.clicked && !widget.noInput)
+                            PressHaptic();
+
                         const bool actionable = s.clicked || s.dragStarted || s.dragging || s.dragReleased ||
                                                 s.hovered != previousState.hovered || s.down != previousState.down;
                         if (widget.node && actionable)

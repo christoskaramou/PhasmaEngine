@@ -219,6 +219,17 @@ namespace pe
         // speck. Scale the UI by real display density, falling back to surface-height scaling when the
         // driver reports no DPI. Clamped so standard ~96 dpi desktops stay at 1.0 (no editor/desktop
         // regression) and pathological DPI reports can't balloon the UI.
+        // The page's UI zoom for a phone-sized screen (Module.peUiZoom), 1 everywhere else.
+        float CompactUiZoom()
+        {
+#if defined(PE_WEB)
+            static const float zoom = static_cast<float>(EM_ASM_DOUBLE({ return Module.peUiZoom || 1; }));
+            return zoom;
+#else
+            return 1.0f;
+#endif
+        }
+
         float ComputeRuntimeUiScale(SDL_Window *window, uint32_t surfaceHeight)
         {
             float scale = 0.0f;
@@ -600,6 +611,7 @@ namespace pe
                     {
                         m_runtimeUi->SetFrameSurfaceSize(RHII.GetWidth(), RHII.GetHeight());
                         m_runtimeUi->SetFrameUiScale(ComputeRuntimeUiScale(m_window, RHII.GetHeight()));
+                        m_runtimeUi->SetCompactZoom(CompactUiZoom());
                         const RuntimeUiSafeArea safeArea =
                             QueryAndroidRuntimeUiSafeArea(RHII.GetWidth(), RHII.GetHeight());
                         if (safeArea.valid)
