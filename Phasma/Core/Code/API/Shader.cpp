@@ -147,12 +147,17 @@ namespace pe
         {
 #if defined(PE_WEB)
             // The browser has no shader compiler: every module comes from the desktop bake (WebGPU spec decision 7).
-            PE_ERROR_IF(needsCompile,
-                        "[Shader] no baked module for '%s' (entry '%s', key %llu): bake it on desktop Vulkan with "
-                        "PHASMA_SPIRV_TARGET=1.2, then run tools/convert_web_shaders.py",
-                        desc.sourcePath.c_str(),
-                        desc.entryPoint.c_str(),
-                        static_cast<unsigned long long>(owner->GetCache().GetHash()));
+            if (needsCompile)
+            {
+                const std::string message = "[Shader] no baked module for '" + desc.sourcePath + "' (entry '" +
+                                            desc.entryPoint + "', key " +
+                                            std::to_string(owner->GetCache().GetHash()) +
+                                            "): bake it on desktop Vulkan with PHASMA_SPIRV_TARGET=1.2, then run "
+                                            "tools/convert_web_shaders.py";
+                Log::Error(message);
+                throw ShaderVariantMissingError(message);
+            }
+
             return new WebGpuShaderImpl(owner);
 #else
             PE_ERROR("[Shader] WebGPU shaders exist only in the browser build");
@@ -217,7 +222,16 @@ namespace pe
                     UsesSlang(path) ? "slang" : "dxc"); // .slang sources compile with slangc under either option
         }
 
-        shader->m_impl = CreateShaderImpl(shader, desc, needsCompile);
+        try
+        {
+            shader->m_impl = CreateShaderImpl(shader, desc, needsCompile);
+        }
+        catch (...)
+        {
+            delete shader; // a browser miss is recoverable, so it must not leak the half-made shader
+            throw;
+        }
+
         shader->m_reflection.Init(shader);
 
         {

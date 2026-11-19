@@ -31,12 +31,11 @@ struct PushConstants
     if (i >= pc.drawCount)
         return;
 
-    NodeVis v;
-    v.pixelCount = 0u;
-    v.minX = 0xFFFFFFFFu;
-    v.minY = 0xFFFFFFFFu;
-    v.maxX = 0u;
-    v.maxY = 0u;
-    v.nearestDepthBits = 0u;
-    NodeVisOut[i] = v;
+    // Member by member: a whole-struct store compiles to an OpCopyLogical that the WGSL converter cannot lower.
+    NodeVisOut[i].pixelCount = 0u;
+    NodeVisOut[i].minX = 0xFFFFFFFFu;
+    NodeVisOut[i].minY = 0xFFFFFFFFu;
+    NodeVisOut[i].maxX = 0u;
+    NodeVisOut[i].maxY = 0u;
+    NodeVisOut[i].nearestDepthBits = 0u;
 }

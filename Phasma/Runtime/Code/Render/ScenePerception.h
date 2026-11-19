@@ -64,4 +64,8 @@ namespace pe
 
     // Releases the object-id decode resources with the renderer's passes, while the RHI is still alive.
     void DestroyScenePerception();
+
+    // The web editor bake (bake_web_shaders.py --editor) compiles the object-id shaders, which no render pass starts:
+    // the browser cannot compile them when scene.pick_view_pixel or the perception tools first ask.
+    void BakeWebEditorPerceptionShaders();
 } // namespace pe

@@ -154,6 +154,9 @@ namespace pe
 
     void UpdateSceneRenderGraphPassStates(std::span<bool> passEnabled, bool hasRayTracingGeometry);
 
+    // True once a pass failed to build because the browser's shader bake lacks a module it needs; it stays off.
+    [[nodiscard]] bool IsSceneRenderGraphPassUnavailable(SceneRenderGraphPassId passId);
+
     void UpdateSceneRenderGraphPassComponents(const OrderedMap<size_t, IRenderPassComponent *> &renderPassComponents,
                                               const SceneRenderGraphPassComponents &components,
                                               const SceneRenderGraphPassCondition &isPassEnabled);

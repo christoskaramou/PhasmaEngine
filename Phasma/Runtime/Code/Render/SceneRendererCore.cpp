@@ -694,7 +694,8 @@ namespace pe
 
     bool SceneRendererCore::IsPassEnabled(SceneRenderGraphPassId passId) const
     {
-        return m_renderGraphPassEnabled[static_cast<size_t>(passId)];
+        // A pass the browser could not build stays off, from the frame it failed (RunPassShaderStep).
+        return m_renderGraphPassEnabled[static_cast<size_t>(passId)] && !IsSceneRenderGraphPassUnavailable(passId);
     }
 
     void SceneRendererCore::SetPassDeferred(SceneRenderGraphPassId passId, bool deferred)

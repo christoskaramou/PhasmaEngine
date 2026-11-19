@@ -20,11 +20,16 @@
 
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
 [[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
-[[vk::binding(0, 2)]] Texture2D pe_textures[] : register(t0, space100);
 #ifdef VISIBILITY
 // The OpenPBR prepass's visibility target: draw id + 1 wherever it resolved coverage, generated masks included.
 [[vk::binding(4, 0)]] Texture2D<uint4> pe_visibility : register(t4, space0);
 #endif
+
+// The web profile binds each material's textures at set 2 (Scene::DrawBucket), as DepthPS does.
+#ifdef PE_WEB_PROFILE
+#include "../Common/WebMaterialTextures.hlsl"
+#else
+[[vk::binding(0, 2)]] Texture2D pe_textures[] : register(t0, space100);
 
 float4 SampleArray(float2 uv, uint index)
 {
@@ -37,6 +42,7 @@ float4 GetBaseColor(uint id, float2 uv)
 {
     return SampleArray(uv, (uint)constants[id].meshImageIndex[0]);
 }
+#endif
 
 uint2 mainPS(PS_INPUT_Position_Uv_ID input) : SV_TARGET0
 {

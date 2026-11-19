@@ -45,6 +45,14 @@ namespace pe
     class PassInfo;
     class Descriptor;
 
+    // The browser compiles no shaders: Shader::Create throws this for a module the page's bake lacks, so a caller
+    // that can do without it (a render pass) can catch it instead of aborting the page.
+    class ShaderVariantMissingError : public std::runtime_error
+    {
+    public:
+        using std::runtime_error::runtime_error;
+    };
+
     class Shader : public NoCopy
     {
     public:

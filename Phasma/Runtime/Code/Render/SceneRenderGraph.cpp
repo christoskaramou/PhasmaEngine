@@ -2,7 +2,9 @@
 #include "API/Command.h"
 #include "API/Pipeline.h"
 #include "API/RHI.h"
+#include "API/Shader.h"
 #include "Project/ProjectSelection.h"
+#include "Render/ScenePerception.h"
 #include "Render/SceneRenderTargets.h"
 #include "Render/ScriptRenderPasses.h"
 #include "RenderPasses/AabbsPass.h"
@@ -284,7 +286,62 @@ namespace pe
 
             return true;
         }
+
+        // Passes whose shader the browser's bake lacks: off for the rest of the session (IsSceneRenderGraphPassUnavailable).
+        std::array<bool, kSceneRenderGraphPassCount> s_unavailablePasses{};
+
+        void ReleaseSceneRenderGraphPassComponent(IRenderPassComponent *component)
+        {
+            // Before Destroy, which may free secondary pass infos.
+            for (PassInfo *info : component->GetPassInfos())
+            {
+                if (info)
+                    CommandBuffer::RetirePipelines(*info);
+            }
+
+            // Consumers rebind by comparing pointers: a resource re-created next frame must not land at a
+            // freed address while another frame's descriptors still name it.
+            RHII.SetDeferDestroy(true);
+            component->Destroy();
+            RHII.SetDeferDestroy(false);
+
+            // A released pass is skipped by shader reload, like one never initialized.
+            for (PassInfo *info : component->GetPassInfos())
+            {
+                if (info)
+                    info->DestroyShaders();
+            }
+        }
+
+        // Runs a step that creates a pass's shaders. In the browser a module missing from the bake would abort the
+        // page; instead the pass is released and stays off, and the editor and game keep running without it.
+        // ponytail: passes that only run alongside it (Sharpen after TAA, for example) are not switched with it. The
+        // upgrade is to revert the setting that enabled it.
+        template <class Step>
+        bool RunPassShaderStep(const SceneRenderGraphPassDesc &desc, IRenderPassComponent *component, Step &&step)
+        {
+            try
+            {
+                step();
+                return true;
+            }
+            catch (const ShaderVariantMissingError &error)
+            {
+                ReleaseSceneRenderGraphPassComponent(component);
+                CommandBuffer::ClearFramebufferCache();
+                s_unavailablePasses[static_cast<size_t>(desc.id)] = true;
+                Log::Error(std::string("[Render] '") + desc.name +
+                           "' is off for this session: this page's shader bake lacks a module it needs. " +
+                           error.what());
+                return false;
+            }
+        }
     } // namespace
+
+    bool IsSceneRenderGraphPassUnavailable(SceneRenderGraphPassId passId)
+    {
+        return s_unavailablePasses[static_cast<size_t>(passId)];
+    }
 
     std::string SceneRenderGraphPassOrderKey(RenderGraph::PassID passId, const std::string &name)
     {
@@ -404,6 +461,11 @@ namespace pe
         static const bool bakeEditorPasses = ReadRuntimeBakeWebEditorShaders();
         static std::array<bool, kSceneRenderGraphPassCount> baked{};
 
+        // The object-id shaders belong to no pass; the editor bake compiles them here, once.
+        static std::once_flag perceptionBake;
+        if (bakeDisabledPasses && bakeEditorPasses)
+            std::call_once(perceptionBake, BakeWebEditorPerceptionShaders);
+
         const uint32_t frame = RHII.GetFrameCounter();
         for (const SceneRenderGraphPassDesc &desc : kSceneRenderGraphPasses)
         {
@@ -422,8 +484,12 @@ namespace pe
             if (!component)
                 continue;
 
-            InitSceneRenderGraphPassComponent(component, cmd);
-            passInitialized[index] = true;
+            const auto init = [&]()
+            {
+                InitSceneRenderGraphPassComponent(component, cmd);
+            };
+            if (RunPassShaderStep(desc, component, init))
+                passInitialized[index] = true;
         }
     }
 
@@ -447,27 +513,8 @@ namespace pe
                 continue;
 
             if (IRenderPassComponent *component = components.*desc.component)
-            {
-                // Before Destroy, which may free secondary pass infos.
-                for (PassInfo *info : component->GetPassInfos())
-                {
-                    if (info)
-                        CommandBuffer::RetirePipelines(*info);
-                }
+                ReleaseSceneRenderGraphPassComponent(component);
 
-                // Consumers rebind by comparing pointers: a resource re-created next frame must not land at a
-                // freed address while another frame's descriptors still name it.
-                RHII.SetDeferDestroy(true);
-                component->Destroy();
-                RHII.SetDeferDestroy(false);
-
-                // A released pass is skipped by shader reload, like one never initialized.
-                for (PassInfo *info : component->GetPassInfos())
-                {
-                    if (info)
-                        info->DestroyShaders();
-                }
-            }
             passInitialized[index] = false;
             released = true;
         }
@@ -506,11 +553,19 @@ namespace pe
                                                     { return info && (!info->colorFormats.empty() || info->acceleration.rayGen); });
             if (rebuildPipelines && usesSceneColor)
             {
-                for (PassInfo *info : infos)
-                    if (info)
-                        info->DestroyShaders();
-                component->UpdatePassInfo();
-                component->UpdateDescriptorSets();
+                const auto rebuild = [&]()
+                {
+                    for (PassInfo *info : infos)
+                    {
+                        if (info)
+                            info->DestroyShaders();
+                    }
+
+                    component->UpdatePassInfo();
+                    component->UpdateDescriptorSets();
+                };
+                if (!RunPassShaderStep(desc, component, rebuild))
+                    passInitialized[index] = false;
             }
         }
     }

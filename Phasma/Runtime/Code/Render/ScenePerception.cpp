@@ -313,10 +313,13 @@ namespace pe
             scene.BindDrawIdBuffer(cmd);
             cmd->SetConstants(idConstants);
             cmd->PushConstants();
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueSS(frame), 0, scene.GetCullingCountersBuffer(frame), 0 * sizeof(uint32_t), scene.GetIndirectCapacity());
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutSS(frame), 0, scene.GetCullingCountersBuffer(frame), 1 * sizeof(uint32_t), scene.GetIndirectCapacity());
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectOpaqueDS(frame), 0, scene.GetCullingCountersBuffer(frame), 5 * sizeof(uint32_t), scene.GetIndirectCapacity());
-            cmd->DrawIndexedIndirectCount(scene.GetIndirectAlphaCutDS(frame), 0, scene.GetCullingCountersBuffer(frame), 6 * sizeof(uint32_t), scene.GetIndirectCapacity());
+            // The depth prepass's buckets; DrawBucket draws per slot with material sets under the web profile.
+            Buffer *counters = scene.GetCullingCountersBuffer(frame);
+            const uint32_t capacity = scene.GetIndirectCapacity();
+            scene.DrawBucket(cmd, scene.GetIndirectOpaqueSS(frame), counters, 0, capacity);
+            scene.DrawBucket(cmd, scene.GetIndirectAlphaCutSS(frame), counters, 1, capacity);
+            scene.DrawBucket(cmd, scene.GetIndirectOpaqueDS(frame), counters, 5, capacity);
+            scene.DrawBucket(cmd, scene.GetIndirectAlphaCutDS(frame), counters, 6, capacity);
             cmd->EndPass();
         }
 
@@ -671,6 +674,19 @@ namespace pe
 
         out.valid = true;
         return out;
+    }
+
+    void BakeWebEditorPerceptionShaders()
+    {
+        // The same creators EnsureObjectIdDecodeResources uses, so the keys match; the PassInfos free their shaders.
+        // The web profile has no OpenPBR, so only the variant without VISIBILITY.
+        CreateObjectIdPassInfo(RHII.GetDepthFormat(), Settings::Get<SceneSettings>().reverse_depth, false);
+        CreateObjectIdComputePassInfo("ObjectIdClear_pipeline",
+                                      Path::RuntimeAssets + "Shaders/Perception/ObjectIdClearCS.hlsl",
+                                      "clearCS");
+        CreateObjectIdComputePassInfo("ObjectIdReduce_pipeline",
+                                      Path::RuntimeAssets + "Shaders/Perception/ObjectIdReduceCS.hlsl",
+                                      "reduceCS");
     }
 
     void DestroyScenePerception()
