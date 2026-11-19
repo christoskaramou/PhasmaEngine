@@ -206,6 +206,7 @@ namespace pe
 
         DestroyInitializedSceneRenderGraphPassComponents(m_scenePasses, m_renderGraphPassInitialized);
         DestroyScenePerception();
+        ReleaseOpenPBRMaterialSources();
     }
 
     void SceneRendererCore::ResizeRenderPassComponents(uint32_t width, uint32_t height, bool hasRayTracingGeometry)

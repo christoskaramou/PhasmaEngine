@@ -937,6 +937,11 @@ namespace pe
         return result.source;
     }
 
+    void ReleaseOpenPBRMaterialSources()
+    {
+        Registry().sources.clear();
+    }
+
     bool OpenPBREligible(Material &material, const OpenPBRModule &module)
     {
         const PassInfoAsset *pass = material.passInfoAsset.get();

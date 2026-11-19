@@ -100,6 +100,10 @@ namespace pe
     std::shared_ptr<const OpenPBRMaterialSource> LoadOpenPBRMaterial(
         const std::string &path, const std::string &material, std::string &error);
 
+    // Drops LoadOpenPBRMaterial's cache. Its sources hold their textures, so the renderer calls this before the RHI
+    // goes; left to the static's destructor, the images leak at RHI shutdown and their deleters run on a dead RHI.
+    void ReleaseOpenPBRMaterialSources();
+
     // The material can be shaded by the module: the module is valid and the material is standard PBR (no pass, or
     // standard_pbr.pass, whose byte record is MaterialGpuData). Shader-driven materials own their bytes.
     bool OpenPBREligible(Material &material, const OpenPBRModule &module);

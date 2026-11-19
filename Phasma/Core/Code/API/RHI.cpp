@@ -1456,10 +1456,15 @@ namespace pe
                 PE_WARN("[RHI] Leaked %s: %zu", name, resources.size());
                 for (const auto &res : resources)
                 {
+                    // The name says which owner forgot it; a pointer alone does not.
+                    std::string name;
+                    if constexpr (requires { res->GetName(); })
+                        name = res->GetName();
+
                     if constexpr (requires { res->ApiHandle(); })
-                        PE_WARN("[RHI]   Handle: %p", (void *)detail::ToUintPtr(res->ApiHandle()));
+                        PE_WARN("[RHI]   Handle: %p '%s'", (void *)detail::ToUintPtr(res->ApiHandle()), name.c_str());
                     else
-                        PE_WARN("[RHI]   Object: %p", (void *)res);
+                        PE_WARN("[RHI]   Object: %p '%s'", (void *)res, name.c_str());
                 }
             }
         };
