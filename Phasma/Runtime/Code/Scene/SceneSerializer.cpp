@@ -12,6 +12,7 @@
 #include "API/RHI.h"
 #include "Camera/Camera.h"
 #include "Particles/ParticleManager.h"
+#include "Project/WebProjectStorage.h"
 #include "Render/SceneRenderTargets.h"
 #include "Render/ScriptRenderPasses.h"
 #ifdef PE_PHYSICS2D
@@ -2969,23 +2970,29 @@ namespace pe
         rapidjson::PrettyWriter<rapidjson::OStreamWrapper> writer(osw);
         writer.SetMaxDecimalPlaces(6);
 
-        if (d.Accept(writer))
-        {
-            if (ofs.bad())
-            {
-                Log::Error("File stream error while writing to: " + file.string());
-            }
-            else
-            {
-                m_scenePath = file;
-                ClearDirty();
-                Log::Info("Scene saved to: " + file.string());
-            }
-        }
-        else
+        if (!d.Accept(writer))
         {
             Log::Error("Failed to write JSON content (invalid data/encoding?) to: " + file.string());
+            return;
         }
+
+        // The scene counts as saved only once the file is closed, and in the browser once it reached IndexedDB.
+        ofs.close();
+        if (ofs.fail())
+        {
+            Log::Error("File stream error while writing to: " + file.string());
+            return;
+        }
+
+        if (!PersistWebProjectEdits())
+        {
+            Log::Error("Scene written to memory only; it is lost when the page reloads: " + file.string());
+            return;
+        }
+
+        m_scenePath = file;
+        ClearDirty();
+        Log::Info("Scene saved to: " + file.string());
     }
 
     bool Scene::SavePrefab(NodeId *root, const std::filesystem::path &file)

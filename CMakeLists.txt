@@ -635,6 +635,8 @@ if(PE_WEB)
     # Icons and fonts, at /EditorAssets where Path looks under the web root.
     target_link_options(PhasmaEditor PRIVATE "SHELL:--preload-file ${PE_EDITOR_ASSETS_SOURCE_DIR}@/EditorAssets")
     set_property(TARGET PhasmaEditor APPEND PROPERTY LINK_DEPENDS ${EDITOR_ASSET_FILES})
+    # IndexedDB-backed folder for the project files the page saves (Project/WebProjectStorage.cpp).
+    target_link_options(PhasmaEditor PRIVATE -lidbfs.js)
 else()
     target_link_libraries(PhasmaEditor PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
 endif()

@@ -10,6 +10,7 @@
 #include "GUI/GUIState.h"
 #include "GUI/UndoRedo.h"
 #include "Project/ProjectSelection.h"
+#include "Project/WebProjectStorage.h"
 #include "Runtime/RuntimeStartup.h"
 #include "Runtime/RuntimePlaySession.h"
 #include "Scene/SelectionManager.h"
@@ -323,6 +324,7 @@ namespace pe
         const std::string editorAssetsRoot = ResolveEditorAssetsRoot();
         const ProjectSelection projectSelection = ResolveProjectSelection();
         ApplyProjectSelectionAssetsRoot(projectSelection);
+        RestoreWebProjectEdits(projectSelection.project.root); // the browser's saved files, before anything reads them
         if (!projectSelection.warning.empty())
             PE_WARN("[Runtime] %s", projectSelection.warning.c_str());
         PE_INFO("[Runtime] Active project root: %s (%s)",
