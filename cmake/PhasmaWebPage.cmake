@@ -10,6 +10,10 @@ function(pe_web_page target shell)
         -sEXIT_RUNTIME=0
     )
 
+    # IndexedDB-backed folder for the project files the page saves (Project/WebProjectStorage.cpp in PhasmaRuntime,
+    # which every page links).
+    target_link_options(${target} PRIVATE -lidbfs.js)
+
     # The game page: a full-window canvas sized by CSS, with a loading and error line.
     set(PE_WEB_SHELL "${shell}")
     target_link_options(${target} PRIVATE "SHELL:--shell-file ${PE_WEB_SHELL}")
