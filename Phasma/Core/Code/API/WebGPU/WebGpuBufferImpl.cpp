@@ -50,7 +50,8 @@ namespace pe
     WebGpuBufferImpl::WebGpuBufferImpl(Buffer *owner, const BufferDesc &desc)
         : m_owner{owner},
           m_paddedSize{AlignUp4(desc.size)},
-          m_hostVisible{IsHostVisibleUsage(desc.memoryUsage)}
+          m_hostVisible{IsHostVisibleUsage(desc.memoryUsage)},
+          m_readback{IsReadbackUsage(desc.memoryUsage)}
     {
         WGPUBufferDescriptor bufferDesc{};
         bufferDesc.label = {desc.name.c_str(), desc.name.size()};
@@ -59,7 +60,7 @@ namespace pe
         m_buffer = wgpuDeviceCreateBuffer(WebGpuRhiImpl::Get()->m_device, &bufferDesc);
         PE_ERROR_IF(!m_buffer, "WebGpuBufferImpl: failed to create buffer '%s'", desc.name.c_str());
 
-        if (m_hostVisible || IsReadbackUsage(desc.memoryUsage))
+        if (m_hostVisible || m_readback)
             m_shadow.resize(m_paddedSize);
     }
 
@@ -74,22 +75,54 @@ namespace pe
 
     void *WebGpuBufferImpl::Map()
     {
-        if (!m_hostVisible)
-        {
-            // Readback is off in the first version (decision 5): callers read zeros.
-            PE_ERROR_IF(m_shadow.empty(), "WebGpuBufferImpl::Map: '%s' is GPU-only", m_owner->GetName().c_str());
-            static bool warned = false;
-            if (!warned)
-            {
-                warned = true;
-                PE_WARN("WebGPU: GPU readback is not available on the web yet; '%s' reads zeros",
-                        m_owner->GetName().c_str());
-            }
-        }
+        PE_ERROR_IF(m_shadow.empty(), "WebGpuBufferImpl::Map: '%s' is GPU-only", m_owner->GetName().c_str());
+        if (m_readback)
+            ReadBack();
 
         m_flushed.clear();
         m_mapped = true;
         return m_shadow.data();
+    }
+
+    void WebGpuBufferImpl::ReadBack()
+    {
+        WebGpuRhiImpl *rhi = WebGpuRhiImpl::Get();
+        WGPUBufferDescriptor desc{};
+        desc.label = {"readback", WGPU_STRLEN};
+        desc.size = m_paddedSize;
+        desc.usage = WGPUBufferUsage_MapRead | WGPUBufferUsage_CopyDst;
+        WGPUBuffer readback = wgpuDeviceCreateBuffer(rhi->m_device, &desc);
+
+        // Queued after every earlier submit, so it sees what the caller's waited-on commands wrote.
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(rhi->m_device, nullptr);
+        wgpuCommandEncoderCopyBufferToBuffer(encoder, m_buffer, 0, readback, 0, m_paddedSize);
+        WGPUCommandBuffer commands = wgpuCommandEncoderFinish(encoder, nullptr);
+        wgpuQueueSubmit(rhi->m_queue, 1, &commands);
+        wgpuCommandBufferRelease(commands);
+        wgpuCommandEncoderRelease(encoder);
+
+        bool mapped = false;
+        WGPUBufferMapCallbackInfo info{};
+        info.mode = WGPUCallbackMode_WaitAnyOnly;
+        info.userdata1 = &mapped;
+        info.callback = [](WGPUMapAsyncStatus status, WGPUStringView, void *userdata, void *)
+        {
+            *static_cast<bool *>(userdata) = status == WGPUMapAsyncStatus_Success;
+        };
+
+        const WGPUFuture future = wgpuBufferMapAsync(readback, WGPUMapMode_Read, 0, m_paddedSize, info);
+        if (rhi->Wait(future, "readback") && mapped)
+        {
+            std::memcpy(m_shadow.data(), wgpuBufferGetConstMappedRange(readback, 0, m_paddedSize), m_paddedSize);
+            wgpuBufferUnmap(readback);
+        }
+        else
+        {
+            PE_WARN("WebGPU: reading back '%s' failed; it reads its previous contents", m_owner->GetName().c_str());
+        }
+
+        wgpuBufferDestroy(readback);
+        wgpuBufferRelease(readback);
     }
 
     void WebGpuBufferImpl::Unmap()

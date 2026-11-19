@@ -12,6 +12,10 @@ namespace pe
     // (2) Before each submit, the whole shadow of every mapped, non-TRANSFER_SRC buffer that submit references uploads
     //     (WebGpuCommandBufferImpl records the references; WebGpuQueueImpl uploads).
     // (3) A host-visible buffer is never GPU-written, or its shadow would overwrite the GPU's result.
+    // A GPU_TO_CPU buffer reads back on Map: it is copied into a temporary MapRead buffer after everything submitted so
+    // far, and Map waits for mapAsync through JSPI. Callers map after waiting on the commands that wrote it, as on the
+    // desktop. ponytail: a persistently mapped reader sees new data only after another Map; a reusable MapRead ring is
+    // the upgrade if a per-frame reader needs it.
     struct WebGpuBufferImpl final : public Buffer::Impl
     {
         WebGpuBufferImpl(Buffer *owner, const BufferDesc &desc);
@@ -41,11 +45,13 @@ namespace pe
 
     private:
         void Upload(size_t begin, size_t end) const;
+        void ReadBack();
 
         std::vector<uint8_t> m_shadow;
         // Ranges [begin, end) uploaded by Flush since the last Map, sorted and merged.
         mutable std::vector<std::pair<size_t, size_t>> m_flushed;
         bool m_hostVisible = false;
+        bool m_readback = false; // GPU_TO_CPU: Map copies the GPU contents into the shadow
         bool m_mapped = false;
 
         static inline uint64_t s_uploadedBytes = 0;

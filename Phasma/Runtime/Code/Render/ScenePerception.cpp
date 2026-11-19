@@ -588,7 +588,7 @@ namespace pe
 
             const size_t bpp = 8; // PE_FORMAT_R32G32_UINT
             const size_t rowBytes = static_cast<size_t>(W) * bpp;
-            const size_t rowPitch = RHII.GetApi() == PE_GRAPHICS_API_DX12 ? RHII.AlignTextureRowPitch(rowBytes) : rowBytes;
+            const size_t rowPitch = RHII.AlignTextureRowPitch(rowBytes); // CopyImageToBuffer's row stride on every API
             const size_t bufferSize = rowPitch * H;
 
             Buffer *staging = Buffer::Create({

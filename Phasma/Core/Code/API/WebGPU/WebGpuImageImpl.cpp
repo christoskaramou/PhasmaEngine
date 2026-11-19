@@ -201,10 +201,40 @@ namespace pe
         }
     }
 
-    void WebGpuImageImpl::CopyToBuffer(CommandBuffer *, Buffer *, uint32_t, uint32_t, uint32_t)
+    // Rows land RHI::AlignTextureRowPitch apart (256 bytes, as WebGPU requires; DX12 does the same), layers one after
+    // another. Callers map the buffer after waiting on cmd (WebGpuBufferImpl::ReadBack).
+    void WebGpuImageImpl::CopyToBuffer(CommandBuffer *cmd, Buffer *dst, uint32_t mipLevel, uint32_t baseArrayLayer, uint32_t layerCount)
     {
-        // Its callers (screenshots, ImageCapture, perception readback) map the buffer afterwards (decision 5).
-        PE_ERROR("WebGpuImageImpl::CopyToBuffer: GPU readback is not available on the web yet");
+        Image *image = m_owner;
+        PE_ERROR_IF(!dst, "WebGpuImageImpl::CopyToBuffer: null buffer");
+        PE_ERROR_IF(mipLevel >= image->GetMipLevels(), "WebGpuImageImpl::CopyToBuffer: mip level out of range");
+
+        const WgpuTexelBlock block = TexelBlockOf(m_format);
+        PE_ERROR_IF(!block.bytes || block.width != 1,
+                    "WebGpuImageImpl::CopyToBuffer: '%s' format cannot be read back",
+                    image->GetName().c_str());
+
+        const uint32_t layers = layerCount ? layerCount : 1;
+        PE_ERROR_IF(baseArrayLayer + layers > image->GetArrayLayers(),
+                    "WebGpuImageImpl::CopyToBuffer: layer range out of bounds");
+
+        const uint32_t width = MipExtent(image->GetWidth(), mipLevel);
+        const uint32_t height = MipExtent(image->GetHeight(), mipLevel);
+
+        WGPUTexelCopyTextureInfo source{};
+        source.texture = m_texture;
+        source.mipLevel = mipLevel;
+        source.origin = {0, 0, baseArrayLayer};
+        source.aspect = WGPUTextureAspect_All;
+
+        WGPUTexelCopyBufferInfo destination{};
+        destination.buffer = WebGpuBufferImpl::From(dst)->m_buffer;
+        destination.layout.offset = 0;
+        destination.layout.bytesPerRow = AlignUp(width * block.bytes, kCopyRowAlignment);
+        destination.layout.rowsPerImage = height;
+
+        const WGPUExtent3D extent{width, height, layers};
+        wgpuCommandEncoderCopyTextureToBuffer(EncoderOf(cmd), &source, &destination, &extent);
     }
 
     void WebGpuImageImpl::Blit(CommandBuffer *cmd, Image *src, const ImageBlit &region, PeFilter filter)

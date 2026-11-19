@@ -8,21 +8,7 @@ namespace pe
 {
     namespace
     {
-        constexpr uint64_t kStartupWaitNs = 10'000'000'000ull;
-
-        bool WaitFor(WGPUInstance instance, WGPUFuture future, const char *what)
-        {
-            WGPUFutureWaitInfo info{};
-            info.future = future;
-            const WGPUWaitStatus status = wgpuInstanceWaitAny(instance, 1, &info, kStartupWaitNs);
-            if (status != WGPUWaitStatus_Success || !info.completed)
-            {
-                PE_WARN("WebGPU: waiting for the %s failed (status %d)", what, static_cast<int>(status));
-                return false;
-            }
-
-            return true;
-        }
+        constexpr uint64_t kWaitNs = 10'000'000'000ull;
 
         std::string ToString(WGPUStringView text)
         {
@@ -36,6 +22,20 @@ namespace pe
     WebGpuRhiImpl *WebGpuRhiImpl::Get()
     {
         return static_cast<WebGpuRhiImpl *>(RHII.GetImpl());
+    }
+
+    bool WebGpuRhiImpl::Wait(WGPUFuture future, const char *what) const
+    {
+        WGPUFutureWaitInfo info{};
+        info.future = future;
+        const WGPUWaitStatus status = wgpuInstanceWaitAny(m_instance, 1, &info, kWaitNs);
+        if (status != WGPUWaitStatus_Success || !info.completed)
+        {
+            PE_WARN("WebGPU: waiting for the %s failed (status %d)", what, static_cast<int>(status));
+            return false;
+        }
+
+        return true;
     }
 
     bool WebGpuRhiImpl::Init(SDL_Window *)
@@ -61,7 +61,7 @@ namespace pe
             static_cast<WebGpuRhiImpl *>(user)->m_adapter = adapter;
         };
 
-        if (!WaitFor(m_instance, wgpuInstanceRequestAdapter(m_instance, &adapterOptions, adapterCb), "adapter") || !m_adapter)
+        if (!Wait(wgpuInstanceRequestAdapter(m_instance, &adapterOptions, adapterCb), "adapter") || !m_adapter)
             return false;
 
         // An indirect draw with a non-zero firstInstance is silently skipped without this feature (spec risk 9).
@@ -120,7 +120,7 @@ namespace pe
             static_cast<WebGpuRhiImpl *>(user)->m_device = device;
         };
 
-        if (!WaitFor(m_instance, wgpuAdapterRequestDevice(m_adapter, &deviceDesc, deviceCb), "device") || !m_device)
+        if (!Wait(wgpuAdapterRequestDevice(m_adapter, &deviceDesc, deviceCb), "device") || !m_device)
             return false;
 
         m_queue = wgpuDeviceGetQueue(m_device);

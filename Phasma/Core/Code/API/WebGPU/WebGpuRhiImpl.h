@@ -7,7 +7,7 @@
 namespace pe
 {
     // Browser WebGPU device (docs/wiki/superpowers/specs/2026-11-06-webgpu-rhi-backend-design.md, decisions 4 and 5).
-    // Startup waits are synchronous through wgpuInstanceWaitAny, which needs the player's -sJSPI link.
+    // Startup and readback waits are synchronous through wgpuInstanceWaitAny, which needs the page's -sJSPI link.
     struct WebGpuRhiImpl final : public RHI::Impl
     {
         bool Init(SDL_Window *window) override;
@@ -18,6 +18,9 @@ namespace pe
 
         static WebGpuRhiImpl *Get();
         void FillLimits(GpuLimits &out) const;
+
+        // Blocks until a WaitAnyOnly future completes (startup, readback); false on failure or after 10 s.
+        bool Wait(WGPUFuture future, const char *what) const;
 
         // Resources for bind group slots nothing was bound to: every layout entry must be bound (decision 5). Each view
         // matches its entry's view dimension and sample type, or storage format, as the binding sidecar sets them.

@@ -5,6 +5,26 @@
 #include "API/RHI.h"
 #include "Render/ScreenshotWriter.h"
 
+#if defined(PE_WEB)
+#include <emscripten.h>
+
+// The page's files live in memory, so a saved screenshot also downloads through the browser. The body is JavaScript;
+// clang-format would split its => into "= >".
+// clang-format off
+EM_JS_DEPS(PeSceneScreenshot, "$UTF8ToString");
+
+EM_JS(void, PeWebDownloadFile, (const char *path), {
+    const file = UTF8ToString(path);
+    const url = URL.createObjectURL(new Blob([FS.readFile(file)], { type: "image/png" }));
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = file.split("/").pop();
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+});
+// clang-format on
+#endif
+
 namespace pe
 {
     namespace
@@ -72,6 +92,9 @@ namespace pe
             PE_INFO("Screenshot saved: %s", resolvedPath.c_str());
             if (savedPath)
                 *savedPath = resolvedPath;
+#if defined(PE_WEB)
+            PeWebDownloadFile(resolvedPath.c_str());
+#endif
         }
         else
         {

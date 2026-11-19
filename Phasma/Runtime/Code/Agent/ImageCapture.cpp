@@ -436,7 +436,7 @@ namespace pe::imagecapture
         const uint32_t width = std::max(image->GetWidth() >> mip, 1u);
         const uint32_t height = std::max(image->GetHeight() >> mip, 1u);
         const size_t rowBytes = static_cast<size_t>(width) * FormatBytesPerPixel(image->GetFormat());
-        const size_t rowPitch = RHII.GetApi() == PE_GRAPHICS_API_DX12 ? RHII.AlignTextureRowPitch(rowBytes) : rowBytes;
+        const size_t rowPitch = RHII.AlignTextureRowPitch(rowBytes); // CopyImageToBuffer's row stride on every API
         const size_t bufferSize = rowPitch * height;
         const size_t cap = args.value("allow_large", false) ? 512 * 1024 * 1024 : 64 * 1024 * 1024;
         if (bufferSize > cap)
