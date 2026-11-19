@@ -386,7 +386,9 @@ namespace pe
         const bool isHotReload = std::filesystem::exists(Path::Executable + "reload_state.json");
         const bool usesDx12StartupOrchestration = UsesDx12StartupOrchestration();
         const bool usesWslDozenVulkan = UsesWslDozenVulkan();
-#ifdef NDEBUG
+// The browser page shows its own loading line, and a second SDL window there is the same canvas, whose WebGPU context
+// leaves no 2D context for the splash renderer.
+#if defined(NDEBUG) && !defined(PE_WEB)
         if (!isHotReload && !usesDx12StartupOrchestration && !usesWslDozenVulkan)
             m_splashScreen = SplashScreen::Create(SDL_WINDOW_SHOWN | SDL_WINDOW_BORDERLESS, GetMainWindowDisplayIndex());
 #endif

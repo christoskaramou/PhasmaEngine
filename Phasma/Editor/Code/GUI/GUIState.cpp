@@ -4,6 +4,8 @@
 #if defined(_WIN32)
 #include <windows.h>
 #include <shellapi.h>
+#else
+#include <unistd.h>
 #endif
 
 namespace

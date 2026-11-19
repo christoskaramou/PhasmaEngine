@@ -72,6 +72,24 @@
             }
         },
         {
+            "name": "wasm-editor",
+            "displayName": "Emscripten browser editor (WebGPU)",
+            "description": "PhasmaEditor.html/.js/.wasm with the editor linked in statically. Needs EMSDK; reuses the wasm-player dependency sources but builds them in its own folder.",
+            "inherits": "wasm-player",
+            "binaryDir": "${sourceDir}/build-wasm-editor",
+            "cacheVariables": {
+                "FETCHCONTENT_BASE_DIR": "${sourceDir}/.fetchcontent-wasm-editor",
+                "FETCHCONTENT_SOURCE_DIR_BOX2D": "${sourceDir}/.fetchcontent-wasm/box2d-src",
+                "FETCHCONTENT_SOURCE_DIR_JOLTPHYSICS": "${sourceDir}/.fetchcontent-wasm/joltphysics-src",
+                "FETCHCONTENT_SOURCE_DIR_MESHOPTIMIZER": "${sourceDir}/.fetchcontent-wasm/meshoptimizer-src",
+                "FETCHCONTENT_SOURCE_DIR_RECASTNAVIGATION": "${sourceDir}/.fetchcontent-wasm/recastnavigation-src",
+                "FETCHCONTENT_SOURCE_DIR_SPIRVCROSSWEB": "${sourceDir}/.fetchcontent-wasm/spirvcrossweb-src",
+                "PE_BUILD_EDITOR": "ON",
+                "PE_BUILD_MCP": "ON",
+                "PE_BUILD_PLAYER": "OFF"
+            }
+        },
+        {
             "name": "ninja-full",
             "displayName": "Ninja Full (WebGPU + Physics)",
             "description": "Ninja Multi-Config. Everything optional turned on except Tracy. Matches the historic default.",

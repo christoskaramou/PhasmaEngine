@@ -68,7 +68,12 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
         GeometryBuffer indices;
     };
 
-    State s_state;
+    // Per ImGui context (io.BackendRendererUserData): the editor UI and the game's runtime UI have a context each, and
+    // drawn in one frame they must not share a font, uniforms or geometry buffers.
+    State &Bd()
+    {
+        return *static_cast<State *>(ImGui::GetIO().BackendRendererUserData);
+    }
 
     WGPUBindGroupLayout CreateGroupLayout()
     {
@@ -87,7 +92,7 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
         WGPUBindGroupLayoutDescriptor desc{};
         desc.entryCount = 3;
         desc.entries = entries;
-        return wgpuDeviceCreateBindGroupLayout(s_state.device, &desc);
+        return wgpuDeviceCreateBindGroupLayout(Bd().device, &desc);
     }
 
     void CreatePipeline(WGPUTextureFormat targetFormat)
@@ -123,14 +128,14 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
         target.writeMask = WGPUColorWriteMask_All;
 
         WGPUFragmentState fragment{};
-        fragment.module = s_state.module;
+        fragment.module = Bd().module;
         fragment.entryPoint = {"fs", WGPU_STRLEN};
         fragment.targetCount = 1;
         fragment.targets = &target;
 
         WGPURenderPipelineDescriptor desc{};
-        desc.layout = s_state.pipelineLayout;
-        desc.vertex.module = s_state.module;
+        desc.layout = Bd().pipelineLayout;
+        desc.vertex.module = Bd().module;
         desc.vertex.entryPoint = {"vs", WGPU_STRLEN};
         desc.vertex.bufferCount = 1;
         desc.vertex.buffers = &vertexLayout;
@@ -140,7 +145,7 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
         desc.multisample.count = 1;
         desc.multisample.mask = 0xFFFFFFFF;
         desc.fragment = &fragment;
-        s_state.pipeline = wgpuDeviceCreateRenderPipeline(s_state.device, &desc);
+        Bd().pipeline = wgpuDeviceCreateRenderPipeline(Bd().device, &desc);
     }
 
     void EnsureBuffer(GeometryBuffer &geometry, uint64_t size, WGPUBufferUsage usage)
@@ -154,7 +159,7 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
         WGPUBufferDescriptor desc{};
         desc.size = size + size / 2;
         desc.usage = usage | WGPUBufferUsage_CopyDst;
-        geometry.buffer = wgpuDeviceCreateBuffer(s_state.device, &desc);
+        geometry.buffer = wgpuDeviceCreateBuffer(Bd().device, &desc);
         geometry.size = desc.size;
     }
 
@@ -162,8 +167,8 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
     {
         const uint64_t vertexBytes = uint64_t(drawData->TotalVtxCount) * sizeof(ImDrawVert);
         const uint64_t indexBytes = uint64_t(drawData->TotalIdxCount) * sizeof(ImDrawIdx);
-        EnsureBuffer(s_state.vertices, vertexBytes, WGPUBufferUsage_Vertex);
-        EnsureBuffer(s_state.indices, indexBytes, WGPUBufferUsage_Index);
+        EnsureBuffer(Bd().vertices, vertexBytes, WGPUBufferUsage_Vertex);
+        EnsureBuffer(Bd().indices, indexBytes, WGPUBufferUsage_Index);
 
         uint64_t vertexOffset = 0;
         uint64_t indexOffset = 0;
@@ -171,8 +176,8 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
         {
             const uint64_t vertexSize = uint64_t(list->VtxBuffer.Size) * sizeof(ImDrawVert);
             const uint64_t indexSize = uint64_t(list->IdxBuffer.Size) * sizeof(ImDrawIdx);
-            wgpuQueueWriteBuffer(s_state.queue, s_state.vertices.buffer, vertexOffset, list->VtxBuffer.Data, vertexSize);
-            wgpuQueueWriteBuffer(s_state.queue, s_state.indices.buffer, indexOffset, list->IdxBuffer.Data, indexSize);
+            wgpuQueueWriteBuffer(Bd().queue, Bd().vertices.buffer, vertexOffset, list->VtxBuffer.Data, vertexSize);
+            wgpuQueueWriteBuffer(Bd().queue, Bd().indices.buffer, indexOffset, list->IdxBuffer.Data, indexSize);
             vertexOffset += vertexSize;
             indexOffset += indexSize;
         }
@@ -188,7 +193,7 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
             -1.0f - drawData->DisplayPos.x * scaleX,
             1.0f - drawData->DisplayPos.y * scaleY,
         };
-        wgpuQueueWriteBuffer(s_state.queue, s_state.uniforms, 0, uniforms, sizeof(uniforms));
+        wgpuQueueWriteBuffer(Bd().queue, Bd().uniforms, 0, uniforms, sizeof(uniforms));
     }
 
     // False when the clipped rectangle is empty.
@@ -218,8 +223,13 @@ fn fs(in : VertexOut) -> @location(0) vec4f {
 
 bool ImGui_ImplWebGpu_Init(WGPUDevice device, WGPUQueue queue, WGPUTextureFormat targetFormat)
 {
-    s_state.device = device;
-    s_state.queue = queue;
+    ImGuiIO &io = ImGui::GetIO();
+    IM_ASSERT(!io.BackendRendererUserData && "the WebGPU renderer is already initialised for this context");
+    io.BackendRendererUserData = IM_NEW(State)();
+    io.BackendRendererName = "imgui_impl_webgpu";
+
+    Bd().device = device;
+    Bd().queue = queue;
 
     WGPUShaderSourceWGSL wgsl{};
     wgsl.chain.sType = WGPUSType_ShaderSourceWGSL;
@@ -227,13 +237,13 @@ bool ImGui_ImplWebGpu_Init(WGPUDevice device, WGPUQueue queue, WGPUTextureFormat
     WGPUShaderModuleDescriptor moduleDesc{};
     moduleDesc.nextInChain = &wgsl.chain;
     moduleDesc.label = {"ImGui", WGPU_STRLEN};
-    s_state.module = wgpuDeviceCreateShaderModule(device, &moduleDesc);
+    Bd().module = wgpuDeviceCreateShaderModule(device, &moduleDesc);
 
-    s_state.groupLayout = CreateGroupLayout();
+    Bd().groupLayout = CreateGroupLayout();
     WGPUPipelineLayoutDescriptor layoutDesc{};
     layoutDesc.bindGroupLayoutCount = 1;
-    layoutDesc.bindGroupLayouts = &s_state.groupLayout;
-    s_state.pipelineLayout = wgpuDeviceCreatePipelineLayout(device, &layoutDesc);
+    layoutDesc.bindGroupLayouts = &Bd().groupLayout;
+    Bd().pipelineLayout = wgpuDeviceCreatePipelineLayout(device, &layoutDesc);
     CreatePipeline(targetFormat);
 
     WGPUSamplerDescriptor samplerDesc{};
@@ -245,12 +255,12 @@ bool ImGui_ImplWebGpu_Init(WGPUDevice device, WGPUQueue queue, WGPUTextureFormat
     samplerDesc.mipmapFilter = WGPUMipmapFilterMode_Nearest;
     samplerDesc.lodMaxClamp = 32.0f;
     samplerDesc.maxAnisotropy = 1;
-    s_state.sampler = wgpuDeviceCreateSampler(device, &samplerDesc);
+    Bd().sampler = wgpuDeviceCreateSampler(device, &samplerDesc);
 
     WGPUBufferDescriptor uniformDesc{};
     uniformDesc.size = sizeof(float) * 4;
     uniformDesc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
-    s_state.uniforms = wgpuDeviceCreateBuffer(device, &uniformDesc);
+    Bd().uniforms = wgpuDeviceCreateBuffer(device, &uniformDesc);
     return true;
 }
 
@@ -258,21 +268,21 @@ ImTextureID ImGui_ImplWebGpu_AddTexture(WGPUTextureView view)
 {
     WGPUBindGroupEntry entries[3] = {};
     entries[0].binding = 0;
-    entries[0].buffer = s_state.uniforms;
+    entries[0].buffer = Bd().uniforms;
     entries[0].size = sizeof(float) * 4;
     entries[1].binding = 1;
-    entries[1].sampler = s_state.sampler;
+    entries[1].sampler = Bd().sampler;
     entries[2].binding = 2;
     entries[2].textureView = view;
 
     WGPUBindGroupDescriptor desc{};
-    desc.layout = s_state.groupLayout;
+    desc.layout = Bd().groupLayout;
     desc.entryCount = 3;
     desc.entries = entries;
 
     Texture *texture = IM_NEW(Texture);
     texture->view = view;
-    texture->group = wgpuDeviceCreateBindGroup(s_state.device, &desc);
+    texture->group = wgpuDeviceCreateBindGroup(Bd().device, &desc);
     return static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(texture));
 }
 
@@ -301,19 +311,19 @@ void ImGui_ImplWebGpu_CreateFontsTexture()
     desc.format = WGPUTextureFormat_RGBA8Unorm;
     desc.mipLevelCount = 1;
     desc.sampleCount = 1;
-    s_state.fontTexture = wgpuDeviceCreateTexture(s_state.device, &desc);
-    s_state.fontView = wgpuTextureCreateView(s_state.fontTexture, nullptr);
+    Bd().fontTexture = wgpuDeviceCreateTexture(Bd().device, &desc);
+    Bd().fontView = wgpuTextureCreateView(Bd().fontTexture, nullptr);
 
     WGPUTexelCopyTextureInfo destination{};
-    destination.texture = s_state.fontTexture;
+    destination.texture = Bd().fontTexture;
     destination.aspect = WGPUTextureAspect_All;
     WGPUTexelCopyBufferLayout layout{};
     layout.bytesPerRow = uint32_t(width) * 4;
     layout.rowsPerImage = uint32_t(height);
-    wgpuQueueWriteTexture(s_state.queue, &destination, pixels, size_t(width) * height * 4, &layout, &desc.size);
+    wgpuQueueWriteTexture(Bd().queue, &destination, pixels, size_t(width) * height * 4, &layout, &desc.size);
 
-    s_state.fontId = ImGui_ImplWebGpu_AddTexture(s_state.fontView);
-    io.Fonts->SetTexID(s_state.fontId);
+    Bd().fontId = ImGui_ImplWebGpu_AddTexture(Bd().fontView);
+    io.Fonts->SetTexID(Bd().fontId);
 }
 
 void ImGui_ImplWebGpu_RenderDrawData(ImDrawData *drawData, WGPURenderPassEncoder pass, uint32_t width, uint32_t height)
@@ -324,10 +334,10 @@ void ImGui_ImplWebGpu_RenderDrawData(ImDrawData *drawData, WGPURenderPassEncoder
     UploadGeometry(drawData);
     WriteUniforms(drawData);
 
-    wgpuRenderPassEncoderSetPipeline(pass, s_state.pipeline);
+    wgpuRenderPassEncoderSetPipeline(pass, Bd().pipeline);
     wgpuRenderPassEncoderSetViewport(pass, 0.0f, 0.0f, float(width), float(height), 0.0f, 1.0f);
-    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, s_state.vertices.buffer, 0, WGPU_WHOLE_SIZE);
-    wgpuRenderPassEncoderSetIndexBuffer(pass, s_state.indices.buffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, Bd().vertices.buffer, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderSetIndexBuffer(pass, Bd().indices.buffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
 
     uint32_t listVertexOffset = 0;
     uint32_t listIndexOffset = 0;
@@ -356,23 +366,27 @@ void ImGui_ImplWebGpu_RenderDrawData(ImDrawData *drawData, WGPURenderPassEncoder
 
 void ImGui_ImplWebGpu_Shutdown()
 {
-    ImGui_ImplWebGpu_RemoveTexture(s_state.fontId);
-    if (s_state.fontView)
-        wgpuTextureViewRelease(s_state.fontView);
-    if (s_state.fontTexture)
-        wgpuTextureRelease(s_state.fontTexture);
-    if (s_state.vertices.buffer)
-        wgpuBufferRelease(s_state.vertices.buffer);
-    if (s_state.indices.buffer)
-        wgpuBufferRelease(s_state.indices.buffer);
+    ImGui_ImplWebGpu_RemoveTexture(Bd().fontId);
+    if (Bd().fontView)
+        wgpuTextureViewRelease(Bd().fontView);
+    if (Bd().fontTexture)
+        wgpuTextureRelease(Bd().fontTexture);
+    if (Bd().vertices.buffer)
+        wgpuBufferRelease(Bd().vertices.buffer);
+    if (Bd().indices.buffer)
+        wgpuBufferRelease(Bd().indices.buffer);
 
-    wgpuBufferRelease(s_state.uniforms);
-    wgpuSamplerRelease(s_state.sampler);
-    wgpuRenderPipelineRelease(s_state.pipeline);
-    wgpuPipelineLayoutRelease(s_state.pipelineLayout);
-    wgpuBindGroupLayoutRelease(s_state.groupLayout);
-    wgpuShaderModuleRelease(s_state.module);
-    s_state = {};
+    wgpuBufferRelease(Bd().uniforms);
+    wgpuSamplerRelease(Bd().sampler);
+    wgpuRenderPipelineRelease(Bd().pipeline);
+    wgpuPipelineLayoutRelease(Bd().pipelineLayout);
+    wgpuBindGroupLayoutRelease(Bd().groupLayout);
+    wgpuShaderModuleRelease(Bd().module);
+
+    ImGuiIO &io = ImGui::GetIO();
+    IM_DELETE(&Bd());
+    io.BackendRendererUserData = nullptr;
+    io.BackendRendererName = nullptr;
 }
 
 #endif

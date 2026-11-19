@@ -158,6 +158,7 @@ if(PE_WEB)
 endif()
 
 include(cmake/PhasmaRuntimeLayout.cmake)
+include(cmake/PhasmaWebPage.cmake)
 pe_add_root_runtime_dependencies_target()
 
 if(CMAKE_SYSTEM_NAME STREQUAL "Android" OR PE_WEB)
@@ -488,8 +489,16 @@ list(FILTER ASSET_FILES EXCLUDE REGEX "\\.obj$")
 file(GLOB_RECURSE EDITOR_ASSET_FILES CONFIGURE_DEPENDS "${PE_EDITOR_ASSETS_SOURCE_DIR}/*")
 set(PE_SHARED_IMGUI_BACKEND_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/ImGuiRuntimeUiBackend.cpp"
-    "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_vulkan.cpp"
 )
+if(PE_WEB)
+    list(APPEND PE_SHARED_IMGUI_BACKEND_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_webgpu.cpp"
+    )
+else()
+    list(APPEND PE_SHARED_IMGUI_BACKEND_SOURCES
+        "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_vulkan.cpp"
+    )
+endif()
 if(WIN32)
     list(APPEND PE_SHARED_IMGUI_BACKEND_SOURCES
         "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Runtime/Code/UI/Backends/imgui_impl_dx12.cpp"
@@ -497,8 +506,14 @@ if(WIN32)
 endif()
 set_source_files_properties(${ASSET_FILES} PROPERTIES VS_TOOL_OVERRIDE "None")
 
-# PhasmaEditorModule (SHARED) — all editor code lives in DLL
-add_library(PhasmaEditorModule SHARED
+# PhasmaEditorModule: all editor code, a hot-reloaded DLL on the desktop. The browser cannot load one, so the web host
+# links it statically (docs/wiki/superpowers/specs/2026-11-18-web-editor-analysis.md, 1A).
+if(PE_WEB)
+    set(PE_EDITOR_MODULE_KIND STATIC)
+else()
+    set(PE_EDITOR_MODULE_KIND SHARED)
+endif()
+add_library(PhasmaEditorModule ${PE_EDITOR_MODULE_KIND}
     ${CODE_SRC_FILES}
     ${IMGUI_SRC_FILES}
     ${PE_SHARED_IMGUI_BACKEND_SOURCES}
@@ -557,10 +572,11 @@ target_link_libraries(PhasmaEditorModule PRIVATE
     meshoptimizer
     Lua
     ${PE_SPIRV_CROSS_CORE_LIB}
-    SDL2
-    SDL2main
-    vulkan
 )
+if(NOT PE_WEB)
+    # The browser build takes SDL2 from Emscripten's -sUSE_SDL=2 port and has no Vulkan.
+    target_link_libraries(PhasmaEditorModule PRIVATE SDL2 SDL2main vulkan)
+endif()
 # $<LINK_LIBRARY:WHOLE_ARCHIVE> needs CMake 3.24; the project minimum is 3.22 (Android
 # NDK toolchain), so fall back to the linker-native whole-archive flags on older CMake.
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.24)
@@ -613,7 +629,15 @@ target_include_directories(PhasmaEditor PRIVATE ${PHASMA_EDITOR_HOST_INCLUDES})
 if(PE_CORE_LINK_DIRS)
     target_link_directories(PhasmaEditor PRIVATE ${PE_CORE_LINK_DIRS})
 endif()
-target_link_libraries(PhasmaEditor PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
+if(PE_WEB)
+    target_link_libraries(PhasmaEditor PRIVATE "$<LINK_LIBRARY:WHOLE_ARCHIVE,PhasmaEditorModule>" PhasmaCore PhasmaRuntime)
+    pe_web_page(PhasmaEditor "${CMAKE_CURRENT_SOURCE_DIR}/Phasma/Player/web_shell.html")
+    # Icons and fonts, at /EditorAssets where Path looks under the web root.
+    target_link_options(PhasmaEditor PRIVATE "SHELL:--preload-file ${PE_EDITOR_ASSETS_SOURCE_DIR}@/EditorAssets")
+    set_property(TARGET PhasmaEditor APPEND PROPERTY LINK_DEPENDS ${EDITOR_ASSET_FILES})
+else()
+    target_link_libraries(PhasmaEditor PRIVATE PhasmaCore PhasmaRuntime SDL2 SDL2main)
+endif()
 pe_link_project_native(PhasmaEditor)
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     target_link_libraries(PhasmaEditor PRIVATE dl)

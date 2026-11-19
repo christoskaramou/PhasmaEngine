@@ -4,6 +4,7 @@
 #include "API/Queue.h"
 #include "API/RHI.h"
 #include "API/RenderPass.h"
+#if defined(PE_VULKAN)
 #include "API/Vulkan/RHI_Vulkan.h"
 #include "API/Vulkan/VulkanCommandBufferImpl.h"
 #include "API/Vulkan/VulkanDescriptorImpl.h"
@@ -11,6 +12,14 @@
 #include "API/Vulkan/VulkanQueueImpl.h"
 #include "API/Vulkan/VulkanRenderPassImpl.h"
 #include "API/Vulkan/VulkanSamplerImpl.h"
+#include "imgui_impl_vulkan.h"
+#endif
+#if defined(PE_WEB)
+#include "API/WebGPU/WebGpuCommandBufferImpl.h"
+#include "API/WebGPU/WebGpuImageImpl.h"
+#include "API/WebGPU/WebGpuRhiImpl.h"
+#include "imgui_impl_webgpu.h"
+#endif
 #if defined(PE_WIN32)
 #include "API/DX12/Dx12CommandBufferImpl.h"
 #include "API/DX12/Dx12DescriptorHeap.h"
@@ -21,7 +30,6 @@
 #endif
 #include "imgui/imgui.h"
 #include "imgui/imgui_impl_sdl2.h"
-#include "imgui_impl_vulkan.h"
 
 namespace pe::GUIBackend
 {
@@ -35,7 +43,9 @@ namespace pe::GUIBackend
     bool IsSupported()
     {
         const PeGraphicsApi api = RHII.GetApi();
-#if defined(PE_WIN32)
+#if defined(PE_WEB)
+        return api == PE_GRAPHICS_API_WEBGPU;
+#elif defined(PE_WIN32)
         return api == PE_GRAPHICS_API_VULKAN || api == PE_GRAPHICS_API_DX12;
 #else
         return api == PE_GRAPHICS_API_VULKAN;
@@ -44,7 +54,10 @@ namespace pe::GUIBackend
 
     bool SupportsPlatformWindows()
     {
-#if defined(PE_WIN32)
+#if defined(PE_WEB)
+        // The page has one canvas; docked windows stay inside it.
+        return false;
+#elif defined(PE_WIN32)
         return RHII.GetApi() == PE_GRAPHICS_API_VULKAN || RHII.GetApi() == PE_GRAPHICS_API_DX12;
 #else
         return RHII.GetApi() == PE_GRAPHICS_API_VULKAN;
@@ -63,10 +76,24 @@ namespace pe::GUIBackend
     void Init(Attachment *attachment)
     {
         const PeGraphicsApi api = RHII.GetApi();
-        Queue *queue = RHII.GetMainQueue();
 
+#if defined(PE_WEB)
+        if (api == PE_GRAPHICS_API_WEBGPU)
+        {
+            PE_ERROR_IF(!attachment || !attachment->image, "GUIBackend::Init: display RT must exist before ImGui WebGPU init");
+
+            ImGui_ImplSDL2_InitForOther(RHII.GetWindow());
+
+            WebGpuRhiImpl *rhi = WebGpuRhiImpl::Get();
+            ImGui_ImplWebGpu_Init(rhi->m_device, rhi->m_queue, WebGpuImageImpl::From(attachment->image)->m_format);
+            return;
+        }
+#endif
+
+#if defined(PE_VULKAN)
         if (api == PE_GRAPHICS_API_VULKAN)
         {
+            Queue *queue = RHII.GetMainQueue();
             ImGui_ImplSDL2_InitForVulkan(RHII.GetWindow());
 
             PE_ERROR_IF(!(ImGui::GetIO().BackendFlags & ImGuiBackendFlags_PlatformHasViewports),
@@ -94,6 +121,7 @@ namespace pe::GUIBackend
             ImGui_ImplVulkan_Init(&initInfo);
             return;
         }
+#endif
 
 #if defined(PE_WIN32)
         if (api == PE_GRAPHICS_API_DX12)
@@ -147,7 +175,9 @@ namespace pe::GUIBackend
 
     void Shutdown()
     {
-#if defined(PE_WIN32)
+#if defined(PE_WEB)
+        ImGui_ImplWebGpu_Shutdown();
+#elif defined(PE_WIN32)
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
             ImGui_ImplDX12_Shutdown();
         else
@@ -162,11 +192,13 @@ namespace pe::GUIBackend
     {
         ImGui_ImplSDL2_NewFrame();
 
+#if defined(PE_VULKAN)
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
         {
             ImGui_ImplVulkan_NewFrame();
             return;
         }
+#endif
 
 #if defined(PE_WIN32)
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
@@ -176,17 +208,31 @@ namespace pe::GUIBackend
 
     void CreateFontsTexture()
     {
+#if defined(PE_WEB)
+        ImGui_ImplWebGpu_CreateFontsTexture();
+#elif defined(PE_VULKAN)
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
             ImGui_ImplVulkan_CreateFontsTexture();
+#endif
     }
 
     void RenderDrawData(CommandBuffer *cmd)
     {
+#if defined(PE_WEB)
+        ImDrawData *drawData = ImGui::GetDrawData();
+        const uint32_t width = static_cast<uint32_t>(drawData->DisplaySize.x * drawData->FramebufferScale.x);
+        const uint32_t height = static_cast<uint32_t>(drawData->DisplaySize.y * drawData->FramebufferScale.y);
+        ImGui_ImplWebGpu_RenderDrawData(drawData, WebGpuCommandBufferImpl::From(cmd)->GetRenderPass(), width, height);
+        return;
+#endif
+
+#if defined(PE_VULKAN)
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
         {
             ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), GetVulkanCommandBuffer(cmd));
             return;
         }
+#endif
 
 #if defined(PE_WIN32)
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
@@ -219,6 +265,13 @@ namespace pe::GUIBackend
         if (!image || !image->GetSampler() || !image->GetSRV())
             return nullptr;
 
+#if defined(PE_WEB)
+        // The WebGPU renderer samples every texture with its own linear sampler.
+        const ImTextureID id = ImGui_ImplWebGpu_AddTexture(WebGpuImageViewImpl::From(image->GetSRV())->m_view);
+        return reinterpret_cast<void *>(static_cast<uintptr_t>(id));
+#endif
+
+#if defined(PE_VULKAN)
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
         {
             VkSampler sampler = pe::GetVulkanSampler(image->GetSampler());
@@ -228,6 +281,7 @@ namespace pe::GUIBackend
 
             return (void *)ImGui_ImplVulkan_AddTexture(sampler, view, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
         }
+#endif
 
 #if defined(PE_WIN32)
         if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
@@ -261,10 +315,15 @@ namespace pe::GUIBackend
         if (!textureID)
             return;
 
+#if defined(PE_WEB)
+        ImGui_ImplWebGpu_RemoveTexture(static_cast<ImTextureID>(reinterpret_cast<uintptr_t>(textureID)));
+#endif
+#if defined(PE_VULKAN)
         if (RHII.GetApi() == PE_GRAPHICS_API_VULKAN)
         {
             ImGui_ImplVulkan_RemoveTexture((VkDescriptorSet)textureID);
         }
+#endif
 #if defined(PE_WIN32)
         else if (RHII.GetApi() == PE_GRAPHICS_API_DX12)
         {

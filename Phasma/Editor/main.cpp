@@ -3,6 +3,13 @@
 #include "API/RHI.h"
 #include "Runtime/RuntimeHost.h"
 
+#if defined(PE_WEB)
+#include "App/EditorModule.h"
+
+// Defined with EM_ASYNC_JS in PlayerHost.cpp: suspends through JSPI until the next animation frame, when the browser
+// presents the canvas.
+extern "C" void PeAwaitAnimationFrame();
+#else
 #if defined(PE_LINUX)
 static constexpr const char *k_moduleName = "libPhasmaEditorModule.so";
 static constexpr const char *k_versionedModulePrefix = "libPhasmaEditorModule_";
@@ -206,6 +213,7 @@ namespace
         m = {};
     }
 } // namespace
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -248,6 +256,10 @@ int main(int argc, char *argv[])
         // App.cpp's early Show()/Maximize() doesn't trigger a swapchain recreate.
         windowDesc.flags |= SDL_WINDOW_MAXIMIZED;
 #endif
+#if defined(PE_WEB)
+        // As in the player: the canvas renders at CSS pixels, the units of input and the swapchain.
+        windowDesc.flags &= ~SDL_WINDOW_ALLOW_HIGHDPI;
+#endif
         // Show/maximize before RHI init creates the Vulkan surface/swapchain.
         // Windows WSI caches a redirected present path on a hidden HWND; Mesa
         // Dozen on WSLg registers its WSLg-mirror handle on the wl_surface at
@@ -268,6 +280,16 @@ int main(int argc, char *argv[])
         }
 #endif
 
+#if defined(PE_WEB)
+        while (TickEditorModule())
+        {
+            pe::FrameTimer::Instance().EndFrame();
+            PeAwaitAnimationFrame();
+        }
+
+        DestroyEditorModule();
+        return 0;
+#else
         ModuleHandle mod = LoadModule();
         if (!mod.lib)
             return 1;
@@ -301,6 +323,7 @@ int main(int argc, char *argv[])
 
         UnloadModule(mod, ModuleUnloadMode::ProcessExit);
         return 0;
+#endif
     }
     catch (const std::exception &e)
     {
