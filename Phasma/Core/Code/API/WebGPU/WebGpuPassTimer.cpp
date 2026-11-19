@@ -1,8 +1,11 @@
 #include "API/WebGPU/WebGpuPassTimer.h"
 #include "API/Debug.h"
+#include "API/RHI.h"
 #include "API/WebGPU/WebGpuRhiImpl.h"
 #include "Base/EventSystem.h"
 #include "Base/Timer.h"
+
+#include <map>
 
 namespace pe
 {
@@ -10,6 +13,7 @@ namespace pe
     {
         WGPUBuffer buffer = nullptr;
         std::vector<std::string> names;
+        uint32_t frame = 0; // the frame counter at the submit
     };
 
     namespace
@@ -19,6 +23,15 @@ namespace pe
         // Mappable buffers that are not waiting for results, shared by every recording.
         // ponytail: never released; they live as long as the page's device does.
         std::vector<WGPUBuffer> s_idleBuffers;
+
+        // One frame's results, which map one command buffer at a time and are handed on together.
+        struct FrameResults
+        {
+            uint32_t pending = 0; // command buffers still mapping
+            std::vector<GpuTimerSample> samples;
+        };
+
+        std::map<uint32_t, FrameResults> s_frames;
 
         WGPUBuffer CreateBuffer(WGPUBufferUsage usage, uint64_t size)
         {
@@ -133,12 +146,41 @@ namespace pe
 
             wgpuBufferUnmap(results->buffer);
             s_idleBuffers.push_back(results->buffer);
-            if (!samples.empty())
-                EventSystem::DispatchEvent(EventType::AfterCommandWait, std::any{std::move(samples)});
+
+            // Gone when DispatchCompletedFrame already passed this frame by.
+            auto frame = s_frames.find(results->frame);
+            if (frame == s_frames.end())
+                return;
+
+            frame->second.samples.insert(frame->second.samples.end(), samples.begin(), samples.end());
+            frame->second.pending--;
         };
 
+        m_results->frame = RHII.GetFrameCounter();
+        s_frames[m_results->frame].pending++;
         wgpuBufferMapAsync(m_results->buffer, WGPUMapMode_Read, 0, m_results->names.size() * kPassBytes, info);
         m_results = nullptr;
+    }
+
+    void WebGpuPassTimer::DispatchCompletedFrame()
+    {
+        // The newest earlier frame whose every command buffer has mapped. Older frames, done or not, are dropped, so
+        // listeners get one whole frame at a time, as the other backends give them, never part of one or two at once.
+        const uint32_t current = RHII.GetFrameCounter();
+        auto newest = s_frames.end();
+        for (auto it = s_frames.begin(); it != s_frames.end(); ++it)
+        {
+            if (it->first != current && it->second.pending == 0)
+                newest = it;
+        }
+
+        if (newest == s_frames.end())
+            return;
+
+        std::vector<GpuTimerSample> samples = std::move(newest->second.samples);
+        s_frames.erase(s_frames.begin(), std::next(newest));
+        if (!samples.empty())
+            EventSystem::DispatchEvent(EventType::AfterCommandWait, std::any{std::move(samples)});
     }
 
     void WebGpuPassTimer::Reset()

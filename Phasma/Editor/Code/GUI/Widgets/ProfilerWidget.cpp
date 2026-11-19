@@ -60,8 +60,13 @@ namespace pe
                 const auto &s = samples[i];
                 if (s.depth == 0)
                     continue;
+
+#if !defined(PE_WEB)
+                // On the web a 0 is real: Chrome quantizes WebGPU timestamps unless its developer features are on, so a
+                // short pass reads 0 in some frames, and hiding it made the row blink.
                 if (s.timeMs <= 0.f)
                     continue;
+#endif
 
                 if (filter[0] != '\0')
                 {
@@ -478,12 +483,25 @@ namespace pe
         if (!latestGpuData.empty())
         {
             d.gpuSamples = std::move(latestGpuData);
+
+            // The total sums the outermost samples: whole command buffers (depth 0), or on WebGPU, which stamps only
+            // passes (depth 1), the passes.
+            size_t outer = SIZE_MAX;
+            for (const auto &s : d.gpuSamples)
+                outer = std::min(outer, s.depth);
+
             for (const auto &s : d.gpuSamples)
             {
-                if (s.depth == 0)
+                if (s.depth == outer)
                     d.gpuTotal += s.timeMs;
                 m_gpuStats[s.name].Push(s.timeMs);
             }
+        }
+        else
+        {
+            // WebGPU results arrive some frames late, so a refresh can find none: keep showing the last ones.
+            d.gpuSamples = m_data.gpuSamples;
+            d.gpuTotal = m_data.gpuTotal;
         }
 
         m_data = std::move(d);

@@ -6,8 +6,9 @@ namespace pe
 {
     // GPU time of one recording's render and compute passes. WebGPU can only stamp the start and end of a pass
     // (timestampWrites), so there is one sample per pass and none for the whole command buffer. The results are
-    // mapped after the submit and arrive some frames later as an AfterCommandWait event, the same samples the other
-    // backends' GpuTimer gives. Passes are timed while Debug::IsGpuTimingEnabled and the device has timestamp-query.
+    // mapped after the submit, gathered per frame, and DispatchCompletedFrame hands the newest whole frame on some
+    // frames later as an AfterCommandWait event, the same samples the other backends' GpuTimer gives. Passes are timed
+    // while Debug::IsGpuTimingEnabled and the device has timestamp-query.
     // ponytail: the backend's own blit and clear passes are not timed; pass their descriptors through Add if needed.
     class WebGpuPassTimer
     {
@@ -18,6 +19,8 @@ namespace pe
         void Resolve(WGPUCommandEncoder encoder);                    // after the last pass, before Finish
         void ReadBack();                                             // after the submit
         void Reset();                                                // the recording was dropped
+
+        static void DispatchCompletedFrame(); // once per frame, on the main thread
 
     private:
         struct Results;

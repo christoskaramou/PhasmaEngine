@@ -5,6 +5,7 @@
 #include "API/Swapchain.h"
 #include "API/WebGPU/WebGpuFormat.h"
 #include "API/WebGPU/WebGpuImageImpl.h"
+#include "API/WebGPU/WebGpuPassTimer.h"
 #include "API/WebGPU/WebGpuRhiImpl.h"
 
 namespace pe
@@ -131,6 +132,8 @@ namespace pe
 
     uint32_t WebGpuSwapchainImpl::AquireNextImage(Semaphore *)
     {
+        WebGpuPassTimer::DispatchCompletedFrame();
+
         WGPUSurfaceTexture surfaceTexture{};
         wgpuSurfaceGetCurrentTexture(WebGpuSurfaceImpl::From(m_surface)->m_surface, &surfaceTexture);
         const bool ok = surfaceTexture.status == WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal ||
