@@ -1,11 +1,22 @@
 
 
+#if defined(PE_WEB)
+#include <emscripten/emscripten.h>
+#endif
+
 namespace pe
 {
+#if defined(PE_WEB)
+    ProfilerClock::time_point ProfilerClock::now()
+    {
+        return time_point(duration(emscripten_get_now()));
+    }
+#endif
+
     std::vector<Profiler::Entry> Profiler::s_entries[2];
     std::vector<Profiler::Counter> Profiler::s_counters[2];
     float Profiler::s_frameTimes[2] = {};
-    std::chrono::high_resolution_clock::time_point Profiler::s_frameStart;
+    ProfilerClock::time_point Profiler::s_frameStart;
     thread_local std::vector<Profiler::ActiveScope> Profiler::s_scopeStack;
     thread_local uint32_t Profiler::s_currentDepth = 0;
     uint32_t Profiler::s_writeIndex = 0;
@@ -67,7 +78,7 @@ namespace pe
     void Profiler::BeginFrame()
     {
         std::lock_guard<std::mutex> lock(ProfilerMutex());
-        s_frameStart = std::chrono::high_resolution_clock::now();
+        s_frameStart = ProfilerClock::now();
         EnsureCapacity(s_entries[s_writeIndex]);
         g_entryCount[s_writeIndex].store(0, std::memory_order_relaxed);
         s_counters[s_writeIndex].clear();
@@ -84,7 +95,7 @@ namespace pe
         while (!s_scopeStack.empty())
             EndScope();
 
-        auto now = std::chrono::high_resolution_clock::now();
+        auto now = ProfilerClock::now();
         std::lock_guard<std::mutex> lock(ProfilerMutex());
         s_frameTimes[s_writeIndex] = std::chrono::duration<float, std::milli>(now - s_frameStart).count();
 
@@ -93,7 +104,7 @@ namespace pe
 
     void Profiler::BeginScope(const char *name)
     {
-        const auto start = std::chrono::high_resolution_clock::now();
+        const auto start = ProfilerClock::now();
         const uint32_t writeIndex = s_writeIndex;
         const uint32_t index = g_entryCount[writeIndex].fetch_add(1, std::memory_order_relaxed);
         // Scopes fired before the first BeginFrame safely no-op the write.
@@ -121,7 +132,7 @@ namespace pe
         if (s_scopeStack.empty())
             return;
 
-        auto end = std::chrono::high_resolution_clock::now();
+        auto end = ProfilerClock::now();
         const ActiveScope scope = s_scopeStack.back();
 
         if (scope.entryIndex < s_entries[scope.writeIndex].size())

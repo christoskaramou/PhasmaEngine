@@ -6,6 +6,23 @@
 
 namespace pe
 {
+#if defined(PE_WEB)
+    // performance.now() through one emscripten_get_now import. std::chrono's clocks reach it through WASI clock_time_get
+    // and a BigInt conversion: switching saved the Sponza web editor 0.11-0.14 ms a frame (2026-11-19 profile).
+    struct ProfilerClock
+    {
+        using duration = std::chrono::duration<double, std::milli>;
+        using rep = duration::rep;
+        using period = duration::period;
+        using time_point = std::chrono::time_point<ProfilerClock>;
+        static constexpr bool is_steady = true;
+
+        static time_point now();
+    };
+#else
+    using ProfilerClock = std::chrono::high_resolution_clock;
+#endif
+
     class Profiler
     {
     public:
@@ -37,7 +54,7 @@ namespace pe
     private:
         struct ActiveScope
         {
-            std::chrono::high_resolution_clock::time_point start;
+            ProfilerClock::time_point start;
             uint32_t entryIndex;
             uint32_t writeIndex;
             uint64_t generation;
@@ -46,7 +63,7 @@ namespace pe
         static std::vector<Entry> s_entries[2];
         static std::vector<Counter> s_counters[2];
         static float s_frameTimes[2];
-        static std::chrono::high_resolution_clock::time_point s_frameStart;
+        static ProfilerClock::time_point s_frameStart;
         static thread_local std::vector<ActiveScope> s_scopeStack;
         static thread_local uint32_t s_currentDepth;
         static uint32_t s_writeIndex;
