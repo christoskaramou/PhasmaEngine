@@ -187,10 +187,13 @@ function Write-BakeSettings([hashtable]$extra) {
 }
 function Invoke-BakeHost([string]$label, [int]$seconds) {
     Write-Host "[bake] launching PhasmaPlayer $label (PHASMA_SPIRV_TARGET=1.2, --api vulkan); waiting ${seconds}s for shader compile..."
-    $proc = Start-Process $player -ArgumentList '--api', 'vulkan' -WorkingDirectory $binDir -WindowStyle Hidden -PassThru
+    # PE_TEST_DISPLAY keeps the host's window off the screen someone is using (the test players' convention).
+    $hostArgs = @('--api', 'vulkan') + $(if ($env:PE_TEST_DISPLAY) { @('--display', $env:PE_TEST_DISPLAY) } else { @() })
+    $proc = Start-Process $player -ArgumentList $hostArgs -WorkingDirectory $binDir -WindowStyle Hidden -PassThru
     Start-Sleep -Seconds $seconds
     if (-not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force
+        $proc.WaitForExit() # its open files (the overlay's audio) are released only once it is gone
         Write-Host "[bake] bake host still running after ${seconds}s (expected) -> stopped."
         return $true
     }
