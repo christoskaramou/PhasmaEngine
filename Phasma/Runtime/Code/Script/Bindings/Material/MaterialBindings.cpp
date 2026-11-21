@@ -379,6 +379,22 @@ namespace pe
         return true;
     }
 
+    // On the shared Material, as double-sidedness above: every mesh using it stops or starts casting.
+    bool SetNodeCastShadows(Scene *s, NodeId *nodeId, int meshIdx, bool castShadows)
+    {
+        if (!s || !s->IsNodeAlive(nodeId) || !s->IsValidMeshIndex(meshIdx) || !s->GetMesh(meshIdx).material)
+            return false;
+        Material *material = s->GetMesh(meshIdx).material;
+        if (material->castShadows == castShadows)
+            return true;
+        material->castShadows = castShadows;
+        material->dirty = true;
+        s->SetInstancesDirty();
+        s->SetMaterialDirty();
+        s->MarkNodeDirty(nodeId);
+        return true;
+    }
+
     bool SetNodeAlphaCutoff(Scene *s, NodeId *nodeId, int meshIdx, float cutoff)
     {
         if (!s || !s->IsNodeAlive(nodeId) || !s->IsValidMeshIndex(meshIdx) || !std::isfinite(cutoff))

@@ -197,6 +197,8 @@ namespace pe
                 }
                 if (mesh.material && mesh.material->doubleSided)
                     flags |= 2u;
+                if (mesh.material && !mesh.material->castShadows)
+                    flags |= 256u; // no shadow (ShadowsVS PeSkipsShadowCaster)
                 if (mesh.material && mesh.material->terrain)
                     flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
                 if (MeshUsesOpenPBR(mesh))
@@ -2971,6 +2973,8 @@ namespace pe
             flags |= 1u;
         if (mesh.material && mesh.material->doubleSided)
             flags |= 2u;
+        if (mesh.material && !mesh.material->castShadows)
+            flags |= 256u; // no shadow (ShadowsVS PeSkipsShadowCaster)
         if (mesh.material && mesh.material->terrain)
             flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
         if (MeshUsesOpenPBR(mesh))

@@ -160,7 +160,7 @@ struct Mesh_Constants
     uint materialId;
     int meshImageIndex[5];
     uint materialByteOffset;
-    uint editorFlags; // 128: MaterialX alpha-blend/transmission mesh (PE_EDITOR_FLAG_MATERIALX_FORWARD)
+    uint editorFlags; // 128: MaterialX alpha-blend/transmission mesh (PE_EDITOR_FLAG_MATERIALX_FORWARD); 256: no shadow
     uint renderType;
     float aabbMinX;
     float aabbMinY;

@@ -1352,6 +1352,15 @@ namespace pe
             return 0;
         };
 #endif
+        m_api.setCastShadows = [](void *ctx, phasma::Node handle, uint32_t castShadows) noexcept -> uint32_t
+        {
+            return GuardApi([&]() -> uint32_t
+                            {
+                NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                if (!node) return 0;
+                Scene *scene = GetActiveScene();
+                return SetNodeCastShadows(scene, node, scene->GetMeshRef(node), castShadows != 0); });
+        };
     }
 
     bool CppScriptSystem::HasModule() const

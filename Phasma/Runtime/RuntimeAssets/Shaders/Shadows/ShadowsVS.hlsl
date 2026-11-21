@@ -19,9 +19,12 @@ float4 mainTintPS(VS_OUTPUT_Position_Uv input) : SV_Target0
 }
 #endif
 
-// Transmission meshes cast into the tint maps alone; the depth maps skip them.
+// Transmission meshes cast into the tint maps alone; the depth maps skip them. A mesh whose material has cast shadows
+// off (editorFlags 0x100) casts into neither.
 bool PeSkipsShadowCaster(Mesh_Constants mesh)
 {
+    if ((mesh.editorFlags & 256u) != 0u)
+        return true;
     const bool transmission = mesh.renderType == 4u; // RenderType::Transmission
 #ifdef PE_SHADOW_TINT
     return !transmission;

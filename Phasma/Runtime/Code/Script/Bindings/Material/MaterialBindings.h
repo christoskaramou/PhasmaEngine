@@ -14,6 +14,7 @@ namespace pe
     bool SetNodeTextureByName(Scene *s, NodeId *nodeId, int meshIdx, std::string_view type, const std::string &path);
     // material.set_double_sided, which flips the mesh's shared material.
     bool SetNodeDoubleSidedFlag(Scene *s, NodeId *nodeId, int meshIdx, bool doubleSided);
+    bool SetNodeCastShadows(Scene *s, NodeId *nodeId, int meshIdx, bool castShadows);
     // material.set(node, "alpha_cutoff", value) on the mesh's material instance.
     bool SetNodeAlphaCutoff(Scene *s, NodeId *nodeId, int meshIdx, float cutoff);
 } // namespace pe

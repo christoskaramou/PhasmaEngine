@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 29;
+    inline constexpr uint32_t ScriptAbiVersion = 30;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -401,6 +401,8 @@ namespace phasma
         uint32_t (*registerTool)(void *, const char *name, const char *description, const char *schemaJson,
                                  ToolHandler handler, void *user) noexcept;
         uint32_t (*unregisterTool)(void *, const char *name) noexcept;
+        // v30: whether the node's mesh casts shadows, on its material (shared, as setDoubleSided). Runtime only.
+        uint32_t (*setCastShadows)(void *, Node, uint32_t castShadows) noexcept;
     };
     struct ScriptDesc
     {
@@ -612,6 +614,10 @@ namespace phasma
             return m_api.setDoubleSided(m_api.context, node, doubleSided) != 0;
         }
         bool SetAlphaCutoff(Node node, float cutoff) const { return m_api.setAlphaCutoff(m_api.context, node, cutoff) != 0; }
+        bool SetCastShadows(Node node, bool castShadows) const
+        {
+            return m_api.setCastShadows(m_api.context, node, castShadows) != 0;
+        }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const
         {

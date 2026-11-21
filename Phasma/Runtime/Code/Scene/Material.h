@@ -94,6 +94,8 @@ namespace pe
         // --- Render state ---
         RenderType renderType = RenderType::Opaque;
         bool doubleSided = false;
+        // false: its meshes stay out of the shadow maps (editorFlags bit 0x100, ShadowsVS). Runtime only, not saved.
+        bool castShadows = true;
 
         // Terrain surface: routes draws to the dedicated triplanar-splat GBuffer pipeline
         // (editorFlags bit 0x10, TerrainGBufferPS).
