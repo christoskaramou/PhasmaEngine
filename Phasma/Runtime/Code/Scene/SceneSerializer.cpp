@@ -2942,11 +2942,10 @@ namespace pe
         return m_scenePath.stem().string();
     }
 
-    void Scene::SaveScene(const std::filesystem::path &file)
+    bool Scene::WriteSceneFile(const std::filesystem::path &file, const std::filesystem::path &sceneDir)
     {
         rapidjson::Document d;
         d.SetObject();
-        const std::filesystem::path sceneDir = file.parent_path();
         SceneSerializationHelper serializer(*this, d);
         serializer.AddSettings();
         serializer.AddSceneScripts();
@@ -2963,7 +2962,7 @@ namespace pe
         if (!ofs.is_open())
         {
             Log::Error("Failed to open file for writing: " + file.string());
-            return;
+            return false;
         }
 
         rapidjson::OStreamWrapper osw(ofs);
@@ -2973,16 +2972,24 @@ namespace pe
         if (!d.Accept(writer))
         {
             Log::Error("Failed to write JSON content (invalid data/encoding?) to: " + file.string());
-            return;
+            return false;
         }
 
-        // The scene counts as saved only once the file is closed, and in the browser once it reached IndexedDB.
         ofs.close();
         if (ofs.fail())
         {
             Log::Error("File stream error while writing to: " + file.string());
-            return;
+            return false;
         }
+
+        return true;
+    }
+
+    void Scene::SaveScene(const std::filesystem::path &file)
+    {
+        // The scene counts as saved only once the file is closed, and in the browser once it reached IndexedDB.
+        if (!WriteSceneFile(file, file.parent_path()))
+            return;
 
         if (!PersistWebProjectEdits())
         {

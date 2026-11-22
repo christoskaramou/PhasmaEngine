@@ -62,10 +62,58 @@
 #include "imgui/imgui_internal.h"
 #include "Base/Process.h"
 
+#if defined(PE_WEB)
+#include "Render/SceneScreenshot.h"
+#endif
+
 namespace pe
 {
     namespace
     {
+#if defined(PE_WEB)
+        // Downloads the scene as it is now, unsaved edits included, through the browser. Not a save: the scene stays
+        // dirty, and its project file and the browser storage are not touched.
+        bool ExportScene()
+        {
+            Scene *scene = GetActiveScene();
+            if (!scene)
+            {
+                Log::Error("Scene export failed: no scene");
+                return false;
+            }
+
+            // A scene stores its file paths relative to its own folder, so they are written as a save there would.
+            const std::string name = scene->GetSceneName() + ".pescene";
+            const std::filesystem::path file = std::filesystem::path("/tmp") / name;
+            std::filesystem::path sceneDir = scene->GetScenePath().parent_path();
+            if (scene->GetScenePath().empty())
+                sceneDir = std::filesystem::path(Path::Assets) / "Scenes";
+
+            const bool written = scene->WriteSceneFile(file, sceneDir);
+            if (written)
+            {
+                PeWebDownloadFile(file.c_str(), "application/json");
+                Log::Info("Scene exported: " + name);
+            }
+            else
+            {
+                Log::Error("Scene export failed: " + name);
+            }
+
+            std::error_code ec;
+            std::filesystem::remove(file, ec);
+            return written;
+        }
+
+        void ShowExportSceneMenuItem()
+        {
+            if (ImGui::MenuItem("Export Scene"))
+                ExportScene();
+
+            ui::ItemTooltip("Download the current scene as a .pescene file. This does not save it.");
+        }
+#endif
+
         // The launcher copies PhasmaEditorModule.dll to a versioned name at start, so a rebuilt DLL is
         // picked up by File > Reload Module (or a restart): the status bar shows which build runs and
         // flags a newer one.
@@ -1013,6 +1061,9 @@ namespace pe
         addAction("file.load_scene", "Load Scene", "File", "command", true, false, false);
         addAction("file.save_scene", "Save Scene", "File", "command", true, false, false);
         addAction("file.save_scene_as", "Save Scene As", "File", "command", true, false, false);
+#if defined(PE_WEB)
+        addAction("file.export_scene", "Export Scene", "File", "command", true, false, false);
+#endif
         addAction("file.reload_module", "Reload Module", "File", "command", true, false, false);
         addAction("editor.module_info", "Editor Module Build (loaded vs on disk)", "Editor", "query", true, false, false);
         addAction("file.exit", "Exit", "File", "command", true, false, false);
@@ -1046,9 +1097,11 @@ namespace pe
         addAction("gizmo.navmesh", "NavMesh Gizmos", "Gizmos", "toggle", true, GUIState::s_useNavMeshGizmos, true);
         addAction("gizmo.orientation", "Orientation Gizmo", "Gizmos", "toggle", true, GUIState::s_useOrientationGizmo, true);
         addAction("gizmo.grid", "Grid", "Gizmos", "toggle", true, globalSettings.draw_grid, true);
+#if !defined(PE_WEB) // the web traces no probes
         addAction("gizmo.gi_probes", "GI Probes", "Gizmos", "toggle", true, globalSettings.draw_gi_probes, true);
         addAction("gizmo.probe_grid", "GI Probe Grid", "Gizmos", "toggle", true, GUIState::s_useProbeGridGizmos, true);
         addAction("gizmo.screen_probes", "Screen Probes", "Gizmos", "toggle", true, globalSettings.draw_screen_probes, true);
+#endif
         addAction("gizmo.audio", "Audio Sources", "Gizmos", "toggle", true, GUIState::s_useAudioGizmos, true);
         addAction("gizmo.emitters", "Particle Emitters", "Gizmos", "toggle", true, GUIState::s_useEmitterGizmos, true);
         addAction("gizmo.colliders2d", "2D Colliders", "Gizmos", "toggle", true, GUIState::s_usePhysics2DGizmos, true);
@@ -1377,6 +1430,16 @@ namespace pe
             ShowSaveSceneMenuItem_Action();
             return ok({{"status", "dialog_opened"}});
         }
+
+#if defined(PE_WEB)
+        if (action == "file.export_scene")
+        {
+            if (!ExportScene())
+                return R"({"error":"scene export failed"})";
+
+            return ok({{"status", "exported"}});
+        }
+#endif
 
         if (action == "file.reload_module")
         {
@@ -3039,6 +3102,9 @@ namespace pe
             ShowSaveSceneMenuItem();
             if (ImGui::MenuItem("Save Scene As..."))
                 ShowSaveSceneMenuItem_Action();
+#if defined(PE_WEB)
+            ShowExportSceneMenuItem();
+#endif
             ImGui::Separator();
             if (ImGui::MenuItem("Reload Module"))
                 EventSystem::PushEvent(EventType::ReloadModule);
@@ -3205,6 +3271,9 @@ namespace pe
                 if (ImGui::MenuItem("Save Scene As..."))
                     ShowSaveSceneMenuItem_Action();
                 ui::ItemTooltip("Save the current scene to a new .pescene path.");
+#if defined(PE_WEB)
+                ShowExportSceneMenuItem();
+#endif
                 ImGui::Separator();
                 if (ImGui::MenuItem("Reload Module"))
                     EventSystem::PushEvent(EventType::ReloadModule);
@@ -3356,6 +3425,7 @@ namespace pe
                 ui::ItemTooltip("Show the viewport orientation gizmo.");
                 ImGui::MenuItem("Grid", nullptr, &gSettings.draw_grid);
                 ui::ItemTooltip("Show or hide the editor grid.");
+#if !defined(PE_WEB) // the web traces no probes
                 ImGui::MenuItem("GI Probes", nullptr, &gSettings.draw_gi_probes);
                 ui::ItemTooltip("Global illumination world probes as spheres lit by their own light, hidden behind "
                                 "geometry. Needs Global Illumination on.");
@@ -3365,6 +3435,7 @@ namespace pe
                 ImGui::MenuItem("Screen Probes", nullptr, &gSettings.draw_screen_probes);
                 ui::ItemTooltip("Screen probes (one per 16 px tile) as small spheres lit by their own light. Needs "
                                 "Global Illumination on, raster or hybrid rendering.");
+#endif
                 ImGui::EndMenu();
             }
 
@@ -3818,6 +3889,12 @@ namespace pe
                 QueueMainThreadAction(std::move(fn));
             },
             RHII.GetWindow());
+
+#if defined(PE_WEB)
+        // A browser page cannot listen on a socket, so the web editor has no MCP server.
+        return;
+#endif
+
         m_editorMcp = std::make_unique<EditorMcp>(m_editorToolRuntime.get(), this);
         LoadAgentConfig();
         if (m_mcpStartEnabled)

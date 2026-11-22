@@ -2,6 +2,12 @@
 
 #include <cstddef>
 
+#if defined(PE_WEB)
+// Downloads a file of the page's in-memory file system through the browser, under its own file name. The file is read
+// before this returns, so the caller may delete it afterwards. Defined in SceneScreenshot.cpp (EM_JS).
+extern "C" void PeWebDownloadFile(const char *path, const char *mimeType);
+#endif
+
 namespace pe
 {
     class Buffer;

@@ -143,6 +143,8 @@ namespace pe
     {
         auto &gs = Settings::Get<SceneSettings>();
         bool changed = false;
+
+#if !defined(PE_WEB) // the web has no ray tracing
         {
             const char *rtModeNames[] = {"Raster", "Hybrid", "Ray Tracing"};
             const bool rtSupported = RHII.GetCaps().rayTracing;
@@ -156,12 +158,18 @@ namespace pe
             }
             ui::ItemTooltip("Switch between raster, hybrid, and full ray-tracing render paths.");
         }
+#endif
+
         changed |= ImGui::Checkbox("HDR Scene Color", &gs.hdr);
         ui::ItemTooltip("Preserve bright lighting for tone mapping and scene bloom before the HUD. Uses more GPU memory; GI enables this automatically.");
         changed |= ImGui::Checkbox("Linear Color", &gs.linear_color);
         ui::ItemTooltip("Decode sRGB colour textures and colours before lighting and encode the image once at the end, as Unreal does. Forces HDR scene color and changes how the scene looks.");
+
+#if !defined(PE_WEB) // OpenPBR is desktop only
         changed |= ImGui::Checkbox("OpenPBR", &gs.openpbr);
         changed |= ImGui::Checkbox("OpenPBR debug view", &gs.openpbr_debug);
+#endif
+
         bool dynamicRendering = gs.dynamic_rendering;
         ImGui::BeginDisabled(!RHII.GetCaps().dynamicRendering);
         if (ImGui::Checkbox("Dynamic Rendering", &dynamicRendering))

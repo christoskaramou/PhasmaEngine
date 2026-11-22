@@ -13,9 +13,9 @@
 // clang-format off
 EM_JS_DEPS(PeSceneScreenshot, "$UTF8ToString");
 
-EM_JS(void, PeWebDownloadFile, (const char *path), {
+EM_JS(void, PeWebDownloadFile, (const char *path, const char *mimeType), {
     const file = UTF8ToString(path);
-    const url = URL.createObjectURL(new Blob([FS.readFile(file)], { type: "image/png" }));
+    const url = URL.createObjectURL(new Blob([FS.readFile(file)], { type: UTF8ToString(mimeType) }));
     const link = document.createElement("a");
     link.href = url;
     link.download = file.split("/").pop();
@@ -93,7 +93,7 @@ namespace pe
             if (savedPath)
                 *savedPath = resolvedPath;
 #if defined(PE_WEB)
-            PeWebDownloadFile(resolvedPath.c_str());
+            PeWebDownloadFile(resolvedPath.c_str(), "image/png");
 #endif
         }
         else

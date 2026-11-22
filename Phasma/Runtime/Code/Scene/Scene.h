@@ -155,6 +155,9 @@ namespace pe
         std::pair<LightType, int> GetLightForNode(const NodeId *node) const;
         void NewScene();
         void SaveScene(const std::filesystem::path &file);
+        // Writes the scene to file with its file paths relative to sceneDir. Not a save: the scene path and the dirty
+        // state stay as they are. False when the file was not written in full.
+        bool WriteSceneFile(const std::filesystem::path &file, const std::filesystem::path &sceneDir);
         void LoadScene(const std::filesystem::path &file);
         bool SavePrefab(NodeId *root, const std::filesystem::path &file);
         SceneNodeHandle InstantiatePrefab(const std::filesystem::path &file, NodeId *parent = nullptr);
