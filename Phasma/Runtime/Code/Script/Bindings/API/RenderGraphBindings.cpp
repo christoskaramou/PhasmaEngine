@@ -3,6 +3,7 @@
 #include "API/Command.h"
 #include "API/Image.h"
 #include "Render/FullscreenPasses.h"
+#include "RenderPasses/DepthPass.h" // the cutaway
 #include "Render/SceneRendererHost.h"
 #include "Render/ScriptRenderPasses.h"
 
@@ -92,6 +93,25 @@ namespace pe
                         for (int i = 0; i < 4; ++i)
                             pass.params[i] = params->get_or(i + 1, 0.0f);
                     AddFullscreenPass(name, pass, GetLuaRenderPassOwner());
+                    return true;
+                });
+
+                // render_graph.set_cutaway(ax, ay, az, radius_a, bx, by, bz, radius_b, feather): the capsule the depth
+                // prepass keeps visible behind the meshes material.set_cutaway marked (RenderPasses/DepthPass.h's
+                // Cutaway); radius 0 at both ends turns it off. False for a non-finite or negative value.
+                rg.set_function("set_cutaway", [](float ax, float ay, float az, float radiusA, float bx, float by,
+                                                  float bz, float radiusB, float feather) {
+                    const float values[] = {ax, ay, az, bx, by, bz, radiusA, radiusB, feather};
+                    for (float value : values)
+                    {
+                        if (!std::isfinite(value))
+                            return false;
+                    }
+
+                    if (radiusA < 0.0f || radiusB < 0.0f || feather < 0.0f)
+                        return false;
+
+                    SetCutaway({vec3(ax, ay, az), vec3(bx, by, bz), radiusA, radiusB, feather});
                     return true;
                 });
 

@@ -199,6 +199,8 @@ namespace pe
                     flags |= 2u;
                 if (mesh.material && !mesh.material->castShadows)
                     flags |= 256u; // no shadow (ShadowsVS PeSkipsShadowCaster)
+                if (mesh.material && mesh.material->cutaway)
+                    flags |= 512u; // the cutaway opens it (Common/Cutaway.hlsl)
                 if (mesh.material && mesh.material->terrain)
                     flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
                 if (MeshUsesOpenPBR(mesh))
@@ -2975,6 +2977,8 @@ namespace pe
             flags |= 2u;
         if (mesh.material && !mesh.material->castShadows)
             flags |= 256u; // no shadow (ShadowsVS PeSkipsShadowCaster)
+        if (mesh.material && mesh.material->cutaway)
+            flags |= 512u; // the cutaway opens it (Common/Cutaway.hlsl)
         if (mesh.material && mesh.material->terrain)
             flags |= 16u; // dedicated terrain triplanar pipeline (cull bucket 8)
         if (MeshUsesOpenPBR(mesh))

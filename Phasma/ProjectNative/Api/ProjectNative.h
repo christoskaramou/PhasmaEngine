@@ -14,7 +14,7 @@ namespace phasma
     // and ScriptModule layouts are frozen. Modules accept any host ScriptApi with version >= their
     // ScriptAbiVersion and size >= their sizeof(ScriptApi); PhasmaGetScriptModule(hostVersion) returns
     // the module when hostVersion >= its ScriptAbiVersion; hosts accept [ScriptAbiMinVersion, ScriptAbiVersion].
-    inline constexpr uint32_t ScriptAbiVersion = 30;
+    inline constexpr uint32_t ScriptAbiVersion = 31;
     inline constexpr uint32_t ScriptAbiMinVersion = 5; // v4 modules demand an exact host match
     using Node = uint64_t;
     struct Vec3
@@ -403,6 +403,14 @@ namespace phasma
         uint32_t (*unregisterTool)(void *, const char *name) noexcept;
         // v30: whether the node's mesh casts shadows, on its material (shared, as setDoubleSided). Runtime only.
         uint32_t (*setCastShadows)(void *, Node, uint32_t castShadows) noexcept;
+        // v31: the cutaway, which keeps a capsule visible behind scenery. setCutaway marks the meshes of the node and
+        // of every descendant (on their shared materials, runtime only); 0 when none has a mesh. setCutawayVolume
+        // places the capsule (world units; radius 0 at both ends turns it off): the depth prepass opens the marked
+        // meshes that stand between the camera and it, fully inside its outline and as a screen-fixed ordered dither
+        // across the feather. Shadows are not opened. It lasts until set again or play stops. 0 for a non-finite or
+        // negative value.
+        uint32_t (*setCutaway)(void *, Node, uint32_t cutaway) noexcept;
+        uint32_t (*setCutawayVolume)(void *, Vec3 a, float radiusA, Vec3 b, float radiusB, float feather) noexcept;
     };
     struct ScriptDesc
     {
@@ -617,6 +625,11 @@ namespace phasma
         bool SetCastShadows(Node node, bool castShadows) const
         {
             return m_api.setCastShadows(m_api.context, node, castShadows) != 0;
+        }
+        bool SetCutaway(Node node, bool cutaway) const { return m_api.setCutaway(m_api.context, node, cutaway) != 0; }
+        bool SetCutawayVolume(Vec3 a, float radiusA, Vec3 b, float radiusB, float feather) const
+        {
+            return m_api.setCutawayVolume(m_api.context, a, radiusA, b, radiusB, feather) != 0;
         }
         template <uint32_t N>
         bool LaunchOption(const char *name, char (&out)[N]) const

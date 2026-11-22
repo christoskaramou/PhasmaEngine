@@ -13,10 +13,40 @@ namespace pe
     class Scene;
     struct BlendState;
 
+    // A capsule a script keeps visible (phasma::World::SetCutawayVolume, render_graph.set_cutaway): the depth
+    // prepass opens the meshes marked for it (Material::cutaway) where they stand between the camera and the capsule,
+    // fully inside its outline and as an ordered dither across the feather (Common/Cutaway.hlsl). World units; a
+    // radius of 0 at both ends turns it off. It lasts until set again and is cleared when its script system stops.
+    struct Cutaway
+    {
+        vec3 a = vec3(0.0f);
+        vec3 b = vec3(0.0f);
+        float radiusA = 0.0f;
+        float radiusB = 0.0f;
+        float feather = 0.0f;
+    };
+
+    void SetCutaway(const Cutaway &cutaway);
+
+    // Common/Cutaway.hlsl's PeCutaway for a target of that size, from the active camera; zero when off.
+    struct CutawayConstants
+    {
+        vec4 a = vec4(0.0f);
+        vec4 b = vec4(0.0f);
+        vec4 params = vec4(0.0f);
+    };
+
+    CutawayConstants GetCutawayConstants(float width, float height);
+
     struct PushConstants_DepthPass
     {
-        uint32_t jointsCount;
+        uint32_t jointsCount = 0;
+        float padding[3] = {};
+        CutawayConstants cutaway;
     };
+
+    // What DepthPass and DepthLatePass push: the joint count and the cutaway for that depth target.
+    PushConstants_DepthPass MakeDepthPassConstants(const Scene &scene, const Image &depth);
 
     class DepthPass : public IRenderPassComponent
     {

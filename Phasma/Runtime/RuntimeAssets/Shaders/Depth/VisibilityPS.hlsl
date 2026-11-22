@@ -1,8 +1,10 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 #include "../Common/MaterialFlags.hlsl"
+#include "../Common/Cutaway.hlsl"
 #include "../Common/DeformedGeometry.hlsl"
 
+[[vk::push_constant]] PushConstants_DepthPass pc;
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
 [[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
 [[vk::binding(0, 2)]] Texture2D pe_textures[] : register(t0, space100);
@@ -17,6 +19,13 @@ float4 SampleArray(float2 uv, uint index)
 uint4 mainPS(PS_INPUT_Position_Uv_ID input) : SV_TARGET0
 {
     const uint id = input.id;
+    if ((constants[id].editorFlags & PE_EDITOR_FLAG_CUTAWAY) != 0u)
+    {
+        const PeCutaway cut = {pc.cutawayA, pc.cutawayB, pc.cutawayParams};
+        if (PeCutawayHole(cut, input.position.xy, PeCutawayCoverage(cut, input.position.xy, input.position.z)))
+            discard;
+    }
+
     const uint e0 = GetAttributeAtVertex(input.visEligible, 0);
     const uint e1 = GetAttributeAtVertex(input.visEligible, 1);
     const uint e2 = GetAttributeAtVertex(input.visEligible, 2);

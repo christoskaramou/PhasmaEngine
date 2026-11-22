@@ -14,6 +14,7 @@
 #include "Navigation/NavScriptApi.h"
 #include "Particles/ParticleManager.h"
 #include "Render/FullscreenPasses.h"
+#include "RenderPasses/DepthPass.h" // the cutaway
 #include "Render/ScriptRenderPasses.h"
 #include "Render/SceneRendererHost.h"
 #include "Scene/Material.h"
@@ -1361,6 +1362,32 @@ namespace pe
                 Scene *scene = GetActiveScene();
                 return SetNodeCastShadows(scene, node, scene->GetMeshRef(node), castShadows != 0); });
         };
+        m_api.setCutaway = [](void *ctx, phasma::Node handle, uint32_t cutaway) noexcept -> uint32_t
+        {
+            return GuardApi([&]() -> uint32_t
+                            {
+                NodeId *node = static_cast<CppScriptSystem *>(ctx)->Resolve(handle);
+                if (!node) return 0;
+                return SetNodeCutaway(GetActiveScene(), node, cutaway != 0); });
+        };
+        m_api.setCutawayVolume = [](void *, phasma::Vec3 a, float radiusA, phasma::Vec3 b, float radiusB,
+                                    float feather) noexcept -> uint32_t
+        {
+            return GuardApi([&]() -> uint32_t
+                            {
+                const float values[] = {a.x, a.y, a.z, b.x, b.y, b.z, radiusA, radiusB, feather};
+                for (float value : values)
+                {
+                    if (!std::isfinite(value))
+                        return 0;
+                }
+
+                if (radiusA < 0.0f || radiusB < 0.0f || feather < 0.0f)
+                    return 0;
+
+                SetCutaway({vec3(a.x, a.y, a.z), vec3(b.x, b.y, b.z), radiusA, radiusB, feather});
+                return 1; });
+        };
     }
 
     bool CppScriptSystem::HasModule() const
@@ -1485,6 +1512,7 @@ namespace pe
         if (m_initialized) // not again from the destructor, which may run after the registry is gone
             DropTools(0);
         ClearFullscreenPasses();
+        SetCutaway({});
         navscript::DestroyAll();
         m_module.Reset();
         m_handles.Clear();
@@ -1556,6 +1584,7 @@ namespace pe
         // Called before the editor restores its scene snapshot; passes a script registered must not
         // survive the snapshot restore, so they are cleared here too (not just on full teardown).
         ClearFullscreenPasses();
+        SetCutaway({});
         m_pendingScene.clear();
         for (auto &instance : m_instances)
         {

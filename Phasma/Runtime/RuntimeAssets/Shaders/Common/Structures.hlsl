@@ -5,6 +5,13 @@
 struct PushConstants_DepthPass
 {
     uint jointsCount;
+    float padding0;
+    float padding1;
+    float padding2;
+    // Common/Cutaway.hlsl's PeCutaway, flat: push constants hold no nested struct on every backend.
+    float4 cutawayA;
+    float4 cutawayB;
+    float4 cutawayParams;
 };
 
 struct PushConstants_OpenPBRMask
@@ -160,7 +167,7 @@ struct Mesh_Constants
     uint materialId;
     int meshImageIndex[5];
     uint materialByteOffset;
-    uint editorFlags; // 128: MaterialX alpha-blend/transmission mesh (PE_EDITOR_FLAG_MATERIALX_FORWARD); 256: no shadow
+    uint editorFlags; // 128: MaterialX alpha-blend/transmission mesh (PE_EDITOR_FLAG_MATERIALX_FORWARD); 256: no shadow; 512: cutaway
     uint renderType;
     float aabbMinX;
     float aabbMinY;

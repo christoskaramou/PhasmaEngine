@@ -8,8 +8,10 @@ namespace pe
     // A fullscreen shader pass over the scene's depth and normals, blended onto the viewport at its render-graph
     // order (phasma::FullscreenPass's contract): the shader provides mainVS / mainPS and reads the depth at binding 0
     // and the normals at binding 1; push constants vec4(1/width, 1/height, max(minThickness, thicknessAt1080 *
-    // height / 1080), camera near) and vec4 params. Added by C++ scripts, Lua (render_graph.add_fullscreen_pass) and
-    // the scene's pipeline script; each owner's passes are cleared together.
+    // height / 1080), camera near), vec4 params, then the cutaway in depth-target pixels (Common/Cutaway.hlsl's
+    // PeCutaway as vec4 2 to 4, zero when off; a shader that declares only the first two ignores it). Added by C++
+    // scripts, Lua (render_graph.add_fullscreen_pass) and the scene's pipeline script; each owner's passes are cleared
+    // together.
     struct FullscreenPassDesc
     {
         std::string shader; // asset path

@@ -1,7 +1,9 @@
 #include "../Common/Structures.hlsl"
 #include "../Common/Common.hlsl"
 #include "../Common/MaterialFlags.hlsl"
+#include "../Common/Cutaway.hlsl"
 
+[[vk::push_constant]] PushConstants_DepthPass pc;
 [[vk::binding(0, 1)]] StructuredBuffer<Mesh_Constants> constants : register(t0, space1);
 [[vk::binding(1, 1)]] SamplerState material_sampler : register(s1, space1);
 #ifdef PE_WEB_PROFILE
@@ -25,6 +27,13 @@ float4 GetBaseColor(uint id, float2 uv)
 void mainPS(PS_INPUT_Position_Uv_ID input)
 {
     const uint id = input.id;
+    if ((constants[id].editorFlags & PE_EDITOR_FLAG_CUTAWAY) != 0u)
+    {
+        const PeCutaway cut = {pc.cutawayA, pc.cutawayB, pc.cutawayParams};
+        if (PeCutawayHole(cut, input.position.xy, PeCutawayCoverage(cut, input.position.xy, input.position.z)))
+            discard;
+    }
+
     float4 sampledBase = HasTexture(constants[id].textureMask, TEX_BASE_COLOR_BIT) ? GetBaseColor(id, input.uv) : float4(1.0f, 1.0f, 1.0f, 1.0f);
     const float spriteBlend = saturate(input.spriteBlend);
     if (spriteBlend > 0.0f && HasTexture(constants[id].textureMask, TEX_BASE_COLOR_BIT))

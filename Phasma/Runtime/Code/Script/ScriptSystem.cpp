@@ -6,6 +6,7 @@
 #include "Camera/Camera.h"
 #include "Base/GamePack.h"
 #include "Render/FullscreenPasses.h"
+#include "RenderPasses/DepthPass.h" // the cutaway
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/ModelAsset.h"
 #if defined(PE_ENABLE_ASSIMP)
@@ -2220,6 +2221,7 @@ namespace pe
         UnloadPipelineScript();
         m_pipelineSceneGeneration = UINT32_MAX; // the reloaded state runs it again
         ClearFullscreenPasses(nullptr);
+        SetCutaway({});
         ClearScriptRenderPasses();
         m_lua = sol::state();
         m_initialized = false;

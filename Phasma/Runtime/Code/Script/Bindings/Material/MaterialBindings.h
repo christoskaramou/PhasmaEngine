@@ -15,6 +15,9 @@ namespace pe
     // material.set_double_sided, which flips the mesh's shared material.
     bool SetNodeDoubleSidedFlag(Scene *s, NodeId *nodeId, int meshIdx, bool doubleSided);
     bool SetNodeCastShadows(Scene *s, NodeId *nodeId, int meshIdx, bool castShadows);
+    // material.set_cutaway: whether the cutaway (RenderPasses/DepthPass.h) opens the meshes of the node and of every
+    // descendant, on their shared materials. False when none of them has a mesh.
+    bool SetNodeCutaway(Scene *s, NodeId *nodeId, bool cutaway);
     // material.set(node, "alpha_cutoff", value) on the mesh's material instance.
     bool SetNodeAlphaCutoff(Scene *s, NodeId *nodeId, int meshIdx, float cutoff);
 } // namespace pe

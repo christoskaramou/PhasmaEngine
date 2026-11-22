@@ -395,6 +395,35 @@ namespace pe
         return true;
     }
 
+    bool SetNodeCutaway(Scene *s, NodeId *nodeId, bool cutaway)
+    {
+        if (!s || !s->IsNodeAlive(nodeId))
+            return false;
+
+        bool found = false;
+        for (int meshIdx : s->GetNodeCache(nodeId).meshRefs->meshRefs)
+        {
+            Material *material = s->IsValidMeshIndex(meshIdx) ? s->GetMesh(meshIdx).material : nullptr;
+            if (!material)
+                continue;
+
+            found = true;
+            if (material->cutaway == cutaway)
+                continue;
+
+            material->cutaway = cutaway;
+            material->dirty = true;
+            s->SetInstancesDirty();
+            s->SetMaterialDirty();
+            s->MarkNodeDirty(nodeId);
+        }
+
+        for (NodeId *child : s->GetChildren(nodeId))
+            found |= SetNodeCutaway(s, child, cutaway);
+
+        return found;
+    }
+
     bool SetNodeAlphaCutoff(Scene *s, NodeId *nodeId, int meshIdx, float cutoff)
     {
         if (!s || !s->IsNodeAlive(nodeId) || !s->IsValidMeshIndex(meshIdx) || !std::isfinite(cutoff))
@@ -808,6 +837,13 @@ namespace pe
                         Scene *s = GetScene();
                         setDoubleSided(s, h.nodeId, ResolveMeshIdx(s, h, slot), doubleSided);
                     }));
+
+                // material.set_cutaway(node, on): whether the cutaway (render_graph.set_cutaway) opens the meshes of
+                // the node and of every descendant. Runtime only.
+                mat.set_function("set_cutaway", [](SceneNodeHandle &h, bool cutaway) {
+                    Scene *s = GetScene();
+                    return s && h.IsValid(*s) && SetNodeCutaway(s, h.nodeId, cutaway);
+                });
 
                 auto getTexMask = [](Scene *s, int meshIdx) -> uint32_t {
                     if (meshIdx < 0) return 0u;

@@ -96,6 +96,8 @@ namespace pe
         bool doubleSided = false;
         // false: its meshes stay out of the shadow maps (editorFlags bit 0x100, ShadowsVS). Runtime only, not saved.
         bool castShadows = true;
+        // true: the cutaway opens its meshes (editorFlags bit 0x200, Common/Cutaway.hlsl). Runtime only, not saved.
+        bool cutaway = false;
 
         // Terrain surface: routes draws to the dedicated triplanar-splat GBuffer pipeline
         // (editorFlags bit 0x10, TerrainGBufferPS).

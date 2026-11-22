@@ -7,6 +7,7 @@
 #include "API/Shader.h"
 #include "Camera/Camera.h"
 #include "Render/SceneRendererHost.h"
+#include "RenderPasses/DepthPass.h" // the cutaway
 #include "Render/ScriptRenderPasses.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneAccess.h"
@@ -85,6 +86,10 @@ namespace pe
             const float thickness = std::max(e.desc.minThickness, e.desc.thicknessAt1080 * h / 1080.0f);
             cmd->SetConstantAt(0, vec4(1.0f / w, 1.0f / h, thickness, nearPlane));
             cmd->SetConstantAt(4, vec4(e.desc.params[0], e.desc.params[1], e.desc.params[2], e.desc.params[3]));
+            const CutawayConstants cutaway = GetCutawayConstants(depth->GetWidth_f(), depth->GetHeight_f());
+            cmd->SetConstantAt(8, cutaway.a);
+            cmd->SetConstantAt(12, cutaway.b);
+            cmd->SetConstantAt(16, cutaway.params);
             cmd->PushConstants();
             cmd->Draw(3, 1, 0, 0);
             cmd->EndPass();

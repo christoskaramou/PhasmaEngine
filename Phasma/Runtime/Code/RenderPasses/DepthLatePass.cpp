@@ -155,8 +155,7 @@ namespace pe
             return; // set A already cleared the depth in DepthPass@200; nothing to add
         }
 
-        PushConstants_DepthPass pushConstants{};
-        pushConstants.jointsCount = static_cast<uint32_t>(m_scene->GetMaxJointCount());
+        const PushConstants_DepthPass pushConstants = MakeDepthPassConstants(*m_scene, *m_depthStencil);
 
         uint32_t frame = RHII.GetFrameIndex();
 
