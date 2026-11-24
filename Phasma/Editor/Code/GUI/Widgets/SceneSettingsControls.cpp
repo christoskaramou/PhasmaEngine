@@ -236,7 +236,7 @@ namespace pe
         }
 
         // The Animator shows scene settings without a navigation system: no section there.
-        const bool hasNav = GetGlobalSystem<NavigationSystem>() != nullptr;
+        const bool hasNav = HasGlobalSystem<NavigationSystem>();
         const bool navOpen = hasNav && ImGui::CollapsingHeader("Navigation");
         if (hasNav)
             ui::ItemTooltip("Bake a navigation mesh from the scene's static physics colliders, for nav.find_path and agents. "
