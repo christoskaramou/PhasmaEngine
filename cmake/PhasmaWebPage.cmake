@@ -10,10 +10,6 @@ function(pe_web_page target shell)
         -sEXIT_RUNTIME=0
     )
 
-    # IndexedDB-backed folder for the project files the page saves (Project/WebProjectStorage.cpp in PhasmaRuntime,
-    # which every page links).
-    target_link_options(${target} PRIVATE -lidbfs.js)
-
     # The game page: a full-window canvas sized by CSS, with a loading and error line.
     set(PE_WEB_SHELL "${shell}")
     target_link_options(${target} PRIVATE "SHELL:--shell-file ${PE_WEB_SHELL}")
@@ -36,9 +32,23 @@ function(pe_web_page target shell)
 
     # The baked shader cache (tools/bake_web_shaders.py) goes into MEMFS at /ShaderCache as loose files, where the WebGPU
     # shader Impl reads _spv, _wgsl and the binding sidecars (spec decisions 7 and 13). Without it, the first shader is
-    # an error naming its key. Reconfigure after the first bake so the folder is picked up.
-    set(PE_WEB_SHADER_CACHE "${CMAKE_BINARY_DIR}/web-shader-cache/ShaderCache" CACHE PATH "Baked browser shader cache")
-    if(EXISTS "${PE_WEB_SHADER_CACHE}/_wgsl")
+    # an error naming its key. For the editor, validate the bake even when linking would otherwise be up to date.
+    set(default_shader_cache "${CMAKE_BINARY_DIR}/web-shader-cache/ShaderCache")
+    if(target STREQUAL "PhasmaEditor")
+        set(default_shader_cache "${CMAKE_SOURCE_DIR}/build-wasm-editor/web-shader-cache/ShaderCache")
+    endif()
+    set(PE_WEB_SHADER_CACHE "${default_shader_cache}" CACHE PATH "Baked browser shader cache")
+    set(PE_WEB_PROJECT "" CACHE PATH "Project folder (with phasma_project.json) the browser player opens")
+    if(target STREQUAL "PhasmaEditor")
+        find_package(Python3 REQUIRED COMPONENTS Interpreter)
+        add_custom_target(VerifyWebEditorBake
+            COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/bake_web_shaders.py"
+                    --verify-editor "${PE_WEB_SHADER_CACHE}" --project "${PE_WEB_PROJECT}"
+            COMMENT "Checking the current editor shader bake and viewport modules"
+            VERBATIM)
+        add_dependencies(${target} VerifyWebEditorBake)
+    endif()
+    if(target STREQUAL "PhasmaEditor" OR EXISTS "${PE_WEB_SHADER_CACHE}/_wgsl")
         file(GLOB_RECURSE PE_WEB_SHADER_FILES CONFIGURE_DEPENDS "${PE_WEB_SHADER_CACHE}/*")
         target_link_options(${target} PRIVATE "SHELL:--preload-file ${PE_WEB_SHADER_CACHE}@/ShaderCache")
         set_property(TARGET ${target} APPEND PROPERTY LINK_DEPENDS ${PE_WEB_SHADER_FILES})
@@ -50,7 +60,6 @@ function(pe_web_page target shell)
     # and a phasma_settings.json at the web root that points the player at its manifest. Bake the shaders with the same
     # project (tools/bake_web_shaders.py --project). Empty: the player starts with no project.
     # ponytail: loose files, not a game pack; everything downloads before start.
-    set(PE_WEB_PROJECT "" CACHE PATH "Project folder (with phasma_project.json) the browser player opens")
     if(PE_WEB_PROJECT)
         if(NOT EXISTS "${PE_WEB_PROJECT}/phasma_project.json")
             message(FATAL_ERROR "PE_WEB_PROJECT has no phasma_project.json: ${PE_WEB_PROJECT}")

@@ -49,12 +49,13 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
     if (!finite || lengthPixels <= 1.0f)
         return output;
 
-    // ponytail: keep adjacent taps at most one pixel apart. Longer blur needs a reconstruction
-    // filter; stretching a fixed tap budget across it produces separated copies of thin objects.
-    const float spanPixels = min(lengthPixels, float(sampleBudget));
-    velocity *= spanPixels / lengthPixels;
-    const int samples = int(ceil(spanPixels));
+    // Integrate the whole exposure. Each tap filters the footprint between taps, so a thin
+    // silhouette contributes even when its texel falls between two widely spaced midpoints.
+    const int samples = int(ceil(min(lengthPixels, float(sampleBudget))));
     const float inv_samples = 1.0f / samples;
+    const float2 direction = (velocity / texelSize) / lengthPixels;
+    const float2 along = direction * max(1.0f, lengthPixels * inv_samples) * texelSize;
+    const float2 across = float2(-direction.y, direction.x) * texelSize;
 
     float3 accumColor = 0.0f;
     float totalWeight = 0.0f;
@@ -63,7 +64,7 @@ PS_OUTPUT_Color mainPS(PS_INPUT_UV input)
         // Midpoints cover both sides equally, including even sample counts.
         float offset = (float(i) + 0.5f) * inv_samples - 0.5f;
         float2 sampleUV = clamp(input.uv + velocity * offset, uvMin, uvMax);
-        float4 sampleColor = frameTex.SampleLevel(sampler_frameTex, sampleUV, 0);
+        float4 sampleColor = frameTex.SampleGrad(sampler_frameTex, sampleUV, along, across);
 
         // Skip nearly transparent samples
         if (sampleColor.a < 0.001f)

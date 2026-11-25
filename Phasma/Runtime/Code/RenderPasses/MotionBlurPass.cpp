@@ -13,6 +13,27 @@
 
 namespace pe
 {
+    namespace
+    {
+        Image *CreateBlurSource(Image &display)
+        {
+            ImageDesc desc{};
+            desc.format = display.GetFormat();
+            desc.width = display.GetWidth();
+            desc.height = display.GetHeight();
+            desc.usage = PE_IMAGE_USAGE_SAMPLED | PE_IMAGE_USAGE_TRANSFER_DST;
+            desc.name = "MotionBlurSource";
+            Image *image = Image::Create(desc);
+            image->CreateSRV(PE_IMAGE_VIEW_TYPE_2D);
+
+            SamplerDesc sampler = Sampler::CreateInfoInit();
+            sampler.addressModeU = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            sampler.addressModeV = PE_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+            image->SetSampler(Sampler::Create(sampler, "MotionBlurSource_sampler"));
+            return image;
+        }
+    } // namespace
+
     void MotionBlurPass::Init()
     {
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
@@ -21,7 +42,7 @@ namespace pe
         m_velocityRT = rs->GetRenderTarget("velocity");
         m_depth = rs->GetDepthStencilTarget("depthStencil");
 
-        m_frameImage = rs->CreateFSSampledImage(m_displayRT);
+        m_frameImage = CreateBlurSource(*m_displayRT);
 
         m_attachments.resize(1);
         m_attachments[0] = {};
@@ -72,6 +93,10 @@ namespace pe
     void MotionBlurPass::ExecutePass(CommandBuffer *cmd)
     {
         auto &gSettings = ActivePostProcessProfile();
+        const float blend = ActivePostProcessBlend().motion_blur;
+        if (gSettings.motion_blur_samples <= 1 || gSettings.motion_blur_strength <= 0.f || blend <= 0.f)
+            return;
+
         Camera *camera = GetActiveScene()->GetActiveCamera();
 
         // Lighting uses a perspective sky ray even for orthographic cameras. Remove
@@ -102,7 +127,7 @@ namespace pe
         cmd->SetConstantAt(0, 1.0f / (static_cast<float>(FrameTimer::Instance().GetDelta()) + FLT_EPSILON));
         cmd->SetConstantAt(1, gSettings.motion_blur_strength);
         cmd->SetConstantAt(2, gSettings.motion_blur_samples);
-        cmd->SetConstantAt(3, ActivePostProcessBlend().motion_blur);
+        cmd->SetConstantAt(3, blend);
         cmd->SetConstantAt(4, skyReprojection);
         cmd->PushConstants();
         cmd->Draw(3, 1, 0, 0);

@@ -3,7 +3,6 @@
 #include "Scene/SceneAccess.h"
 #include "Scene/Scene.h"
 
-
 namespace pe
 {
     namespace
@@ -109,16 +108,15 @@ namespace pe
             scene->NewScene();
     }
 
-    void SaveScene(const std::filesystem::path &path)
+    bool SaveScene(const std::filesystem::path &path)
     {
         if (s_sceneHostCallbacks.saveScene)
-        {
-            s_sceneHostCallbacks.saveScene(path);
-            return;
-        }
+            return s_sceneHostCallbacks.saveScene(path);
 
         if (Scene *scene = GetHostScene("SaveScene"))
-            scene->SaveScene(path);
+            return scene->SaveScene(path);
+
+        return false;
     }
 
     void LoadScene(const std::filesystem::path &path)

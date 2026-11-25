@@ -117,9 +117,9 @@ namespace pe
     // A node counts as selected when it, or any ancestor, is selected. Selection is otherwise a
     // strict per-node test, so selecting a model root outlined nothing and selecting a parent whose
     // detail meshes hang off child nodes outlined only the parent's own mesh.
-    static bool IsSelectedInHierarchy(const Scene &scene, const NodeId *node)
+    bool Scene::IsSelectedInHierarchy(const NodeId *node) const
     {
-        for (const NodeId *n = node; n; n = scene.GetParent(n))
+        for (const NodeId *n = node; n; n = GetParent(n))
         {
             if (IsSceneNodeSelected(n))
                 return true;
@@ -129,33 +129,25 @@ namespace pe
 
     bool Scene::HasSelectedRenderableMeshes() const
     {
-        if (!HasSceneSelection()) // the Player with nothing selected: no walk over every node
+        if (m_meshSelectionClean || !HasSceneSelection())
             return false;
-        for (uint32_t i = 0; i < GetNodeCount(); i++)
-        {
-            NodeId *node = m_nodeIds[i];
-            if (!node || m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(node) ||
-                !IsSelectedInHierarchy(*this, node))
-                continue;
 
-            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
-            {
-                if (!IsValidMeshIndex(meshIdx))
-                    continue;
-
-                const Mesh &mesh = m_meshes[meshIdx];
-                if (mesh.indexCount != 0 && mesh.renderType != RenderType::Lines &&
-                    mesh.renderType != RenderType::SpriteOutline)
-                    return true;
-            }
-        }
-
-        return false;
+        return !SceneUsesWebProfile() || !m_webDraws[4].empty();
     }
 
     void Scene::UpdateMeshSelectionFlags()
     {
-        if (!m_meshConstants || m_meshCount == 0 || (m_meshSelectionClean && !HasSceneSelection()))
+        // Bucket 4 is the mask's list of per-instance slots, refreshed together with the native selection flags.
+        auto &webSelected = m_webDraws[4];
+        webSelected.clear();
+        if (!m_meshConstants || m_meshCount == 0)
+        {
+            m_meshSelectionClean = true;
+            return;
+        }
+
+        const bool hasSelection = HasSceneSelection();
+        if (m_meshSelectionClean && !hasSelection)
             return;
 
         // In-place rewrite of the editorFlags field for every mesh, in the SAME iteration order
@@ -165,15 +157,21 @@ namespace pe
         size_t offset = 0;
         uint32_t meshOrdinal = 0;
         uint64_t selectionSignature = 0; // XOR of a per-ordinal hash for each SELECTED mesh
+        const bool web = hasSelection && SceneUsesWebProfile();
+        bool anySelected = false;
         m_meshConstants->Map();
 
         for (uint32_t i = 0; i < GetNodeCount(); i++)
         {
-            if (m_nodeRuntime[i].gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
+            const auto &node = m_nodeRuntime[i];
+            if (node.gpuPending || !IsNodeHierarchyEnabled(m_nodeIds[i]))
                 continue;
 
-            for (int meshIdx : m_nodeComponentCache[i].meshRefs->meshRefs)
+            const auto &refs = m_nodeComponentCache[i].meshRefs->meshRefs;
+            const bool selected = hasSelection && !refs.empty() && IsSelectedInHierarchy(m_nodeIds[i]);
+            for (size_t ref = 0; ref < refs.size(); ref++)
             {
+                const int meshIdx = refs[ref];
                 if (!IsValidMeshIndex(meshIdx))
                     continue;
 
@@ -182,9 +180,20 @@ namespace pe
                     continue;
 
                 uint32_t flags = 0;
-                if (IsSelectedInHierarchy(*this, m_nodeIds[i]))
+                if (selected)
                 {
+                    anySelected = true;
                     flags |= 1u;
+
+                    // Terrain isn't drawn on the web. The cull writes all other raster instances at their own slots.
+                    if (web && node.gpuData.renderVisible && !(mesh.material && mesh.material->terrain) &&
+                        ref < node.meshRefIndirect.size())
+                    {
+                        const uint32_t slot = node.meshRefIndirect[ref];
+                        if (slot != UINT32_MAX)
+                            webSelected.push_back({slot, nullptr, 0.f});
+                    }
+
                     // splitmix64 of the ordinal. XOR-accumulating distinct terms flips the signature
                     // whenever any single mesh's selected state toggles (no collision on add/remove).
                     uint64_t h = meshOrdinal + 1u;
@@ -223,7 +232,7 @@ namespace pe
 
         m_meshConstants->Flush(offset, 0);
         m_meshConstants->Unmap();
-        m_meshSelectionClean = selectionSignature == 0;
+        m_meshSelectionClean = !anySelected;
 
         // DX12: the cull pass reads m_meshConstantsDevice (a GPU-cached mirror), so the host writes
         // above are invisible to it — without this the selected bucket keeps whatever was baked at the
@@ -2971,7 +2980,7 @@ namespace pe
             constants.materialByteOffset = 0xFFFFFFFF;
 
         uint32_t flags = 0;
-        if (IsSelectedInHierarchy(*this, m_nodeIds[nodeIndex]))
+        if (IsSelectedInHierarchy(m_nodeIds[nodeIndex]))
             flags |= 1u;
         if (mesh.material && mesh.material->doubleSided)
             flags |= 2u;

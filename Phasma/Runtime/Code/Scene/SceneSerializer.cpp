@@ -2942,22 +2942,8 @@ namespace pe
         return m_scenePath.stem().string();
     }
 
-    bool Scene::WriteSceneFile(const std::filesystem::path &file, const std::filesystem::path &sceneDir)
+    static bool WriteJsonFile(const rapidjson::Document &document, const std::filesystem::path &file)
     {
-        rapidjson::Document d;
-        d.SetObject();
-        SceneSerializationHelper serializer(*this, d);
-        serializer.AddSettings();
-        serializer.AddSceneScripts();
-        serializer.BuildLiveGeometryRemap();
-        serializer.AddSources(&sceneDir);
-        serializer.AddMeshes(&sceneDir);
-        serializer.AddNodes(&sceneDir);
-        serializer.AddLegacyLights();
-        serializer.AddLegacyCameras(SceneSerializationHelper::LegacyCameraMode::SaveFile);
-        serializer.AddActiveCamera();
-
-        // Write to file
         std::ofstream ofs(file);
         if (!ofs.is_open())
         {
@@ -2969,7 +2955,7 @@ namespace pe
         rapidjson::PrettyWriter<rapidjson::OStreamWrapper> writer(osw);
         writer.SetMaxDecimalPlaces(6);
 
-        if (!d.Accept(writer))
+        if (!document.Accept(writer))
         {
             Log::Error("Failed to write JSON content (invalid data/encoding?) to: " + file.string());
             return false;
@@ -2985,21 +2971,43 @@ namespace pe
         return true;
     }
 
-    void Scene::SaveScene(const std::filesystem::path &file)
+    bool Scene::WriteSceneFile(const std::filesystem::path &file, const std::filesystem::path &sceneDir)
+    {
+        rapidjson::Document d;
+        d.SetObject();
+        SceneSerializationHelper serializer(*this, d);
+        serializer.AddSettings();
+        serializer.AddSceneScripts();
+        serializer.BuildLiveGeometryRemap();
+        serializer.AddSources(&sceneDir);
+        serializer.AddMeshes(&sceneDir);
+        serializer.AddNodes(&sceneDir);
+        serializer.AddLegacyLights();
+        serializer.AddLegacyCameras(SceneSerializationHelper::LegacyCameraMode::SaveFile);
+        serializer.AddActiveCamera();
+        return WriteJsonFile(d, file);
+    }
+
+    bool Scene::SaveScene(const std::filesystem::path &file)
     {
         // The scene counts as saved only once the file is closed, and in the browser once it reached IndexedDB.
-        if (!WriteSceneFile(file, file.parent_path()))
-            return;
-
-        if (!PersistWebProjectEdits())
+        if (!CanWriteWebProjectPath(file))
         {
-            Log::Error("Scene written to memory only; it is lost when the page reloads: " + file.string());
-            return;
+            Log::Error("Scene save path is outside the project: " + file.string());
+            return false;
+        }
+
+        if (!CommitProjectEdit({file}, [&]()
+                               { return WriteSceneFile(file, file.parent_path()); }))
+        {
+            Log::Error("Scene not saved; edits remain in memory only: " + file.string());
+            return false;
         }
 
         m_scenePath = file;
         ClearDirty();
         Log::Info("Scene saved to: " + file.string());
+        return true;
     }
 
     bool Scene::SavePrefab(NodeId *root, const std::filesystem::path &file)
@@ -3013,16 +3021,6 @@ namespace pe
         std::filesystem::path prefabPath = file;
         if (prefabPath.extension() != ".peprefab")
             prefabPath += ".peprefab";
-
-        std::error_code ec;
-        if (!prefabPath.parent_path().empty())
-            std::filesystem::create_directories(prefabPath.parent_path(), ec);
-        if (ec)
-        {
-            PE_WARN("[Prefab] Failed to create prefab directory '%s': %s",
-                    prefabPath.parent_path().string().c_str(), ec.message().c_str());
-            return false;
-        }
 
         rapidjson::Document d;
         d.SetObject();
@@ -3041,17 +3039,14 @@ namespace pe
         serializer.AddMeshes(&prefabDir);
         serializer.AddNodes(&prefabDir);
 
-        std::ofstream ofs(prefabPath);
-        if (!ofs.is_open())
+        const auto write = [&]()
         {
-            Log::Error("Failed to open prefab for writing: " + prefabPath.string());
-            return false;
-        }
-
-        rapidjson::OStreamWrapper osw(ofs);
-        rapidjson::PrettyWriter<rapidjson::OStreamWrapper> writer(osw);
-        writer.SetMaxDecimalPlaces(6);
-        if (!d.Accept(writer) || ofs.bad())
+            std::error_code ec;
+            if (!prefabDir.empty())
+                std::filesystem::create_directories(prefabDir, ec);
+            return !ec && WriteJsonFile(d, prefabPath);
+        };
+        if (!CommitProjectEdit({prefabPath}, write))
         {
             Log::Error("Failed to write prefab: " + prefabPath.string());
             return false;

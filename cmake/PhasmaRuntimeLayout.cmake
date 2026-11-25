@@ -99,6 +99,18 @@ function(pe_depend_on_root_runtime_dependencies TARGET_NAME)
     endif()
 endfunction()
 
+# The editor bake runs these native binaries privately. Record the actual linker outputs, not a
+# directory inferred from --build (which could contain a copied player from another checkout).
+function(pe_record_web_bake_binary target)
+    if(WIN32)
+        set(stamp "${CMAKE_BINARY_DIR}/CMakeFiles/web-bake-${target}-$<CONFIG>.sha256")
+        add_custom_command(TARGET ${target} POST_BUILD
+            COMMAND "${CMAKE_COMMAND}" -E sha256sum "$<TARGET_FILE:${target}>" > "${stamp}"
+            BYPRODUCTS "${stamp}"
+            VERBATIM)
+    endif()
+endfunction()
+
 function(pe_install_dependency_files INSTALL_DESTINATION)
     if(ARGN)
         install(FILES ${ARGN}

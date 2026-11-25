@@ -209,6 +209,7 @@ namespace pe
         char m_searchBuffer[128] = {};
         SortMode m_sortMode = SortMode::Name;
         bool m_sortDescending = false;
+        bool m_fileEditFailed = false;
         bool m_wasOpen = false;
         std::filesystem::path m_clipboardPath; // set by Ctrl+C, consumed by Ctrl+V
 
@@ -225,6 +226,7 @@ namespace pe
             std::atomic<bool> active{false};
             std::atomic<float> progress{0.0f};
             std::atomic<bool> needsRefresh{false};
+            std::atomic<bool> failed{false};
             std::string label;
             std::mutex labelMutex;
         };

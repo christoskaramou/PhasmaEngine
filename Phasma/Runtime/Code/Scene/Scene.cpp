@@ -1849,8 +1849,11 @@ namespace pe
             return;
 
         m_webDrawsFrame = frame;
-        for (std::vector<WebDraw> &draws : m_webDraws)
-            draws.clear();
+        for (size_t bucket = 0; bucket < m_webDraws.size(); bucket++)
+        {
+            if (bucket != 4) // UpdateMeshSelectionFlags owns the selection mask list.
+                m_webDraws[bucket].clear();
+        }
 
         // ponytail: terrain has its own pipeline and cull bucket, which the web profile does not draw yet; per-mesh
         // draws for it, like DrawWebVoxels, are the upgrade.
@@ -1909,8 +1912,11 @@ namespace pe
         Buffer *draws = m_indirectOpaqueSS[RHII.GetFrameIndex()];
         for (const WebDraw &draw : m_webDraws[bucket])
         {
-            Descriptor *sets[3] = {nullptr, nullptr, draw.materialSet};
-            cmd->BindDescriptors(3, sets);
+            if (bucket != 4) // The selection mask has no material descriptor set.
+            {
+                Descriptor *sets[3] = {nullptr, nullptr, draw.materialSet};
+                cmd->BindDescriptors(3, sets);
+            }
             cmd->DrawIndexedIndirect(draws, static_cast<size_t>(draw.slot) * PE_DRAW_INDEXED_INDIRECT_COMMAND_SIZE, 1);
         }
     }

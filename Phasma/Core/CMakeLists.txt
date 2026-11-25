@@ -97,6 +97,9 @@ add_library(PhasmaCore ${PE_CORE_LIBRARY_TYPE}
         ${VMA_SOURCES}
 )
 set_target_properties(PhasmaCore PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(COMMAND pe_record_web_bake_binary)
+    pe_record_web_bake_binary(PhasmaCore)
+endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Windows")
     set_target_properties(PhasmaCore PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()

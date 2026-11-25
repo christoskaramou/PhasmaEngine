@@ -7,6 +7,7 @@
 #include "API/RHI.h"
 #include "API/RenderGraph.h"
 #include "API/Shader.h"
+#include "Project/ProjectSelection.h"
 #include "Render/SceneRendererHost.h"
 #include "Render/SceneRenderTargets.h"
 
@@ -80,8 +81,35 @@ namespace pe
 
     void TAAPass::UpdatePassInfo()
     {
+        const auto createShader = [](bool hdr)
+        {
+            ShaderDesc desc{};
+            desc.sourcePath = Path::RuntimeAssets + "Shaders/TAA/TAA.hlsl";
+            desc.entryPoint = "main";
+            desc.stage = PE_SHADER_STAGE_COMPUTE;
+            if (hdr)
+                desc.defines.push_back({"HDR_SCENE", "1"});
+
+            return Shader::Create(desc);
+        };
+        const bool hdr = SceneUsesHDR();
+
+#if !defined(PE_WEB)
+        // The browser editor can toggle HDR regardless of the startup scene.
+        const auto bakeAlternate = [&]()
+        {
+            if (!ReadRuntimeBakeWebEditorShaders())
+                return;
+
+            Shader *alternate = createShader(!hdr);
+            Shader::Destroy(alternate);
+        };
+        static std::once_flag bake;
+        std::call_once(bake, bakeAlternate);
+#endif
+
         m_passInfo->name = "TAA_pipeline";
-        m_passInfo->pCompShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/TAA/TAA.hlsl", .entryPoint = "main", .stage = PE_SHADER_STAGE_COMPUTE, .defines = SceneUsesHDR() ? std::vector<Define>{{"HDR_SCENE", "1"}} : std::vector<Define>{}});
+        m_passInfo->pCompShader = createShader(hdr);
         m_passInfo->Update();
     }
 
@@ -227,10 +255,13 @@ namespace pe
 
     void TAAPass::Resize(uint32_t width, uint32_t height)
     {
+        const ::PeFormat previousFormat = m_historyImage ? m_historyImage->GetFormat() : PE_FORMAT_UNDEFINED;
         Destroy();
         Init();
-        // The active post-process profile may leave velocity unallocated while this pass is disabled.
-        if (m_velocityRT)
+
+        // On a format change the graph rebuilds the storage-image layout and binds the new output after Resize.
+        const bool layoutMatches = previousFormat == PE_FORMAT_UNDEFINED || previousFormat == m_displayRT->GetFormat();
+        if (m_velocityRT && layoutMatches)
             UpdateDescriptorSets();
     }
 

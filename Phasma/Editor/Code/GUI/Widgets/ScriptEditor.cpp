@@ -2,6 +2,7 @@
 #include "Base/Process.h"
 #include "GUI/GUI.h"
 #include "GUI/Helpers.h"
+#include "Project/WebProjectStorage.h"
 #include "Scene/Scene.h"
 #include "Scene/SceneNode.h"
 #include "Script/CppScriptPath.h"
@@ -239,6 +240,7 @@ namespace pe
                     m_buildOutput = "Use a C++ identifier for the new script name.";
                     return;
                 }
+#if !defined(PE_WEB)
                 try
                 {
                     std::ifstream config(std::filesystem::path(Path::Executable) / "NativeScripts.json");
@@ -249,10 +251,10 @@ namespace pe
                     m_buildOutput = std::string("Native build configuration unavailable: ") + e.what();
                     return;
                 }
+#endif
                 for (size_t pos = 0; (pos = content.find("NewCppScript", pos)) != std::string::npos; pos += name.size())
                     content.replace(pos, 12, name);
             }
-            std::filesystem::create_directories(scriptsDir);
             outPath = scriptsDir / (name + (m_isCpp ? ".cpp" : ".lua"));
             if (std::filesystem::exists(outPath))
             {
@@ -260,20 +262,36 @@ namespace pe
                 return;
             }
         }
-        std::ofstream f(outPath, std::ios::binary | std::ios::trunc);
-        if (!f.is_open())
+        if (!CanWriteWebProjectPath(outPath))
         {
-            PE_WARN("[ScriptEditor] Cannot write '%s'", outPath.string().c_str());
-            return;
-        }
-        f << content;
-        f.close();
-        if (!f)
-        {
-            m_buildOutput = "Failed to save: " + outPath.string();
+            m_buildOutput = "Bundled files outside the project are read-only.";
             return;
         }
 
+        const auto write = [&]()
+        {
+            std::error_code ec;
+            if (m_isNewScript)
+                std::filesystem::create_directories(outPath.parent_path(), ec);
+            if (ec)
+                return false;
+
+            std::ofstream f(outPath, std::ios::binary | std::ios::trunc);
+            f << content;
+            f.close();
+            return !f.fail();
+        };
+        if (!CommitProjectEdit({outPath}, write))
+        {
+            m_modified = true;
+            m_buildOutput = "Source not saved. Retry Save before closing or reloading: " + outPath.string();
+            PE_WARN("[ScriptEditor] Cannot save '%s'", outPath.string().c_str());
+            return;
+        }
+
+#if defined(PE_WEB)
+        m_buildOutput.clear();
+#endif
         if (m_targetNode.nodeId)
         {
             if (auto *r = GetGlobalSystem<RendererSystem>())
@@ -297,10 +315,12 @@ namespace pe
         m_modified = false;
         m_isNewScript = false;
 
-        if (m_isCpp)
-            BuildCppScripts();
-        else
+        if (!m_isCpp)
             EventSystem::PushEvent(EventType::CompileScripts);
+#if !defined(PE_WEB)
+        else
+            BuildCppScripts();
+#endif
     }
 
     void ScriptEditor::OpenNewCppScript(NodeId *node)
@@ -468,9 +488,15 @@ PHASMA_NODE_SCRIPT(NewCppScript)
         ImGui::SameLine();
 
         ImGui::BeginDisabled(m_build.valid());
+#if defined(PE_WEB)
+        bool saveClicked = ImGui::Button("Save");
+        ImGui::EndDisabled();
+        ui::ItemTooltip(m_isCpp ? "Save source only. Native builds require the desktop editor." : "Save and reload Lua scripts.");
+#else
         bool saveClicked = ImGui::Button(m_isCpp ? "Save & Build" : "Save");
         ImGui::EndDisabled();
         ui::ItemTooltip(m_isCpp ? "Save C++ source, build, and live reload on success." : "Save and reload Lua scripts.");
+#endif
         ImGui::SameLine();
 
         if (!m_isCpp && ImGui::Button(m_showFunctions ? "Hide Functions" : "Show Functions"))

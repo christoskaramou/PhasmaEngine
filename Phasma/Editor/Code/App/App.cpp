@@ -324,7 +324,7 @@ namespace pe
         const std::string editorAssetsRoot = ResolveEditorAssetsRoot();
         const ProjectSelection projectSelection = ResolveProjectSelection();
         ApplyProjectSelectionAssetsRoot(projectSelection);
-        RestoreWebProjectEdits(projectSelection.project.root); // the browser's saved files, before anything reads them
+        RestoreWebProjectEdits(projectSelection.project.root, projectSelection.project.name); // the browser's saved files, before anything reads them
         if (!projectSelection.warning.empty())
             PE_WARN("[Runtime] %s", projectSelection.warning.c_str());
         PE_INFO("[Runtime] Active project root: %s (%s)",

@@ -995,7 +995,9 @@ namespace pe
         result["windows"] = nlohmann::json::array();
         result["actions"] = nlohmann::json::array();
         result["state"] = {
+#if !defined(PE_WEB)
             {"mcp_running", IsMcpServerRunning()},
+#endif
             {"play_mode", GUIState::s_playMode},
             {"paused", GUIState::s_isPaused},
             {"viewport_floating", GUIState::s_sceneViewFloating},
@@ -1064,18 +1066,22 @@ namespace pe
 #if defined(PE_WEB)
         addAction("file.export_scene", "Export Scene", "File", "command", true, false, false);
 #endif
+#if !defined(PE_WEB)
         addAction("file.reload_module", "Reload Module", "File", "command", true, false, false);
         addAction("editor.module_info", "Editor Module Build (loaded vs on disk)", "Editor", "query", true, false, false);
+#endif
         addAction("file.exit", "Exit", "File", "command", true, false, false);
 
         addAction("edit.undo", "Undo", "Edit", "command", undoRedo.CanUndo(), false, false);
         addAction("edit.redo", "Redo", "Edit", "command", undoRedo.CanRedo(), false, false);
 
+#if !defined(PE_WEB)
         addAction("connection.mcp.toggle", "MCP Server", "Connection", "toggle", true, IsMcpServerRunning(), true);
         addAction("connection.mcp.start", "Start MCP Server", "Connection", "command", !IsMcpServerRunning(), false, false);
         addAction("connection.mcp.stop", "Stop MCP Server", "Connection", "command", IsMcpServerRunning(), false, false);
         addAction("connection.index_codebase", "Index Codebase", "Connection", "command", !m_isIndexing.load(), false, false);
         addAction("connection.rebuild_codebase_index", "Rebuild Codebase Index", "Connection", "command", !m_isIndexing.load(), false, false);
+#endif
 
         addAction("viewport.floating", "Viewport Floating", "Window", "toggle", true, GUIState::s_sceneViewFloating, true);
         addAction("viewport.redock", "Redock Viewport", "Window", "command", GUIState::s_sceneViewFloating, false, false);
@@ -1302,7 +1308,10 @@ namespace pe
                 }
                 if (!std::filesystem::exists(modelPath))
                     return nlohmann::json{{"error", "model file not found: " + modelPath.string()}}.dump();
-
+#if defined(PE_WEB)
+                if (!ModelAssetCooked::IsCookedPath(modelPath))
+                    return R"({"error":"expected a cooked .pemesh model"})";
+#endif
                 GUIState::s_modelLoading = true;
                 const std::string loadPath = modelPath.string();
                 ThreadPool::GUI.Enqueue([loadPath]()
@@ -1324,11 +1333,19 @@ namespace pe
             if (!fs)
                 return R"({"error":"FileSelector not available"})";
 
+#if defined(PE_WEB)
+            std::vector<std::string> exts = {ModelAssetCooked::kExtension};
+#else
             std::vector<std::string> exts;
             for (const char *ext : FileBrowser::s_modelExtensionsVec)
                 exts.push_back(ext);
+#endif
             fs->OpenSelection([](const std::string &selectedPath)
                               {
+#if defined(PE_WEB)
+                if (!ModelAssetCooked::IsCookedPath(selectedPath))
+                    return false;
+#endif
                 GUIState::s_modelLoading = true;
                 ThreadPool::GUI.Enqueue([selectedPath]()
                 {
@@ -1388,7 +1405,11 @@ namespace pe
             if (!std::filesystem::exists(scenePath))
                 return nlohmann::json{{"error", "scene file not found: " + scenePath.string()}}.dump();
 
-            pe::LoadScene(scenePath);
+            auto preload = pe::PreloadScene(scenePath);
+            if (!preload.IsValid())
+                return nlohmann::json{{"error", "could not load scene: " + scenePath.string()}}.dump();
+
+            pe::LoadSceneApply(std::move(preload));
             SaveEditorConfig();
             UndoRedo::Instance().Clear();
             return ok({{"path", scenePath.string()}});
@@ -1410,14 +1431,16 @@ namespace pe
                 if (std::filesystem::exists(savePath) && !args.value("overwrite", false))
                     return nlohmann::json{{"error", "file exists; pass overwrite=true to replace: " + savePath.string()}}.dump();
 
-                pe::SaveScene(savePath);
+                if (!pe::SaveScene(savePath))
+                    return R"({"error":"scene save failed"})";
                 return ok({{"path", savePath.string()}});
             }
 
             Scene &scene = renderer->GetScene();
             if (!scene.GetScenePath().empty())
             {
-                pe::SaveScene(scene.GetScenePath());
+                if (!pe::SaveScene(scene.GetScenePath()))
+                    return R"({"error":"scene save failed"})";
                 return ok({{"path", scene.GetScenePath().string()}});
             }
 
@@ -1441,6 +1464,7 @@ namespace pe
         }
 #endif
 
+#if !defined(PE_WEB)
         if (action == "file.reload_module")
         {
             EventSystem::PushEvent(EventType::ReloadModule);
@@ -1456,6 +1480,7 @@ namespace pe
                        {"stale", s_moduleBuild.stale},
                        {"module", EditorModulePath().generic_string()}});
         }
+#endif
 
         if (action == "file.exit")
         {
@@ -1493,6 +1518,7 @@ namespace pe
             return ok({{"steps", steps}});
         }
 
+#if !defined(PE_WEB)
         if (action == "connection.mcp.toggle" || action == "connection.mcp.start" || action == "connection.mcp.stop")
         {
             bool enabled = !IsMcpServerRunning();
@@ -1509,6 +1535,7 @@ namespace pe
             StartCodebaseIndexing(action == "connection.rebuild_codebase_index" || args.value("full_rebuild", false));
             return ok({{"status", "indexing"}});
         }
+#endif
 
         if (action == "viewport.floating")
         {
@@ -1721,6 +1748,9 @@ namespace pe
 
                 fs->OpenSelection([](const std::string &path)
                                   {
+                    if (!ModelAssetCooked::IsCookedPath(path))
+                        return false;
+
                     auto loadAsync = [path]()
                     {
                         GUIState::s_modelLoading = true;
@@ -2181,7 +2211,6 @@ namespace pe
 
         auto onSceneSelected = [this](const std::string &path)
         {
-            UndoRedo::Instance().Clear();
             ThreadPool::GUI.Enqueue([this, path]()
                                     {
                     auto preload = std::make_shared<ScenePreloadHandle>(pe::PreloadScene(path));
@@ -2190,6 +2219,7 @@ namespace pe
                         if (preload->IsValid())
                         {
                             pe::LoadSceneApply(std::move(*preload));
+                            UndoRedo::Instance().Clear();
                             SaveEditorConfig();
                         } }); });
             return true;
@@ -2214,17 +2244,9 @@ namespace pe
 
             if (ImGui::Button("Save", ui::DialogButtonSize("Save", 6.2f)))
             {
-                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-                if (rs)
-                {
-                    Scene &scene = rs->GetScene();
-                    if (!scene.GetScenePath().empty())
-                        pe::SaveScene(scene.GetScenePath());
-                    else
-                        ShowSaveSceneMenuItem_Action();
-                }
                 ImGui::CloseCurrentPopup();
-                OpenLoadSceneDialog();
+                SaveBeforeAction([this]()
+                                 { OpenLoadSceneDialog(); });
             }
             ui::ItemTooltip("Save the current scene, then continue loading another scene.");
             ImGui::SameLine();
@@ -2275,19 +2297,12 @@ namespace pe
 
             if (ImGui::Button("Save", ui::DialogButtonSize("Save", 6.2f)))
             {
-                RendererSystem *rs = GetGlobalSystem<RendererSystem>();
-                if (rs)
-                {
-                    Scene &scene = rs->GetScene();
-                    if (!scene.GetScenePath().empty())
-                        pe::SaveScene(scene.GetScenePath());
-                    else
-                        ShowSaveSceneMenuItem_Action();
+                ImGui::CloseCurrentPopup();
+                SaveBeforeAction([this]()
+                                 {
                     pe::NewScene();
                     SaveEditorConfig();
-                    UndoRedo::Instance().Clear();
-                }
-                ImGui::CloseCurrentPopup();
+                    UndoRedo::Instance().Clear(); });
             }
             ui::ItemTooltip("Save the current scene, then create a new scene.");
             ImGui::SameLine();
@@ -2362,9 +2377,7 @@ namespace pe
 
             if (ImGui::Button("Save", ImVec2(btnW, 0)))
             {
-                auto savePath = m_confirmSavePath;
-                ThreadPool::GUI.Enqueue([savePath]()
-                                        { pe::SaveScene(savePath); });
+                SaveSelectedScene(m_confirmSavePath, {});
                 m_confirmSavePath.clear();
                 ImGui::CloseCurrentPopup();
             }
@@ -2380,8 +2393,34 @@ namespace pe
         }
     }
 
-    void GUI::ShowSaveSceneMenuItem_Action()
+    void GUI::SaveBeforeAction(std::function<void()> onSaved)
     {
+        auto *rs = GetGlobalSystem<RendererSystem>();
+        if (!rs)
+            return;
+
+        const auto path = rs->GetScene().GetScenePath();
+        if (path.empty())
+            ShowSaveSceneMenuItem_Action(std::move(onSaved));
+        else if (pe::SaveScene(path))
+            onSaved();
+    }
+
+    void GUI::SaveSelectedScene(const std::filesystem::path &path, std::function<void()> onSaved)
+    {
+        if (!pe::SaveScene(path))
+            return;
+
+        if (onSaved)
+            QueueMainThreadAction(std::move(onSaved));
+    }
+
+    void GUI::ShowSaveSceneMenuItem_Action(std::function<void()> onSaved)
+    {
+        m_showOverwriteConfirmation = false;
+        m_pendingSavePath.clear();
+        m_overwriteOnSaved = {};
+
         auto *fs = GetWidget<FileSelector>();
         if (fs)
         {
@@ -2396,7 +2435,7 @@ namespace pe
             suggestedName += ".pescene";
 
             std::vector<std::string> exts = {".pescene"};
-            fs->OpenSelection([this](const std::string &path)
+            fs->OpenSelection([this, onSaved](const std::string &path)
                               {
                 std::filesystem::path savePath(path);
                 if (savePath.extension() != ".pescene")
@@ -2405,23 +2444,13 @@ namespace pe
                 if (std::filesystem::exists(savePath))
                 {
                     m_pendingSavePath = savePath;
+                    m_overwriteOnSaved = onSaved;
                     m_showOverwriteConfirmation = true;
                     return true; // Close file selector, show overwrite prompt
                 }
 
-                auto saveAsync = [savePath, exitAfter = m_exitAfterSave]()
-                {
-                    pe::SaveScene(savePath);
-                    if (exitAfter)
-                    {
-                        EventSystem::PushEvent(EventType::Quit);
-                    }
-                };
-                m_exitAfterSave = false;
-                ThreadPool::GUI.Enqueue(saveAsync);
-                return true; }, exts, Path::Assets + "Scenes/",
-                              [this]()
-                              { m_exitAfterSave = false; }, suggestedName, "Save");
+                SaveSelectedScene(savePath, onSaved);
+                return true; }, exts, Path::Assets + "Scenes/", {}, suggestedName, "Save");
         }
     }
 
@@ -2444,11 +2473,7 @@ namespace pe
             if (ImGui::Button("Overwrite", ui::DialogButtonSize("Overwrite", 9.2f)))
             {
                 auto savePath = m_pendingSavePath;
-                auto saveAsync = [savePath]()
-                {
-                    pe::SaveScene(savePath);
-                };
-                ThreadPool::GUI.Enqueue(saveAsync);
+                SaveSelectedScene(savePath, std::exchange(m_overwriteOnSaved, {}));
                 m_pendingSavePath.clear();
                 m_showOverwriteConfirmation = false;
                 if (auto *fs = GetWidget<FileSelector>())
@@ -2459,6 +2484,7 @@ namespace pe
             if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 9.2f)))
             {
                 m_pendingSavePath.clear();
+                m_overwriteOnSaved = {};
                 m_showOverwriteConfirmation = false;
             }
             ui::ItemTooltip("Choose a different save path.");
@@ -2468,6 +2494,7 @@ namespace pe
         if (!open)
         {
             m_pendingSavePath.clear();
+            m_overwriteOnSaved = {};
             m_showOverwriteConfirmation = false;
         }
     }
@@ -2798,7 +2825,6 @@ namespace pe
 
         if (ImGui::BeginPopupModal("Exit##confirm", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
         {
-            RendererSystem *rs = GetGlobalSystem<RendererSystem>();
             ImGui::Text("The scene has unsaved changes.");
             ImGui::Dummy(ImVec2(0, 4));
             ImGui::Separator();
@@ -2806,22 +2832,11 @@ namespace pe
 
             if (ImGui::Button("Save & Exit", ui::DialogButtonSize("Save & Exit", 8.5f)))
             {
-                if (rs)
-                {
-                    Scene &scene = rs->GetScene();
-                    if (!scene.GetScenePath().empty())
-                    {
-                        pe::SaveScene(scene.GetScenePath());
-                        SaveEditorConfig();
-                        EventSystem::PushEvent(EventType::Quit);
-                    }
-                    else
-                    {
-                        m_exitAfterSave = true;
-                        ShowSaveSceneMenuItem_Action();
-                    }
-                }
                 ImGui::CloseCurrentPopup();
+                SaveBeforeAction([this]()
+                                 {
+                    SaveEditorConfig();
+                    EventSystem::PushEvent(EventType::Quit); });
             }
             ui::ItemTooltip("Save the current scene, then exit the editor.");
             ImGui::SameLine();
@@ -3025,9 +3040,10 @@ namespace pe
             ui::ItemTooltip("Filter the console to warning messages.");
         }
 
-        // Module build stamp — right-aligned, left of MCP; orange when a newer DLL is on disk
-        RefreshModuleBuild(ImGui::GetTime());
         RefreshModelClips(ImGui::GetTime());
+#if !defined(PE_WEB)
+        // Module build stamp and MCP controls are native-only.
+        RefreshModuleBuild(ImGui::GetTime());
         if (s_moduleBuild.valid)
         {
             const std::string text = s_moduleBuild.stale
@@ -3081,6 +3097,7 @@ namespace pe
             ImGui::PopStyleColor();
             ui::ItemTooltip(mcpRunning ? "Disable the running editor MCP server." : "Start the editor MCP server.");
         }
+#endif
 
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
@@ -3105,9 +3122,11 @@ namespace pe
 #if defined(PE_WEB)
             ShowExportSceneMenuItem();
 #endif
+#if !defined(PE_WEB)
             ImGui::Separator();
             if (ImGui::MenuItem("Reload Module"))
                 EventSystem::PushEvent(EventType::ReloadModule);
+#endif
             ImGui::Separator();
             ShowExitMenuItem();
             ImGui::EndMenu();
@@ -3130,11 +3149,13 @@ namespace pe
 
         if (ImGui::BeginMenu("Agent"))
         {
+#if !defined(PE_WEB)
             const bool mcpRunning = IsMcpServerRunning();
             if (ImGui::MenuItem("MCP Server", nullptr, mcpRunning))
                 SetMcpServerEnabled(!mcpRunning);
             if (ImGui::MenuItem("Index Codebase", nullptr, false, !m_isIndexing.load()))
                 StartCodebaseIndexing();
+#endif
             ImGui::Separator();
             if (ImGui::MenuItem("Command Palette", "Ctrl+P"))
             {
@@ -3176,13 +3197,17 @@ namespace pe
     // Right end of the agent menu bar: what the hidden status bar would say, only when it says something.
     void GUI::AgentMenuStatus()
     {
+#if !defined(PE_WEB)
         RefreshModuleBuild(ImGui::GetTime());
+#endif
         RefreshModelClips(ImGui::GetTime());
 
         auto *console = GetWidget<Console>();
         const int errors = console ? console->GetErrorCount() : 0;
         const int warns = console ? console->GetWarnCount() : 0;
+#if !defined(PE_WEB)
         const bool mcpRunning = IsMcpServerRunning();
+#endif
 
         char errText[24];
         char warnText[24];
@@ -3191,8 +3216,10 @@ namespace pe
 
         // Right-align the shown buttons: each one is its label plus frame padding plus the gap before the next.
         const ImGuiStyle &style = ImGui::GetStyle();
+#if !defined(PE_WEB)
         const char *mcpText = ICON_FA_CIRCLE " MCP";
         const char *staleText = "New build";
+#endif
         auto buttonWidth = [&](const char *text, bool shown)
         {
             if (!shown)
@@ -3201,14 +3228,14 @@ namespace pe
             return ImGui::CalcTextSize(text, nullptr, true).x + style.FramePadding.x * 2.0f + style.ItemSpacing.x;
         };
 
-        const float totalW = buttonWidth(staleText, s_moduleBuild.stale) +
-                             buttonWidth(errText, errors > 0) +
-                             buttonWidth(warnText, warns > 0) +
-                             buttonWidth(mcpText, true) -
-                             style.ItemSpacing.x;
+        float totalW = buttonWidth(errText, errors > 0) + buttonWidth(warnText, warns > 0) - style.ItemSpacing.x;
+#if !defined(PE_WEB)
+        totalW += buttonWidth(staleText, s_moduleBuild.stale) + buttonWidth(mcpText, true);
+#endif
         ImGui::SetCursorPosX(ImGui::GetWindowWidth() - totalW - style.WindowPadding.x);
 
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+#if !defined(PE_WEB)
         if (s_moduleBuild.stale)
         {
             ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.55f, 0.15f, 1.0f));
@@ -3217,6 +3244,7 @@ namespace pe
             ImGui::PopStyleColor();
             ui::ItemTooltip("A newer editor module is on disk. Click to reload it (scene and layout are kept).");
         }
+#endif
 
         if (errors > 0)
         {
@@ -3236,6 +3264,7 @@ namespace pe
             ui::ItemTooltip("Filter the console to warning messages.");
         }
 
+#if !defined(PE_WEB)
         const ImVec4 onColor(0.3f, 0.8f, 0.4f, 1.0f);
         const ImVec4 offColor(0.45f, 0.45f, 0.45f, 1.0f);
         ImGui::PushStyleColor(ImGuiCol_Text, mcpRunning ? onColor : offColor);
@@ -3245,6 +3274,9 @@ namespace pe
         ui::ItemTooltip(mcpRunning
                             ? "MCP server running on 127.0.0.1:8765. Click to stop it."
                             : "MCP server stopped. Click to start it.");
+#else
+        ImGui::PopStyleColor();
+#endif
     }
 
     void GUI::Menu()
@@ -3261,7 +3293,9 @@ namespace pe
             ui::ItemTooltip("Scene loading, saving, import, and exit commands.");
             if (fileMenuOpen)
             {
+#if !defined(PE_WEB)
                 ShowImportModelMenuItem();
+#endif
                 ShowLoadModelMenuItem();
                 if (ImGui::MenuItem("New Scene"))
                     NewScene();
@@ -3274,10 +3308,12 @@ namespace pe
 #if defined(PE_WEB)
                 ShowExportSceneMenuItem();
 #endif
+#if !defined(PE_WEB)
                 ImGui::Separator();
                 if (ImGui::MenuItem("Reload Module"))
                     EventSystem::PushEvent(EventType::ReloadModule);
                 ui::ItemTooltip("Reload the hot-reload editor module.");
+#endif
                 ImGui::Separator();
                 ShowExitMenuItem();
                 ImGui::EndMenu();
@@ -3314,6 +3350,7 @@ namespace pe
                 ImGui::EndMenu();
             }
 
+#if !defined(PE_WEB)
             const bool connectionMenuOpen = ImGui::BeginMenu("Connection");
             ui::ItemTooltip("Editor service and indexing commands.");
             if (connectionMenuOpen)
@@ -3327,6 +3364,7 @@ namespace pe
                 ui::ItemTooltip("Start or refresh the editor codebase index.");
                 ImGui::EndMenu();
             }
+#endif
 
             const bool windowMenuOpen = ImGui::BeginMenu("Window");
             ui::ItemTooltip("Show, hide, and configure editor windows.");

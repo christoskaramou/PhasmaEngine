@@ -21,7 +21,7 @@ namespace pe
                 sol::table scene = lua.create_named_table("scene");
 
                 scene.set_function("save", [](const std::string &name) {
-                    SaveScene(Path::Assets + "Scenes/" + name);
+                    return SaveScene(Path::Assets + "Scenes/" + name);
                 });
 
                 scene.set_function("load", [](const std::string &name) {
@@ -476,7 +476,7 @@ namespace pe
 
                 // Keep legacy global functions for backwards compatibility
                 lua.set_function("save_scene", [](const std::string &name) {
-                    SaveScene(Path::Assets + "Scenes/" + name);
+                    return SaveScene(Path::Assets + "Scenes/" + name);
                 }); });
         }
     } s_sceneBindings;

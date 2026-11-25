@@ -1,3 +1,4 @@
+#include "Project/WebProjectStorage.h"
 #include "FileBrowser.h"
 #include "API/Command.h"
 #include "API/Image.h"
@@ -212,18 +213,26 @@ namespace pe
         {
             constexpr size_t kChunkSize = 1 * 1024 * 1024;
 
+            std::error_code ec;
+            if (std::filesystem::equivalent(src, dst, ec))
+                return true;
+
             std::filesystem::create_directories(dst.parent_path());
 
             std::ifstream in(src, std::ios::binary);
+            if (!in.is_open())
+                return false;
+
             std::ofstream out(dst, std::ios::binary | std::ios::trunc);
-            if (!in.is_open() || !out.is_open())
+            if (!out.is_open())
                 return false;
 
             auto fileSize = std::filesystem::file_size(src);
             if (fileSize == 0)
             {
                 onBytesWritten(0);
-                return true;
+                out.close();
+                return !out.fail();
             }
 
             std::vector<char> buf(std::min(kChunkSize, static_cast<size_t>(fileSize)));
@@ -237,7 +246,8 @@ namespace pe
                 onBytesWritten(static_cast<uintmax_t>(n));
             }
 
-            return !out.bad();
+            out.close();
+            return in.eof() && !in.bad() && !out.fail();
         }
     } // namespace
 
@@ -516,7 +526,7 @@ namespace pe
 
     void FileBrowser::TryStartCopy(const std::vector<std::filesystem::path> &sources)
     {
-        if (m_copyState->active)
+        if (m_copyState->active || !CanWriteWebProjectPath(m_currentPath / ".copy"))
             return;
 
         auto tasks = BuildCopyTasks(sources, m_currentPath);
@@ -543,7 +553,7 @@ namespace pe
 
     void FileBrowser::CopyDroppedFiles(const std::vector<std::filesystem::path> &sources, bool skipExisting)
     {
-        if (m_copyState->active)
+        if (m_copyState->active || !CanWriteWebProjectPath(m_currentPath / ".copy"))
             return;
 
         auto tasks = BuildCopyTasks(sources, m_currentPath);
@@ -567,10 +577,14 @@ namespace pe
         state->progress = 0.0f;
         state->needsRefresh = false;
 
-        ThreadPool::GUI.Enqueue([state, tasks, totalBytes, totalFiles]()
-                                {
-            uintmax_t bytesCopied = 0;
+        std::vector<std::filesystem::path> destinations;
+        for (const auto &task : tasks)
+            destinations.push_back(task.dst);
 
+        auto copy = [state, tasks = std::move(tasks), totalBytes, totalFiles]()
+        {
+            uintmax_t bytesCopied = 0;
+            bool copied = true;
             for (int i = 0; i < totalFiles; ++i)
             {
                 const auto &task = tasks[i];
@@ -589,7 +603,24 @@ namespace pe
                 };
 
                 if (!CopyFileChunked(task.src, task.dst, onBytesWritten))
+                {
                     PE_WARN("[FileBrowser] Failed to copy '%s'", task.src.filename().string().c_str());
+                    copied = false;
+                }
+            }
+            return copied;
+        };
+
+        ThreadPool::GUI.Enqueue([state, destinations = std::move(destinations), copy = std::move(copy)]()
+                                {
+            try
+            {
+                state->failed = !CommitProjectEdit(destinations, copy);
+            }
+            catch (const std::filesystem::filesystem_error &e)
+            {
+                PE_WARN("[FileBrowser] Copy failed: %s", e.what());
+                state->failed = true;
             }
 
             state->active = false;
@@ -1063,7 +1094,7 @@ namespace pe
                                                 ImGuiPopupFlags_NoOpenOverItems))
             return;
 
-        if (ImGui::MenuItem("New Folder"))
+        if (ImGui::MenuItem("New Folder", nullptr, false, CanWriteWebProjectPath(m_currentPath / "New Folder")))
         {
             auto newFolder = m_currentPath / "New Folder";
             for (int i = 1; std::filesystem::exists(newFolder); ++i)
@@ -1071,14 +1102,18 @@ namespace pe
 
             try
             {
-                std::filesystem::create_directory(newFolder);
-                RefreshCache();
-                m_selectedEntry = newFolder;
-                auto filename = newFolder.filename().string();
-                CopyToCharBuffer(m_renameBuffer, filename);
-                m_renamingEntry = newFolder;
-                m_renameNeedsFocus = true;
-                m_pendingOpenRename = true;
+                m_fileEditFailed = !CommitProjectEdit({newFolder}, [&]()
+                                                      { return std::filesystem::create_directory(newFolder); });
+                if (!m_fileEditFailed)
+                {
+                    RefreshCache();
+                    m_selectedEntry = newFolder;
+                    auto filename = newFolder.filename().string();
+                    CopyToCharBuffer(m_renameBuffer, filename);
+                    m_renamingEntry = newFolder;
+                    m_renameNeedsFocus = true;
+                    m_pendingOpenRename = true;
+                }
             }
             catch (const std::filesystem::filesystem_error &e)
             {
@@ -1118,19 +1153,28 @@ namespace pe
                                           ImGuiInputTextFlags_EnterReturnsTrue);
         ui::ItemTooltip("New name for the selected file or folder.");
         ImGui::Spacing();
-        if (confirmed || ImGui::Button("OK"))
+        const auto destination = m_renamingEntry.parent_path() / m_renameBuffer;
+        const bool writable = CanWriteWebProjectPath(m_renamingEntry) && CanWriteWebProjectPath(destination);
+        ImGui::BeginDisabled(!writable);
+        if ((confirmed && writable) || ImGui::Button("OK"))
         {
             if (m_renameBuffer[0] != '\0' && !m_renamingEntry.empty())
             {
-                auto newPath = m_renamingEntry.parent_path() / m_renameBuffer;
+                const auto &newPath = destination;
                 try
                 {
-                    std::filesystem::rename(m_renamingEntry, newPath);
-                    if (m_selectedEntry == m_renamingEntry)
-                        m_selectedEntry = newPath;
-                    if (m_clipboardPath == m_renamingEntry)
-                        m_clipboardPath = newPath;
-                    RefreshCache();
+                    m_fileEditFailed = !CommitProjectEdit({m_renamingEntry, newPath}, [&]()
+                                                          {
+                        std::filesystem::rename(m_renamingEntry, newPath);
+                        return true; });
+                    if (!m_fileEditFailed)
+                    {
+                        if (m_selectedEntry == m_renamingEntry)
+                            m_selectedEntry = newPath;
+                        if (m_clipboardPath == m_renamingEntry)
+                            m_clipboardPath = newPath;
+                        RefreshCache();
+                    }
                 }
                 catch (const std::filesystem::filesystem_error &e)
                 {
@@ -1140,6 +1184,7 @@ namespace pe
             m_renamingEntry.clear();
             ImGui::CloseCurrentPopup();
         }
+        ImGui::EndDisabled();
         ui::ItemTooltip("Apply the rename.");
         ImGui::SameLine();
         if (ImGui::Button("Cancel"))
@@ -1162,15 +1207,20 @@ namespace pe
         ImGui::TextWrapped("Delete \"%s\"?", m_selectedEntry.filename().string().c_str());
         ImGui::Spacing();
 
+        ImGui::BeginDisabled(!CanWriteWebProjectPath(m_selectedEntry));
         if (ImGui::Button("Delete"))
         {
             try
             {
-                std::filesystem::remove_all(m_selectedEntry);
-                if (m_clipboardPath == m_selectedEntry)
-                    m_clipboardPath.clear();
-                m_selectedEntry.clear();
-                RefreshCache();
+                m_fileEditFailed = !CommitProjectEdit({m_selectedEntry}, [&]()
+                                                      { return std::filesystem::remove_all(m_selectedEntry) != 0; });
+                if (!m_fileEditFailed)
+                {
+                    if (m_clipboardPath == m_selectedEntry)
+                        m_clipboardPath.clear();
+                    m_selectedEntry.clear();
+                    RefreshCache();
+                }
             }
             catch (const std::filesystem::filesystem_error &e)
             {
@@ -1178,6 +1228,7 @@ namespace pe
             }
             ImGui::CloseCurrentPopup();
         }
+        ImGui::EndDisabled();
         ui::ItemTooltip("Permanently delete this file or folder.");
         ImGui::SameLine();
         if (ImGui::Button("Cancel"))
@@ -1246,8 +1297,7 @@ namespace pe
         if (!validNode)
             ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.25f, 1.0f), "Source node is no longer valid.");
 
-        if (!validNode)
-            ImGui::BeginDisabled();
+        ImGui::BeginDisabled(!validNode || !CanWriteWebProjectPath(savePath));
         if (ImGui::Button("Create", ui::DialogButtonSize("Create", 9.2f)))
         {
             UndoRedo::Instance().RecordSnapshot(*scene, "Created Prefab");
@@ -1261,8 +1311,7 @@ namespace pe
             }
         }
         ui::ItemTooltip("Create a prefab from the dragged node subtree.");
-        if (!validNode)
-            ImGui::EndDisabled();
+        ImGui::EndDisabled();
 
         ImGui::SameLine();
         if (ImGui::Button("Cancel", ui::DialogButtonSize("Cancel", 9.2f)))
@@ -1277,7 +1326,10 @@ namespace pe
         ProcessLoadedImages();
 
         if (m_copyState->needsRefresh.exchange(false))
+        {
+            m_fileEditFailed = m_copyState->failed;
             RefreshCache();
+        }
 
         if (m_open && !m_wasOpen)
             RefreshCache(false);
@@ -1289,6 +1341,9 @@ namespace pe
         ui::SetInitialWindowSizeFraction(0.2f, 0.4f);
         if (ImGui::Begin("File Browser", &m_open))
         {
+            if (m_fileEditFailed)
+                ImGui::TextWrapped("File operation failed. Retry the operation.");
+
             // Process OS-level file drops when this window is focused
             if (ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows))
             {

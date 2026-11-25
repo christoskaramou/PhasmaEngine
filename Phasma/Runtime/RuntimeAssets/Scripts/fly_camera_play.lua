@@ -22,6 +22,28 @@ local props = exposed {
 }
 
 local skip_next_rotation = false
+local look_x, look_y = 0.0, 0.0
+local look_time_left = 0.0
+
+-- Spread relative mouse input over 20 ms rather than rotating only on event frames.
+-- Consume the measured delta exactly; never extrapolate after the mouse stops.
+local function apply_look(cam, dx, dy, dt)
+    if dx ~= 0 or dy ~= 0 then
+        look_x = look_x + dx
+        look_y = look_y + dy
+        look_time_left = 0.020
+    end
+    if look_time_left <= 0 then return end
+
+    local step = math.min(dt, look_time_left)
+    local fraction = step / look_time_left
+    local x = look_x * fraction
+    local y = look_y * fraction
+    cam:rotate(x, y)
+    look_x = look_x - x
+    look_y = look_y - y
+    look_time_left = look_time_left - step
+end
 -- fly-mode smoothed axes carried between frames
 local move_fwd, move_side, move_up = 0.0, 0.0, 0.0
 local since_jump = 1.0 -- physics: seconds since last jump, gates re-jump
@@ -33,11 +55,10 @@ local function approach(current, target, rate, delta)
 end
 
 -- Mouse look while Right Mouse is held (relative-mouse capture). Returns whether RMB is down.
-local function do_look(cam)
+local function do_look(cam, dt)
     local rmb = input.is_right_mouse_down()
-    if not engine.is_play_mode() and input.is_viewport_focused and not input.is_viewport_focused() then
-        rmb = false
-    end
+    local focused = not input.is_viewport_focused or input.is_viewport_focused()
+    rmb = rmb and focused
     if rmb then
         if not input.is_relative_mouse() then
             input.set_relative_mouse(true)
@@ -46,12 +67,19 @@ local function do_look(cam)
         local m = input.get_mouse_delta()
         if not skip_next_rotation then
             local my = props.invert_y and -m.y or m.y
-            cam:rotate(m.x, my)
+            apply_look(cam, m.x, my, dt)
         else
+            look_x, look_y, look_time_left = 0.0, 0.0, 0.0
             skip_next_rotation = false
         end
-    elseif input.is_relative_mouse() then
-        input.set_relative_mouse(false)
+    else
+        if focused and look_time_left > 0 then
+            cam:rotate(look_x, look_y)
+        end
+        look_x, look_y, look_time_left = 0.0, 0.0, 0.0
+        if input.is_relative_mouse() then
+            input.set_relative_mouse(false)
+        end
     end
     return rmb
 end
@@ -137,6 +165,7 @@ local function update(dt)
     -- Editor viewport freecam only. During play (editor Play or packaged player)
     -- games own WASD/Space — never steal them here even if runMode was left on "both".
     if engine and engine.is_play_mode and engine.is_play_mode() then
+        look_x, look_y, look_time_left = 0.0, 0.0, 0.0
         if input and input.is_relative_mouse and input.is_relative_mouse() then
             input.set_relative_mouse(false)
         end
@@ -145,7 +174,7 @@ local function update(dt)
     local cam = get_camera()
     if not cam then return end
     local delta = dt or (engine.get_metrics().delta_ms / 1000.0)
-    local rmb = do_look(cam)
+    local rmb = do_look(cam, delta)
     -- Physics FPS only during play (bodies simulate only then); in the editor, fly to author freely.
     if self and engine.is_play_mode() and physics.has_body(self) then
         update_physics(cam, delta)

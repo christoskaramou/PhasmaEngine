@@ -154,7 +154,7 @@ namespace pe
         void RemoveLight(LightType type, int index);
         std::pair<LightType, int> GetLightForNode(const NodeId *node) const;
         void NewScene();
-        void SaveScene(const std::filesystem::path &file);
+        bool SaveScene(const std::filesystem::path &file);
         // Writes the scene to file with its file paths relative to sceneDir. Not a save: the scene path and the dirty
         // state stay as they are. False when the file was not written in full.
         bool WriteSceneFile(const std::filesystem::path &file, const std::filesystem::path &sceneDir);
@@ -963,6 +963,7 @@ namespace pe
             float distance;
         };
         void BuildWebDraws();
+        bool IsSelectedInHierarchy(const NodeId *node) const;
         std::array<std::vector<WebDraw>, 7> m_webDraws;
         uint32_t m_webDrawsFrame = UINT32_MAX;
         bool m_hasTransmissionMeshes = false;

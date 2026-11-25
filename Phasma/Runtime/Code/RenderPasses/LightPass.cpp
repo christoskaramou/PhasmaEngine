@@ -641,6 +641,7 @@ namespace pe
             const bool frameBoundForwardPlusResources =
                 SetForwardPlusDescriptors(DSet, i, m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
+            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true, ActiveScreenIrradiance(i), ActiveReflections(i));
             DSet->Update();
 
             // Set 1 is null when the shader declares no shadow bindings.
@@ -656,7 +657,6 @@ namespace pe
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
-            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true, ActiveScreenIrradiance(i), ActiveReflections(i));
         }
 
         m_boundShadowsAvailable = useShadowResources;
@@ -778,9 +778,9 @@ namespace pe
         m_bakedPath = path;
         if (m_bakedProbes)
         {
-            RHII.WaitDeviceIdle();
-            Image::Destroy(m_bakedProbes);
-            m_bakedProbes = nullptr;
+            // In-flight lighting descriptors may still reference the previous scene's atlas.
+            RHII.AddToDeletionQueue([old = std::exchange(m_bakedProbes, nullptr)]() mutable
+                                    { Image::Destroy(old); });
         }
 
         m_bakedUniforms = {};
@@ -932,6 +932,7 @@ namespace pe
             const bool frameBoundForwardPlusResources =
                 SetForwardPlusDescriptors(DSet, i, m_forwardPlusFallbackTileData, m_forwardPlusFallbackLightIndices);
             boundForwardPlusResources = boundForwardPlusResources && frameBoundForwardPlusResources;
+            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true);
             DSet->Update();
 
             // Set 1 is null when the shader declares no shadow bindings.
@@ -947,7 +948,6 @@ namespace pe
             auto *DSetSkybox = sets[2];
             DSetSkybox->SetImageView(0, skybox.GetCubeMap()->GetSRV(), skybox.GetCubeMap()->GetSampler());
             DSetSkybox->Update();
-            BindProbeLighting(*m_passInfo, m_uniforms[i], i, true);
         }
 
         m_boundShadowsAvailable = useShadowResources;

@@ -113,7 +113,9 @@ namespace pe
         bool CookModelToPemesh(const std::filesystem::path &src, const std::filesystem::path &outPemesh);
         void ShowLoadSceneMenuItem();
         void ShowSaveSceneMenuItem();
-        void ShowSaveSceneMenuItem_Action(); // Opens file selector for Save As
+        void ShowSaveSceneMenuItem_Action(std::function<void()> onSaved = {});
+        void SaveBeforeAction(std::function<void()> onSaved);
+        void SaveSelectedScene(const std::filesystem::path &path, std::function<void()> onSaved);
         void OpenLoadSceneDialog();
         void ShowExitMenuItem();
         void ShowRunScriptTestsMenu();
@@ -141,7 +143,7 @@ namespace pe
 
         bool m_showOverwriteConfirmation = false;
         std::filesystem::path m_pendingSavePath;
-        bool m_exitAfterSave = false; // set when Save & Exit is chosen with no existing path
+        std::function<void()> m_overwriteOnSaved;
         void DrawOverwriteConfirmationPopup();
 
         // Confirm-before-save guard for the interactive Save (Ctrl+S / menu): a stray

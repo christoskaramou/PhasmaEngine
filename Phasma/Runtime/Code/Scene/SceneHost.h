@@ -1,6 +1,5 @@
 #pragma once
 
-
 namespace pe
 {
     class Scene;
@@ -35,7 +34,7 @@ namespace pe
     {
         SceneHostBeforeMutationFn beforeMutation = nullptr;
         void (*newScene)() = nullptr;
-        void (*saveScene)(const std::filesystem::path &path) = nullptr;
+        bool (*saveScene)(const std::filesystem::path &path) = nullptr;
         void (*loadScene)(const std::filesystem::path &path) = nullptr;
         ScenePreloadHandle (*preloadScene)(const std::filesystem::path &path) = nullptr;
         void (*loadSceneApply)(ScenePreloadHandle preload) = nullptr;
@@ -44,7 +43,7 @@ namespace pe
     void SetSceneHostCallbacks(SceneHostCallbacks callbacks);
     void SyncSceneBeforeMutation();
     void NewScene();
-    void SaveScene(const std::filesystem::path &path);
+    bool SaveScene(const std::filesystem::path &path);
     void LoadScene(const std::filesystem::path &path);
     [[nodiscard]] ScenePreloadHandle PreloadScene(const std::filesystem::path &path);
     void LoadSceneApply(ScenePreloadHandle preload);

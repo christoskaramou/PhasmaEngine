@@ -165,11 +165,7 @@ namespace pe
         scene->BindDrawIdBuffer(cmd);
         cmd->SetConstants(maskConstants);
         cmd->PushConstants();
-        cmd->DrawIndexedIndirectCount(scene->GetIndirectSelected(frame),
-                                      0,
-                                      scene->GetCullingCountersBuffer(frame),
-                                      4 * sizeof(uint32_t),
-                                      mesh);
+        scene->DrawBucket(cmd, scene->GetIndirectSelected(frame), scene->GetCullingCountersBuffer(frame), 4, mesh);
         cmd->EndPass();
 
         // 2) Mask color-attachment -> shader read for the composite.
