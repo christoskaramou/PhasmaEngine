@@ -348,6 +348,8 @@ namespace pe
             out = RenderType::Lines;
         else if (type == "sprite_outline")
             out = RenderType::SpriteOutline;
+        else if (type == "additive")
+            out = RenderType::Additive;
         else
             return false;
         return true;
@@ -782,6 +784,7 @@ namespace pe
                     case RenderType::Transmission: return "transmission";
                     case RenderType::Lines: return "lines";
                     case RenderType::SpriteOutline: return "sprite_outline";
+                    case RenderType::Additive: return "additive";
                     default: return "opaque";
                     }
                 };

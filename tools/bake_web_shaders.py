@@ -74,9 +74,10 @@ def required_editor_variants():
     # Paths can alias: AABBsPS and LinesPS have the same expanded code, entry and stage.
     for stage, entry, paths in [
         (VERTEX, "mainVS", "Common/Quad Depth/DepthVS Utilities/AABBsVS Utilities/LinesVS "
-                      "Utilities/SpriteOutlineVS Shadows/ShadowsVS Voxel/VoxelShadowVS Particle/ParticleVS"),
+                      "Utilities/SpriteOutlineVS Utilities/AdditiveVS Shadows/ShadowsVS Voxel/VoxelShadowVS "
+                      "Particle/ParticleVS"),
         (FRAGMENT, "mainPS", "Depth/DepthPS Utilities/GridPS Utilities/LinesPS Utilities/AABBsPS "
-                       "Outline/OutlineMaskPS Outline/OutlineCompositePS Perception/ObjectIdPS Tonemap/TonemapPS "
+                       "Utilities/AdditivePS Outline/OutlineMaskPS Outline/OutlineCompositePS Perception/ObjectIdPS Tonemap/TonemapPS "
                        "SSR/SSRPS Utilities/UpsamplePS FXAA/FXAAPS Bloom/BrightFilterPS Bloom/GaussianBlurHPS "
                        "Bloom/GaussianBlurVPS ColorGrading/ColorGradingPS DepthOfField/DOFPS MotionBlur/MotionBlurPS "
                        "Particle/ParticlePS"),

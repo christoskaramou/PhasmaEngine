@@ -29,7 +29,9 @@ namespace pe
 
     static bool IsRasterIndirectMesh(const Mesh &mesh)
     {
-        return mesh.renderType != RenderType::Lines && mesh.renderType != RenderType::SpriteOutline;
+        return mesh.renderType != RenderType::Lines &&
+               mesh.renderType != RenderType::SpriteOutline &&
+               mesh.renderType != RenderType::Additive;
     }
 
     static bool IsOpenPBRSkinningMesh(const Mesh &mesh, const NodeGpuData &node)
@@ -1872,6 +1874,7 @@ namespace pe
         m_hasAlphaBlendMeshes = false;
         m_hasTransmissionMeshes = false;
         m_hasLinesMeshes = false;
+        m_hasAdditiveMeshes = false;
         m_alphaBlendMeshCount = 0;
         m_transmissionMeshCount = 0;
         m_meshConstants->Map();
@@ -1892,6 +1895,11 @@ namespace pe
                 if (mesh.renderType == RenderType::Lines || mesh.renderType == RenderType::SpriteOutline)
                 {
                     m_hasLinesMeshes = true;
+                    continue;
+                }
+                else if (mesh.renderType == RenderType::Additive)
+                {
+                    m_hasAdditiveMeshes = true;
                     continue;
                 }
                 else if (mesh.renderType == RenderType::AlphaBlend)

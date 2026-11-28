@@ -35,6 +35,7 @@ namespace pe
 
         static const BlendState Default;
         static const BlendState AdditiveColor;
+        static const BlendState AdditiveAlpha;
         static const BlendState TransparencyBlend;
         static const BlendState ParticlesBlend;
     };

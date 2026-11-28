@@ -189,6 +189,7 @@ namespace pe
         Transmission = 4,
         Lines = 5,         // line-strip meshes drawn directly by LinesPass
         SpriteOutline = 6, // feathered sprite silhouette triangles drawn directly by LinesPass
+        Additive = 7,      // unlit additive-blended effect meshes drawn directly by LinesPass
     };
 
     enum class ReflectionVariableType

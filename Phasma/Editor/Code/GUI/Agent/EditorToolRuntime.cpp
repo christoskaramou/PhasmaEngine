@@ -309,6 +309,10 @@ namespace pe
                 return "transmission";
             case RenderType::Lines:
                 return "lines";
+            case RenderType::SpriteOutline:
+                return "sprite_outline";
+            case RenderType::Additive:
+                return "additive";
             default:
                 return "unknown";
             }
@@ -2594,6 +2598,8 @@ namespace pe
                                         else if (rt == "alpha_blend") newRT = RenderType::AlphaBlend;
                                         else if (rt == "transmission") newRT = RenderType::Transmission;
                                         else if (rt == "lines") newRT = RenderType::Lines;
+                                        else if (rt == "sprite_outline") newRT = RenderType::SpriteOutline;
+                                        else if (rt == "additive") newRT = RenderType::Additive;
                                         if (newRT != mesh.renderType)
                                         {
                                             inst->SetRenderType(newRT);

@@ -367,7 +367,8 @@ namespace pe
         {
             const Mesh &mesh = m_meshes[meshIndex];
             if (!mesh.live || mesh.indexCount == 0 || mesh.renderType == RenderType::Lines ||
-                mesh.renderType == RenderType::SpriteOutline || spriteMesh[meshIndex])
+                mesh.renderType == RenderType::SpriteOutline || mesh.renderType == RenderType::Additive ||
+                spriteMesh[meshIndex])
                 continue;
             if (hasSkeleton && mesh.skinned)
                 continue;
@@ -583,7 +584,8 @@ namespace pe
                     continue;
                 if (m_meshes[meshIdx].indexCount == 0 ||
                     m_meshes[meshIdx].renderType == RenderType::Lines ||
-                    m_meshes[meshIdx].renderType == RenderType::SpriteOutline)
+                    m_meshes[meshIdx].renderType == RenderType::SpriteOutline ||
+                    m_meshes[meshIdx].renderType == RenderType::Additive)
                 {
                     continue;
                 }

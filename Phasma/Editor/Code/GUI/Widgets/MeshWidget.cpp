@@ -324,7 +324,8 @@ namespace pe
                 ImGui::Text("Render Type");
                 ImGui::TableSetColumnIndex(1);
 
-                const char *renderTypeItems[] = {"Opaque", "AlphaCut", "AlphaBlend", "Transmission", "Lines"};
+                const char *renderTypeItems[] = {"Opaque", "AlphaCut", "AlphaBlend", "Transmission", "Lines",
+                                                 "SpriteOutline", "Additive"};
                 int currentRenderType = static_cast<int>(curRenderType) - 1;
                 if (currentRenderType >= 0 && currentRenderType < IM_ARRAYSIZE(renderTypeItems))
                 {
@@ -339,7 +340,7 @@ namespace pe
                         mesh->renderType = newRT;
                         changed = true;
                     }
-                    ui::ItemTooltip("Select the material render path: opaque, cutout, blended, transmission, or lines.");
+                    ui::ItemTooltip("Select the material render path: opaque, cutout, blended, transmission, lines, sprite outline, or additive.");
                 }
                 else
                 {

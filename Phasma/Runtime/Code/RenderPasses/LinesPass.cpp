@@ -18,6 +18,8 @@ namespace pe
     {
         if (!m_spriteOutlinePassInfo)
             m_spriteOutlinePassInfo = std::make_unique<PassInfo>();
+        if (!m_additivePassInfo)
+            m_additivePassInfo = std::make_unique<PassInfo>();
 
         SceneRendererHost *rs = &RequireActiveSceneRendererHost();
 
@@ -67,14 +69,43 @@ namespace pe
         m_spriteOutlinePassInfo->depthBiasConstantFactor =
             Settings::Get<SceneSettings>().reverse_depth ? 1.0f : -1.0f;
         m_spriteOutlinePassInfo->Update();
+
+        m_additivePassInfo->name = "Additive_pipeline";
+        m_additivePassInfo->pVertShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Utilities/AdditiveVS.hlsl",
+                                                          .entryPoint = "mainVS",
+                                                          .stage = PE_SHADER_STAGE_VERTEX,
+                                                          .defines = std::vector<Define>{}});
+        m_additivePassInfo->pFragShader = Shader::Create({.sourcePath = Path::RuntimeAssets + "Shaders/Utilities/AdditivePS.hlsl",
+                                                          .entryPoint = "mainPS",
+                                                          .stage = PE_SHADER_STAGE_FRAGMENT,
+                                                          .defines = std::vector<Define>{}});
+        m_additivePassInfo->dynamicStates = {PE_DYNAMIC_STATE_VIEWPORT, PE_DYNAMIC_STATE_SCISSOR};
+        m_additivePassInfo->topology = PE_TOPOLOGY_TRIANGLE_LIST;
+        m_additivePassInfo->cullMode = PE_CULL_MODE_NONE;
+        m_additivePassInfo->blendEnable = true;
+        m_additivePassInfo->colorBlendAttachments = {BlendState::AdditiveAlpha};
+        m_additivePassInfo->colorFormats = {m_viewportRT->GetFormat()};
+        m_additivePassInfo->depthFormat = m_depthRT->GetFormat();
+        m_additivePassInfo->depthTestEnable = true;
+        m_additivePassInfo->depthWriteEnable = false;
+        m_additivePassInfo->depthCompareOp = Settings::Get<SceneSettings>().reverse_depth
+                                                 ? PE_COMPARE_OP_GREATER_OR_EQUAL
+                                                 : PE_COMPARE_OP_LESS_OR_EQUAL;
+        m_additivePassInfo->Update();
+        m_lastGeometryVersion = ~0ull;
+    }
+
+    void LinesPass::UpdateDescriptorSets()
+    {
+        m_lastGeometryVersion = ~0ull;
     }
 
     void LinesPass::Update()
     {
         Scene &scene = *GetActiveScene();
+        const uint32_t frame = RHII.GetFrameIndex();
         if (scene.HasLinesMeshes())
         {
-            uint32_t frame = RHII.GetFrameIndex();
             const auto &sets = m_passInfo->GetDescriptors(frame);
             Descriptor *setUniforms = sets[0];
             setUniforms->SetBuffer(0, scene.GetUniforms(frame));
@@ -85,6 +116,27 @@ namespace pe
             outlineUniforms->SetBuffer(0, scene.GetUniforms(frame));
             outlineUniforms->Update();
         }
+
+        if (scene.HasAdditiveMeshes())
+        {
+            const uint64_t geoVersion = scene.GetGeometryVersion();
+            if (geoVersion != m_lastGeometryVersion)
+            {
+                m_lastGeometryVersion = geoVersion;
+                for (uint32_t i = 0; i < RHII.GetSwapchainImageCount(); i++)
+                {
+                    const auto &additiveSets = m_additivePassInfo->GetDescriptors(i);
+                    Descriptor *additiveUniforms = additiveSets[0];
+                    additiveUniforms->SetSampler(1, scene.GetDefaultSampler());
+                    additiveUniforms->Update();
+                }
+            }
+
+            const auto &additiveSets = m_additivePassInfo->GetDescriptors(frame);
+            Descriptor *additiveUniforms = additiveSets[0];
+            additiveUniforms->SetBuffer(0, scene.GetUniforms(frame));
+            additiveUniforms->Update();
+        }
     }
 
     void LinesPass::ExecutePass(CommandBuffer *cmd)
@@ -92,7 +144,7 @@ namespace pe
         PE_ERROR_IF(m_scene == nullptr, "Scene was not set");
         Scene *scene = m_scene;
         m_scene = nullptr;
-        if (!scene->HasLinesMeshes())
+        if (!scene->HasLinesMeshes() && !scene->HasAdditiveMeshes())
             return;
 
         struct PushConstants_Lines
@@ -101,82 +153,153 @@ namespace pe
             uint32_t meshDataOffset;
         } constants{};
 
+        struct PushConstants_Additive
+        {
+            vec4 baseColorFactor;
+            vec4 emissiveFactor;
+            uint32_t meshDataOffset;
+            uint32_t baseColorTexIdx;
+            uint32_t linearColor;
+            uint32_t pad0;
+        } additiveConstants{};
+
         cmd->BeginDebugRegion("Lines");
 
         cmd->BeginPass(2, m_attachments.data(), "LinesPass");
         cmd->SetViewport(0.f, 0.f, m_viewportRT->GetWidth_f(), m_viewportRT->GetHeight_f());
         cmd->SetScissor(0, 0, m_viewportRT->GetWidth(), m_viewportRT->GetHeight());
-        cmd->BindPipeline(*m_passInfo);
         cmd->BindIndexBuffer(scene->GetBuffer(), 0);
-        cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
-        scene->BindDrawIdBuffer(cmd);
 
-        for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
+        if (scene->HasLinesMeshes())
         {
-            NodeId *node = scene->GetNodeId(i);
-            const NodeRuntime &rt = scene->GetNodeRuntime(node);
-            if (rt.gpuPending || rt.gpuData.renderVisible == 0u)
-                continue;
+            cmd->BindPipeline(*m_passInfo);
+            cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
+            scene->BindDrawIdBuffer(cmd);
 
-            const auto &refs = scene->GetMeshRefs(node);
-            if (refs.empty())
-                continue;
-
-            for (int meshIdx : refs)
+            for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
             {
-                if (meshIdx < 0)
+                NodeId *node = scene->GetNodeId(i);
+                const NodeRuntime &rt = scene->GetNodeRuntime(node);
+                if (rt.gpuPending || rt.gpuData.renderVisible == 0u)
                     continue;
 
-                const Mesh &mesh = scene->GetMesh(meshIdx);
-                if (mesh.renderType != RenderType::Lines || mesh.indexCount == 0)
+                const auto &refs = scene->GetMeshRefs(node);
+                if (refs.empty())
                     continue;
 
-                vec3 emissive = mesh.materialInstance ? mesh.materialInstance->GetEmissiveFactor()
-                                                      : (mesh.material ? mesh.material->emissiveFactor : vec3(1.f));
-                vec4 baseColor = mesh.materialInstance ? mesh.materialInstance->GetBaseColorFactor()
-                                                       : (mesh.material ? mesh.material->baseColorFactor : vec4(1.f));
-                // Emissive is the line color when set (lit shading is meaningless for
-                // guide lines); base_color is the fallback.
-                constants.color = dot(emissive, emissive) > 0.f ? vec4(SceneColor(emissive), baseColor.a)
-                                                                : vec4(SceneColor(vec3(baseColor)), baseColor.a);
-                constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
+                for (int meshIdx : refs)
+                {
+                    if (meshIdx < 0)
+                        continue;
 
-                cmd->SetConstants(constants);
-                cmd->PushConstants();
-                cmd->DrawIndexed(mesh.indexCount, 1, mesh.indexOffset, mesh.vertexOffset, 0);
+                    const Mesh &mesh = scene->GetMesh(meshIdx);
+                    if (mesh.renderType != RenderType::Lines || mesh.indexCount == 0)
+                        continue;
+
+                    vec3 emissive = mesh.materialInstance ? mesh.materialInstance->GetEmissiveFactor()
+                                                          : (mesh.material ? mesh.material->emissiveFactor : vec3(1.f));
+                    vec4 baseColor = mesh.materialInstance ? mesh.materialInstance->GetBaseColorFactor()
+                                                           : (mesh.material ? mesh.material->baseColorFactor : vec4(1.f));
+                    // Emissive is the line color when set (lit shading is meaningless for
+                    // guide lines); base_color is the fallback.
+                    constants.color = dot(emissive, emissive) > 0.f ? vec4(SceneColor(emissive), baseColor.a)
+                                                                    : vec4(SceneColor(vec3(baseColor)), baseColor.a);
+                    constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
+
+                    cmd->SetConstants(constants);
+                    cmd->PushConstants();
+                    cmd->DrawIndexed(mesh.indexCount, 1, mesh.indexOffset, mesh.vertexOffset, 0);
+                }
+            }
+
+            cmd->BindPipeline(*m_spriteOutlinePassInfo);
+            cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
+            scene->BindDrawIdBuffer(cmd);
+
+            for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
+            {
+                NodeId *node = scene->GetNodeId(i);
+                const NodeRuntime &rt = scene->GetNodeRuntime(node);
+                if (rt.gpuPending || rt.gpuData.renderVisible == 0u)
+                    continue;
+
+                for (int meshIdx : scene->GetMeshRefs(node))
+                {
+                    if (meshIdx < 0)
+                        continue;
+
+                    const Mesh &mesh = scene->GetMesh(meshIdx);
+                    if (mesh.renderType != RenderType::SpriteOutline || mesh.indexCount == 0)
+                        continue;
+
+                    const vec3 emissive = mesh.materialInstance ? mesh.materialInstance->GetEmissiveFactor()
+                                                                : mesh.material->emissiveFactor;
+                    const vec4 baseColor = mesh.materialInstance ? mesh.materialInstance->GetBaseColorFactor()
+                                                                 : mesh.material->baseColorFactor;
+                    constants.color = vec4(SceneColor(emissive), baseColor.a);
+                    constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
+
+                    cmd->SetConstants(constants);
+                    cmd->PushConstants();
+                    cmd->DrawIndexed(mesh.indexCount, 1, mesh.indexOffset, mesh.positionsOffset, 0);
+                }
             }
         }
 
-        cmd->BindPipeline(*m_spriteOutlinePassInfo);
-        cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetPositionsOffset());
-        scene->BindDrawIdBuffer(cmd);
-
-        for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
+        if (scene->HasAdditiveMeshes())
         {
-            NodeId *node = scene->GetNodeId(i);
-            const NodeRuntime &rt = scene->GetNodeRuntime(node);
-            if (rt.gpuPending || rt.gpuData.renderVisible == 0u)
-                continue;
+            const uint32_t linearColor = SceneUsesLinearColor() ? 1u : 0u;
+            const size_t imageViewCount = scene->GetImageViews().size();
 
-            for (int meshIdx : scene->GetMeshRefs(node))
+            cmd->BindPipeline(*m_additivePassInfo);
+            cmd->BindVertexBuffer(scene->GetBuffer(), scene->GetVerticesOffset());
+
+            for (uint32_t i = 0; i < scene->GetNodeCount(); i++)
             {
-                if (meshIdx < 0)
+                NodeId *node = scene->GetNodeId(i);
+                const NodeRuntime &rt = scene->GetNodeRuntime(node);
+                if (rt.gpuPending ||
+                    rt.gpuData.renderVisible == 0u ||
+                    rt.dataOffset == static_cast<size_t>(-1) ||
+                    !scene->IsNodeHierarchyEnabled(node))
+                {
+                    continue;
+                }
+
+                const auto &refs = scene->GetMeshRefs(node);
+                if (refs.empty())
                     continue;
 
-                const Mesh &mesh = scene->GetMesh(meshIdx);
-                if (mesh.renderType != RenderType::SpriteOutline || mesh.indexCount == 0)
-                    continue;
+                for (int meshIdx : refs)
+                {
+                    if (meshIdx < 0 || !scene->IsValidMeshIndex(meshIdx))
+                        continue;
 
-                const vec3 emissive = mesh.materialInstance ? mesh.materialInstance->GetEmissiveFactor()
-                                                            : mesh.material->emissiveFactor;
-                const vec4 baseColor = mesh.materialInstance ? mesh.materialInstance->GetBaseColorFactor()
-                                                             : mesh.material->baseColorFactor;
-                constants.color = vec4(SceneColor(emissive), baseColor.a);
-                constants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
+                    const Mesh &mesh = scene->GetMesh(meshIdx);
+                    if (mesh.renderType != RenderType::Additive || mesh.indexCount == 0)
+                        continue;
 
-                cmd->SetConstants(constants);
-                cmd->PushConstants();
-                cmd->DrawIndexed(mesh.indexCount, 1, mesh.indexOffset, mesh.positionsOffset, 0);
+                    const vec4 baseColor = mesh.materialInstance ? mesh.materialInstance->GetBaseColorFactor()
+                                                                 : (mesh.material ? mesh.material->baseColorFactor : vec4(1.f));
+                    const vec3 emissive = mesh.materialInstance ? mesh.materialInstance->GetEmissiveFactor()
+                                                                : (mesh.material ? mesh.material->emissiveFactor : vec3(0.f));
+                    const uint32_t texMask = mesh.materialInstance ? mesh.materialInstance->GetTextureMask()
+                                                                   : (mesh.material ? mesh.material->textureMask : 0u);
+                    const uint32_t baseIdx = scene->GetMeshRuntime(meshIdx).imageViewIndices[0];
+                    const bool hasBaseColorTex = (texMask & TextureBit(TextureType::BaseColor)) != 0u &&
+                                                 baseIdx < imageViewCount;
+
+                    additiveConstants.baseColorFactor = baseColor;
+                    additiveConstants.emissiveFactor = vec4(emissive, 0.f);
+                    additiveConstants.meshDataOffset = static_cast<uint32_t>(rt.dataOffset);
+                    additiveConstants.baseColorTexIdx = hasBaseColorTex ? baseIdx : ~0u;
+                    additiveConstants.linearColor = linearColor;
+                    additiveConstants.pad0 = 0u;
+
+                    cmd->SetConstants(additiveConstants);
+                    cmd->PushConstants();
+                    cmd->DrawIndexed(mesh.indexCount, 1, mesh.indexOffset, mesh.vertexOffset, 0);
+                }
             }
         }
 
@@ -193,5 +316,6 @@ namespace pe
 
     void LinesPass::Destroy()
     {
+        m_lastGeometryVersion = ~0ull;
     }
 } // namespace pe

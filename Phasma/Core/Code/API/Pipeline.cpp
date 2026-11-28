@@ -64,6 +64,16 @@ namespace pe
         /*alphaBlendOp*/ PE_BLEND_OP_ADD,
         /*colorWriteMask*/ PE_COLOR_COMPONENT_RGBA);
 
+    PE_API const BlendState BlendState::AdditiveAlpha = BlendState(
+        /*blendEnable*/ true,
+        /*srcColorBlendFactor*/ PE_BLEND_FACTOR_SRC_ALPHA,
+        /*dstColorBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*colorBlendOp*/ PE_BLEND_OP_ADD,
+        /*srcAlphaBlendFactor*/ PE_BLEND_FACTOR_ZERO,
+        /*dstAlphaBlendFactor*/ PE_BLEND_FACTOR_ONE,
+        /*alphaBlendOp*/ PE_BLEND_OP_ADD,
+        /*colorWriteMask*/ PE_COLOR_COMPONENT_RGBA);
+
     PE_API const BlendState BlendState::TransparencyBlend = BlendState(
         /*blendEnable*/ true,
         /*srcColorBlendFactor*/ PE_BLEND_FACTOR_ONE,
@@ -233,6 +243,8 @@ namespace pe
     {
         if (s == "additive")
             return BlendState::AdditiveColor;
+        if (s == "additiveAlpha")
+            return BlendState::AdditiveAlpha;
         if (s == "transparency")
             return BlendState::TransparencyBlend;
         if (s == "particles")

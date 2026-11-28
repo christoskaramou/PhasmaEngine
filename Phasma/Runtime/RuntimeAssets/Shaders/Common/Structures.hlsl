@@ -76,6 +76,16 @@ struct PushConstants_SelectionOutline
     float4 params1;
 };
 
+struct PushConstants_Additive
+{
+    float4 baseColorFactor;
+    float4 emissiveFactor;
+    uint meshDataOffset;
+    uint baseColorTexIdx;
+    uint linearColor;
+    uint pad0;
+};
+
 struct PushConstants_Bloom
 {
     float range;

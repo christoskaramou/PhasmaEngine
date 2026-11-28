@@ -572,6 +572,7 @@ namespace pe
         bool HasAlphaBlendMeshes() const { return m_hasAlphaBlendMeshes; }
         bool HasTransmissionMeshes() const { return m_hasTransmissionMeshes; }
         bool HasLinesMeshes() const { return m_hasLinesMeshes; }
+        bool HasAdditiveMeshes() const { return m_hasAdditiveMeshes; }
 
         // MaterialX modules of alpha-blend and transmission meshes, shaded by the forward pass (Phase 6).
         const std::vector<uint32_t> &GetOpenPBRForwardModules() const { return m_openpbrForwardModules; }
@@ -742,6 +743,7 @@ namespace pe
         Mesh &GetMesh(int index) { return m_meshes[index]; }
         const Mesh &GetMesh(int index) const { return m_meshes[index]; }
         MeshRuntime &GetMeshRuntime(int index) { return m_meshRuntimes[index]; }
+        const MeshRuntime &GetMeshRuntime(int index) const { return m_meshRuntimes[index]; }
 
         // Data stores
         std::vector<Vertex> &GetVertexStore() { return m_vertexStore; }
@@ -968,6 +970,7 @@ namespace pe
         uint32_t m_webDrawsFrame = UINT32_MAX;
         bool m_hasTransmissionMeshes = false;
         bool m_hasLinesMeshes = false;
+        bool m_hasAdditiveMeshes = false;
         uint32_t m_alphaBlendMeshCount = 0;
         uint32_t m_transmissionMeshCount = 0;
         uint32_t m_indicesCount = 0;
